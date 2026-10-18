@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 — 2026-10-18
+- **WebGL renderer** (default when available): round anti-aliased points snapped to device pixels, specular cores, soft halos and additive bloom, with edges, links, signals, trails and shockwaves in a single `gl.LINES` batch. Three draw calls a frame. Default counts double (2,800 / 1,400). Canvas-2D is the automatic fallback (`renderer: '2d'` forces it), and WebGL context loss pauses and rebuilds.
+- **`setPose({ yaw, pitch, roll, eyes })`**: a tracked head drives facing shapes, and `eyes` (0…1) dims their bright points on a blink. The projection gains roll.
+- **The helm, redrawn** from line art: forehead tab, temple screws, a V brow, angular eye slits, cheek slashes, a mouth block with stacked chin plates, ear pieces, and the shell silhouette. Particle lines sit over a 3D shell. A new `lineArt` shape flag draws its links brighter and keeps place-trading local, so the drawing never tears.
+- **Fix.** Edges stretched across the shape by particles in transit are no longer drawn.
+
 ## 0.3.0 — 2026-10-18
 - **New shape: `helm`.** An armoured helmet with a faceplate, brow ridge, cheek and mouth seams that carry signals, a crest, ear discs, a jaw ring, and two eye slits that glow. It turns to face you and holds there with a slow sway.
 - **Depth.** A stronger perspective (`depth`, default 2.8) and 12 depth layers instead of 8. Far points fade toward `palette.fog`, and near points get a one-pixel specular core.

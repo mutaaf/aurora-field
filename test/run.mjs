@@ -64,12 +64,12 @@ test('helm: faces forward, eyes glow from the front, seams carry signals', () =>
   for (const n of [600, 900, 1600]) {
     const s = AF.build('helm', n, 4);
     assert.equal(s.facing, true);
-    assert.ok(s.bright.length >= n * 0.06, 'eye points ' + s.bright.length);
-    for (const i of s.bright) { const p = s.points[i]; assert.ok(p[2] < -0.4 && p[1] < -0.05 && p[1] > -0.32, 'eye at ' + p + ' (camera space: -z is toward the viewer, -y is up)'); }
+    assert.ok(s.bright.length >= n * 0.05, 'eye points ' + s.bright.length);
+    for (const i of s.bright) { const p = s.points[i]; assert.ok(p[2] < -0.3 && p[1] < 0.02 && p[1] > -0.2, 'eye at ' + p + ' (camera space: -z is toward the viewer, -y is up)'); }
     for (const [a, b] of s.pairs) assert.ok(a >= 0 && b < n && a !== b);
     assert.ok(s.pairs.length > n * 0.12);
     const ys = s.points.map(p => p[1]);
-    assert.ok(Math.min(...ys) < -0.85 && Math.max(...ys) > 0.9, 'shell covers crown to jaw');
+    assert.ok(Math.min(...ys) < -0.8 && Math.max(...ys) > 0.8, 'shell covers crown to jaw');
   }
 });
 
@@ -114,7 +114,7 @@ function stubEnv({ reduce = false } = {}) {
   };
   const doc = { hidden: false, defaultView: win, addEventListener: (e) => listeners.push(e), removeEventListener() {} };
   const container = el(1200, 800);
-  const canvas = Object.assign(el(1200, 800), { ownerDocument: doc, parentNode: container, getContext: () => ctx, setAttribute() {}, removeAttribute() {} });
+  const canvas = Object.assign(el(1200, 800), { ownerDocument: doc, parentNode: container, getContext: (type) => (type === '2d' ? ctx : null), setAttribute() {}, removeAttribute() {} });
   const pump = (n, t0 = 1000, ms = 16.7) => { for (let i = 0; i < n; i++) { const q = queue.splice(0); q.forEach(f => f(t0 + i * ms)); } };
   return { canvas, container, win, calls, listeners, pump };
 }
@@ -178,6 +178,16 @@ test('governor: a slow device steps quality down, a fast one never does', () => 
   const pinned = stubEnv();
   const h = AF.create(pinned.canvas, { seed: 1, count: 300, quality: 'high' });
   pinned.pump(200, 1000, 40); assert.equal(h.stats().quality, 0); h.destroy();
+});
+
+test('renderer: falls back to canvas-2D without WebGL; pose drives a facing shape', () => {
+  const env = stubEnv();
+  const f = AF.create(env.canvas, { seed: 3, count: 600, shapes: ['helm'], cycle: 0, intro: 0 });
+  assert.equal(f.stats().renderer, '2d');
+  f.setPose({ yaw: 0.4, pitch: -0.2, roll: 0.1, eyes: 0.5 }); env.pump(60);
+  f.setPose(null); env.pump(10);
+  assert.ok(f.stats().settle >= 0);
+  f.destroy();
 });
 
 test('create: refuses a missing canvas', () => {

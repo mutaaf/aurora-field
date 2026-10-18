@@ -70,11 +70,11 @@
     <div class="stage" id="stage" aria-hidden="true"></div>
     <div class="copy">
       <h1>Points that <em>assemble</em>.</h1>
-      <p class="lede">A canvas-2D particle field that becomes a neural sphere, a team, a stack of platforms, a helm that turns to face you, or any shape you register. Drag to spin it, move through it to part it, click to send a shockwave. One file, zero dependencies, ES5.</p>
+      <p class="lede">A WebGL particle field (with a canvas-2D fallback) that becomes a neural sphere, a team, a stack of platforms, a helm that turns to face you, or any shape you register. Drag to spin it, move through it to part it, click to send a shockwave. One file, zero dependencies, ES5.</p>
       <div class="panel">
         <div class="row" role="group" aria-label="Shape"><span class="k">shape</span><span id="shapes" class="row"></span></div>
         <div class="row" role="group" aria-label="Palette"><span class="k">palette</span><span id="palettes" class="row"></span></div>
-        <div class="row"><label class="k" for="count">nodes</label><input id="count" type="range" min="200" max="3000" step="100" value="1600"><output id="countv">1600</output></div>
+        <div class="row"><label class="k" for="count">nodes</label><input id="count" type="range" min="400" max="8000" step="200" value="2800"><output id="countv">2800</output></div>
         <div class="row"><span class="k">cycle</span><button class="chip" id="cycle" aria-pressed="true">auto · 6.5s</button></div>
         <div class="row"><span class="k">autonomy</span><button class="chip" id="auto" aria-pressed="true">on · breathe, trade, scout</button></div>
         <pre id="code" aria-label="Code for the current settings"></pre>
@@ -104,7 +104,7 @@
     mono:{point:[220,224,228],hot:'#FFFFFF',star:'#DDE3E6',signal:[245,247,248],head:[255,255,255],glow:[200,205,210],glow2:[90,95,100]}
   };
   var SW={aurora:'#7BE3C3',ember:'#FF9E5E',ice:'#8CBEFF',mono:'#DCE0E4'};
-  var state={palette:'aurora',count:innerWidth<760?900:1600,cycle:true,auto:true,shape:'mind'}, field=null;
+  var state={palette:'aurora',count:innerWidth<760?1400:2800,cycle:true,auto:true,shape:'mind'}, field=null;
   var canvas=document.getElementById('field'), sky=document.getElementById('sky'), stage=document.getElementById('stage');
   var statsEl=document.getElementById('stats'), shapesEl=document.getElementById('shapes'), palEl=document.getElementById('palettes');
   document.getElementById('ver').textContent='v'+AuroraField.version;
@@ -135,7 +135,7 @@
   function build(){
     if(field) field.destroy();
     field=AuroraField.create(canvas,{container:sky,stage:stage,count:state.count,cycle:state.cycle?6500:0,autonomy:state.auto?1:0,palette:PALETTES[state.palette],initial:state.shape,
-      onShape:mark, onStats:function(s){var st=field.stats();statsEl.innerHTML='<b>'+s.nodes.toLocaleString('en-US')+'</b> nodes · <b>'+s.fps+'</b> fps · quality '+(['high','retina-lite','balanced','eco'][s.quality])+' · '+st.scouts+' scouts out'},
+      onShape:mark, onStats:function(s){var st=field.stats();statsEl.innerHTML='<b>'+s.nodes.toLocaleString('en-US')+'</b> nodes · <b>'+s.fps+'</b> fps · '+st.renderer+' · quality '+(['high','retina-lite','balanced','eco'][s.quality])+' · '+st.scouts+' scouts out'},
       onSpinout:function(){statsEl.innerHTML='<b>1.21 GW</b>'}});
     code();
   }

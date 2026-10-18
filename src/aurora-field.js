@@ -1,9 +1,11 @@
-/*! aurora-field v0.3.0 · MIT · https://github.com/mutaaf/aurora-field
+/*! aurora-field v0.4.0 · MIT · https://github.com/mutaaf/aurora-field
  * A canvas-2D particle field that assembles into shapes and morphs between them:
  * a neural sphere with travelling signals, a team of orbs, a stack of platforms, a helm.
  * Drag spins it, the cursor parts it, a click sends a shockwave. Particles are damped
  * springs that swirl into place, breathe, trade places and send out scouts; a governor
- * holds the frame rate; points are snapped to device pixels so they stay crisp.
+ * holds the frame rate; points are snapped to device pixels so they stay crisp. WebGL when
+ * available (round anti-aliased points, halos, additive bloom, ~2× the particles), canvas-2D
+ * otherwise. setPose() lets a tracked head steer facing shapes like the helm.
  * Zero dependencies. ES5 on purpose, so it can be inlined into old-device-friendly pages.
  */
 (function (root, factory) {
@@ -11,7 +13,7 @@
   else root.AuroraField = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var VERSION = '0.3.0';
+  var VERSION = '0.4.0';
   var TAU = Math.PI * 2;
 
   var imul = Math.imul || function (a, b) {
@@ -114,107 +116,118 @@
     };
   });
 
-  // helm: an armoured helmet that turns to face you. Shell, faceplate seams that carry
-  // signals like circuitry, a crest, a jaw ring, and two eye slits that glow.
+  // helm: an armoured helmet traced from line art — forehead tab, temple screws, a V brow,
+  // angular eye slits, cheek slashes, a mouth block with stacked chin plates, ear pieces —
+  // drawn as particle lines over a 3D shell so it still turns in space. Faces the viewer.
+  // Authored in a 1024×1536 drawing (y down, like the screen); mirrored for the right side.
   register('helm', function (n, r) {
-    var A = 0.74, B = 1, C = 0.84;
-    // silhouette: crown, a slight cheek flare, then a squared jaw
-    function width(y) { return y > 0.5 ? 1 - (y - 0.5) * 0.25 : y > -0.3 ? 1 + (0.5 - Math.abs(y + 0.05)) * 0.04 : 1 - (-0.3 - y) * 0.38; }
-    function shellZ(x, y) {
-      var u = x / (A * width(y)), v = y / B, q = 1 - u * u - v * v;
-      return q <= 0 ? 0 : C * Math.pow(q, 0.42);                                   // boxier than an ellipsoid
+    var CX = 512, CY = 650, SX = 330, SY = 470;
+    function U(x) { return (x - CX) / SX; }
+    function V(y) { return (y - CY) / SY; }
+    function M(P) { var o = []; for (var i = 0; i < P.length; i++) o.push([2 * CX - P[i][0], P[i][1]]); return o; }
+    // silhouette (left half, crown → chin): half-width of the head at each height
+    var SIL = [[512, 172], [390, 182], [285, 220], [215, 295], [182, 410], [178, 500], [196, 620], [218, 740], [246, 860], [296, 960], [366, 1040], [438, 1098], [512, 1116]];
+    function half(v) {
+      var y = v * SY + CY;
+      if (y <= SIL[0][1]) return 0.02;
+      for (var i = 0; i < SIL.length - 1; i++) if (y <= SIL[i + 1][1]) {
+        var f = (y - SIL[i][1]) / (SIL[i + 1][1] - SIL[i][1]); return (CX - (SIL[i][0] + (SIL[i + 1][0] - SIL[i][0]) * f)) / SX;
+      }
+      return 0.02;
     }
-    function inPoly(P, x, y) {
-      var c = false;
-      for (var i = 0, j = P.length - 1; i < P.length; j = i++)
-        if ((P[i][1] > y) !== (P[j][1] > y) && x < (P[j][0] - P[i][0]) * (y - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) c = !c;
-      return c;
+    var PLATE_TOP = 600, MOUTH_TOP = 912;
+    // depth of the front surface (camera space: negative z is toward the viewer)
+    function front(u, v) {
+      var w = half(v), q = w > 0 ? 1 - (u / w) * (u / w) : 0, y = v * SY + CY;
+      if (q < 0) q = 0;
+      var z = -0.78 * Math.pow(q, 0.55) * (y < 300 ? 0.75 + 0.25 * (y - 172) / 128 : 1);
+      if (y > PLATE_TOP - 15 && y < MOUTH_TOP + 200) z -= 0.05 * Math.exp(-(u * u) / 0.02);   // faceplate ridge
+      if (y > PLATE_TOP && y < MOUTH_TOP) z -= 0.035;                                          // the plate stands proud
+      return z;
     }
-    var PLATE = [[-0.36, 0.6], [-0.47, 0.3], [-0.5, 0.02], [-0.44, -0.3], [-0.32, -0.6], [-0.15, -0.84], [0.15, -0.84], [0.32, -0.6], [0.44, -0.3], [0.5, 0.02], [0.47, 0.3], [0.36, 0.6], [0, 0.7], [-0.36, 0.6]];
-    // the faceplate stands proud of the shell and is flatter
-    function plateZ(x, y) { return shellZ(x, y) * 0.9 + 0.075; }
-    function eyeHit(x, y) {                                                        // trapezoid slits: tall at the nose, thin at the temple
-      var ax = Math.abs(x); if (ax < 0.08 || ax > 0.37) return false;
-      var t = (ax - 0.08) / 0.29, top = 0.235 - t * 0.012, bottom = 0.165 + t * 0.045;
-      return y < top && y > bottom;
+    function at(x, y, lift) { var u = U(x), v = V(y); return [u, v, front(u, v) - (lift || 0)]; }
+    // the line art
+    var LINES = [], L = function (P, w, glow) { LINES.push({ p: P, w: w || 1, glow: !!glow }); };
+    var tabOuter = [[398, 182], [403, 255], [425, 375], [458, 412], [566, 412], [599, 375], [621, 255], [626, 182]];
+    var tabInner = [[420, 252], [447, 352], [463, 372], [561, 372], [577, 352], [604, 252], [420, 252]];
+    var brow = [[205, 598], [258, 560], [430, 583], [462, 612], [562, 612], [594, 583], [766, 560], [819, 598]];
+    var eyeL = [[252, 582], [437, 603], [445, 628], [418, 642], [300, 636], [250, 603], [252, 582]];
+    var plateL = [[212, 640], [225, 740], [262, 840], [320, 920], [372, 972], [415, 958]];
+    var slashL = [[250, 700], [300, 800], [345, 900], [385, 962]];
+    var cheekL = [[318, 660], [368, 820], [415, 915]];
+    var mouth = [[413, 912], [612, 912], [606, 968], [590, 1002], [434, 1002], [418, 968], [413, 912]];
+    var mouthLine = [[420, 965], [604, 965]];
+    var chin1 = [[424, 1010], [600, 1010], [592, 1062], [432, 1062], [424, 1010]];
+    var chin2 = [[436, 1075], [588, 1075], [578, 1118], [446, 1118], [436, 1075]];
+    var earL = [[148, 505], [192, 492], [205, 560], [200, 700], [170, 762], [150, 705], [148, 505]];
+    var jawL = [[232, 930], [255, 1000], [300, 1090]];
+    var crown = [[196, 620], [182, 410], [215, 295], [285, 220], [390, 186], [512, 180], [634, 186], [739, 220], [809, 295], [842, 410], [828, 620]];
+    L(tabOuter, 1.2); L(tabInner, 0.8); L(brow, 1.4);
+    L(eyeL, 1.3, true); L(M(eyeL), 1.3, true);
+    L(plateL, 1.1); L(M(plateL), 1.1); L(slashL, 0.9); L(M(slashL), 0.9); L(cheekL, 0.7); L(M(cheekL), 0.7);
+    L(mouth, 1.1); L(mouthLine, 0.6); L(chin1, 0.9); L(chin2, 0.8);
+    L(earL, 0.9); L(M(earL), 0.9); L(jawL, 0.7); L(M(jawL), 0.7); L(crown, 1.2);
+    L(SIL.slice(6), 0.9); L(M(SIL.slice(6)), 0.9);
+    // budget: line art 52%, eye fill 7%, screws 1.5%, front shell 26%, the rest the back of the head
+    var pts = [], pairs = [], bright = [], links = [], i, k, j;
+    var total = 0, lens = [];
+    for (i = 0; i < LINES.length; i++) {
+      var P = LINES[i].p, len = 0; for (k = 0; k < P.length - 1; k++) len += Math.sqrt(Math.pow(P[k + 1][0] - P[k][0], 2) + Math.pow(P[k + 1][1] - P[k][1], 2));
+      lens.push(len * LINES[i].w); total += len * LINES[i].w;
     }
-    function face(x, y, lift) { return [x, y, (inPoly(PLATE, x, y) ? plateZ(x, y) : shellZ(x, y)) + (lift || 0)]; }
-    function polyline(P, count, jit, lift) {
-      var segs = [], total = 0, i, out = [];
-      for (i = 0; i < P.length - 1; i++) { var dx = P[i + 1][0] - P[i][0], dy = P[i + 1][1] - P[i][1], L = Math.sqrt(dx * dx + dy * dy); segs.push(L); total += L; }
-      for (i = 0; i < count; i++) {
-        var d = (i + 0.5) / count * total, s = 0;
+    var lineBudget = Math.floor(n * 0.52);
+    for (i = 0; i < LINES.length; i++) {
+      var Pl = LINES[i].p, cnt = Math.max(4, Math.round(lineBudget * lens[i] / total)), segs = [], tot = 0;
+      for (k = 0; k < Pl.length - 1; k++) { var sl = Math.sqrt(Math.pow(Pl[k + 1][0] - Pl[k][0], 2) + Math.pow(Pl[k + 1][1] - Pl[k][1], 2)); segs.push(sl); tot += sl; }
+      var start = pts.length;
+      for (j = 0; j < cnt && pts.length < n; j++) {
+        var d = (j + 0.5) / cnt * tot, s = 0;
         while (s < segs.length - 1 && d > segs[s]) { d -= segs[s]; s++; }
         var f = segs[s] ? d / segs[s] : 0;
-        out.push(face(P[s][0] + (P[s + 1][0] - P[s][0]) * f + (r() - 0.5) * jit, P[s][1] + (P[s + 1][1] - P[s][1]) * f + (r() - 0.5) * jit, lift));
+        if (LINES[i].glow) bright.push(pts.length);
+        pts.push(at(Pl[s][0] + (Pl[s + 1][0] - Pl[s][0]) * f + (r() - 0.5) * 2.2, Pl[s][1] + (Pl[s + 1][1] - Pl[s][1]) * f + (r() - 0.5) * 2.2, 0.012));
+        if (j) pairs.push([pts.length - 2, pts.length - 1]);
       }
-      return out;
+      for (k = 0; k < Pl.length - 1; k++) links.push([at(Pl[k][0], Pl[k][1], 0.012), at(Pl[k + 1][0], Pl[k + 1][1], 0.012)]);
+      if (pts.length >= n) break;
     }
-    var pts = [], pairs = [], bright = [], links = [], i, k;
-    function run(P, count, jit, lift) { var start = pts.length, a = polyline(P, count, jit, lift); for (var j = 0; j < a.length; j++) { pts.push(a[j]); if (j) pairs.push([start + j - 1, start + j]); } }
-    var seams = Math.floor(n * 0.2);
-    run(PLATE, Math.floor(seams * 0.42), 0.004, 0.012);
-    run([[-0.46, 0.33], [-0.2, 0.31], [0, 0.36], [0.2, 0.31], [0.46, 0.33]], Math.floor(seams * 0.14), 0.004, 0.014);     // brow ridge
-    run([[-0.2, -0.47], [-0.07, -0.5], [0.07, -0.5], [0.2, -0.47]], Math.floor(seams * 0.08), 0.003, 0.012);               // mouth
-    run([[-0.44, -0.3], [-0.24, -0.34], [-0.1, -0.66]], Math.floor(seams * 0.1), 0.003, 0.012);                            // cheek seams
-    run([[0.44, -0.3], [0.24, -0.34], [0.1, -0.66]], Math.floor(seams * 0.1), 0.003, 0.012);
-    run([[0, 0.7], [0, 0.99]], Math.max(2, seams - pts.length), 0.004, 0.012);   // crest
-    // eyes: dense, sharp, glowing
-    var eyes = Math.floor(n * 0.075), edge = Math.floor(eyes * 0.55);
-    // half the eye points trace each slit's outline (crisp edges), half fill it
-    for (i = 0; i < edge; i++) {
-      var sd = i % 2 ? 1 : -1, u = (i >> 1) / Math.max(1, (edge >> 1) - 1), q = u * 4, e2;
-      if (q < 1) e2 = [0.08 + q * 0.29, 0.235 - q * 0.012];                          // top edge, nose → temple
-      else if (q < 2) e2 = [0.37, 0.223 - (q - 1) * 0.013];                          // temple end
-      else if (q < 3) e2 = [0.37 - (q - 2) * 0.29, 0.21 - (q - 2) * 0.045];          // bottom edge, temple → nose
-      else e2 = [0.08, 0.165 + (q - 3) * 0.07];                                      // nose end
-      bright.push(pts.length); pts.push(face(sd * e2[0], e2[1], 0.022));
+    // eyes: fill the slits so they glow as shapes, not outlines
+    function inPoly(P, x, y) {
+      var c = false;
+      for (var a = 0, b = P.length - 1; a < P.length; b = a++)
+        if ((P[a][1] > y) !== (P[b][1] > y) && x < (P[b][0] - P[a][0]) * (y - P[a][1]) / (P[b][1] - P[a][1]) + P[a][0]) c = !c;
+      return c;
     }
-    for (i = edge, k = 0; i < eyes && k < eyes * 30; k++) {
-      var ex = (r() * 2 - 1) * 0.37, ey = 0.16 + r() * 0.08;
-      if (!eyeHit(ex, ey)) continue;
-      bright.push(pts.length); pts.push(face(ex, ey, 0.02)); i++;
+    var eyes = [eyeL, M(eyeL)], eyeFill = Math.floor(n * 0.045);
+    for (i = 0, k = 0; i < eyeFill && k < eyeFill * 60 && pts.length < n; k++) {
+      var E = eyes[k % 2], ex = 250 + r() * 200, ey = 580 + r() * 64;
+      if (k % 2) ex = 2 * CX - ex;
+      if (!inPoly(E, ex, ey)) continue;
+      bright.push(pts.length); pts.push(at(ex, ey, 0.02)); i++;
     }
-    // ear discs: a ring and a hub on each side
-    var ears = Math.floor(n * 0.04);
-    for (i = 0; i < ears; i++) {
-      var s = i % 2 ? 1 : -1, a = r() * Math.PI * 2, rad = i % 3 ? 0.15 : 0.07;
-      pts.push([s * (A * 1.01 + 0.015), 0.04 + Math.sin(a) * rad, Math.cos(a) * rad * 1.1 - 0.02]);
+    // temple screws: two small rings
+    var screws = [[270, 255], [752, 245]], sc = Math.floor(n * 0.015);
+    for (i = 0; i < sc && pts.length < n; i++) {
+      var S0 = screws[i % 2], a2 = r() * Math.PI * 2, rr = i % 3 ? 12 : 5;
+      pts.push(at(S0[0] + Math.cos(a2) * rr, S0[1] + Math.sin(a2) * rr, 0.01));
     }
-    // faceplate surface, denser than the shell so the plate reads as one piece
-    var plate = Math.floor(n * 0.25);
-    for (i = 0, k = 0; i < plate && k < plate * 40; k++) {
-      var fx = (r() * 2 - 1) * 0.5, fy = -0.84 + r() * 1.54;
-      if (!inPoly(PLATE, fx, fy) || eyeHit(fx, fy)) continue;
-      pts.push([fx, fy, plateZ(fx, fy)]); i++;
+    // front shell: even fill inside the silhouette, skipping the eye slits
+    var shell = Math.floor(n * 0.17);
+    for (i = 0, k = 0; i < shell && k < shell * 30 && pts.length < n; k++) {
+      var vy = -1 + r() * 2, w = half(vy), vx = (r() * 2 - 1) * w, x0 = vx * SX + CX, y0 = vy * SY + CY;
+      if (inPoly(eyeL, x0, y0) || inPoly(eyes[1], x0, y0)) continue;
+      pts.push([vx, vy, front(vx, vy)]); i++;
     }
-    // jaw ring and neck seal
-    var jaw = Math.floor(n * 0.04);
-    for (i = 0; i < jaw; i++) { var ja = i / jaw * Math.PI * 2; pts.push([Math.cos(ja) * A * 0.58, -0.93, Math.sin(ja) * C * 0.6]); }
-    // the shell, everywhere the plate isn't
-    var rest = n - pts.length, M = Math.ceil(rest * 1.7) + 8, ga = Math.PI * (3 - Math.sqrt(5)), cand = [];
-    for (k = 0; k < M; k++) {
-      var y = 1 - (k + 0.5) / M * 2, rr = Math.sqrt(Math.max(0, 1 - y * y)), an = ga * k;
-      var px = Math.cos(an) * rr * A * width(y), py = y * B, pz = Math.sin(an) * rr;
-      pz = (pz < 0 ? -1 : 1) * C * Math.pow(Math.abs(pz), 0.84);
-      if (pz > 0 && inPoly(PLATE, px, py)) continue;
-      cand.push([px, py, pz]);
+    // the back of the head, sparse, so turning shows a solid
+    for (k = 0; pts.length < n; k++) {
+      var bv = -1 + r() * 2, bw = half(bv), bu = (r() * 2 - 1) * bw, q2 = bw > 0 ? 1 - (bu / bw) * (bu / bw) : 0;
+      pts.push([bu, bv, 0.62 * Math.pow(Math.max(0, q2), 0.5)]);
     }
-    for (k = 0; k < rest && cand.length; k++) pts.push(cand[Math.min(cand.length - 1, Math.floor(k * cand.length / rest))]);
-    while (pts.length < n) pts.push(face((r() - 0.5) * 0.6, (r() - 0.5) * 1.4, 0));
-    function lineOf(P, lift) { for (var q = 0; q < P.length - 1; q++) links.push([face(P[q][0], P[q][1], lift), face(P[q + 1][0], P[q + 1][1], lift)]); }
-    lineOf(PLATE, 0.012);
-    lineOf([[-0.46, 0.33], [-0.2, 0.31], [0, 0.36], [0.2, 0.31], [0.46, 0.33]], 0.014);
-    lineOf([[-0.2, -0.47], [-0.07, -0.5], [0.07, -0.5], [0.2, -0.47]], 0.012);
-    lineOf([[-0.44, -0.3], [-0.24, -0.34], [-0.1, -0.66]], 0.012);
-    lineOf([[0.44, -0.3], [0.24, -0.34], [0.1, -0.66]], 0.012);
-    lineOf([[0, 0.7], [0, 0.99]], 0.012);
-    // authored y-up and face-forward (+z); the camera looks down +z with y down,
-    // so flip both once on the way out and the face turns toward the viewer
-    var out = pts.slice(0, n);
-    for (k = 0; k < out.length; k++) out[k] = [out[k][0], -out[k][1], -out[k][2]];
-    for (k = 0; k < links.length; k++) links[k] = [[links[k][0][0], -links[k][0][1], -links[k][0][2]], [links[k][1][0], -links[k][1][1], -links[k][1][2]]];
-    return { points: out, pairs: pairs, links: links, bright: bright, facing: true, kick: 0.2 };
+    // fit the stage: the drawing is taller than it is wide
+    var K = 0.84, out = pts.slice(0, n);
+    for (k = 0; k < out.length; k++) out[k] = [out[k][0] * K, out[k][1] * K, out[k][2] * K];
+    for (k = 0; k < links.length; k++) links[k] = [[links[k][0][0] * K, links[k][0][1] * K, links[k][0][2] * K], [links[k][1][0] * K, links[k][1][1] * K, links[k][1][2] * K]];
+    return { points: out, pairs: pairs, links: links, bright: bright, facing: true, kick: 0.2, lineArt: true };
   });
 
   var DEFAULTS = {
@@ -231,6 +244,7 @@
     radius: null,             // function (stageWidth, stageHeight) → px
     maxDpr: 2,
     depth: 2.8,               // camera distance in shape radii: lower is more dramatic perspective
+    renderer: 'auto',         // 'auto' uses WebGL when it can and canvas-2D otherwise; 'webgl' | '2d'
     quality: 'auto',          // 'auto' governs itself to hold the frame rate; 'high' | 'low' pin it
     fpsFloor: 45,             // the governor steps quality down below this, back up above 57
     autonomy: 1,              // 0…1: breathing, place-trading, scouts, self-lit signals
@@ -286,15 +300,22 @@
   function create(canvas, options) {
     var o = merge(DEFAULTS, options);
     o.palette = merge(DEFAULTS.palette, options && options.palette);
-    var ctx = canvas && canvas.getContext && canvas.getContext('2d');
-    if (!ctx) throw new Error('aurora-field: needs a <canvas> with a 2D context');
+    if (!canvas || !canvas.getContext) throw new Error('aurora-field: needs a <canvas>');
+    var gl = null, ctx = null;
+    if (o.renderer !== '2d') {
+      var glo = { alpha: true, antialias: false, premultipliedAlpha: true, depth: false, stencil: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' };
+      try { gl = canvas.getContext('webgl', glo) || canvas.getContext('experimental-webgl', glo); } catch (e) { gl = null; }
+    }
+    if (!gl) ctx = canvas.getContext('2d');
+    if (!gl && !ctx) throw new Error('aurora-field: needs a <canvas> with a WebGL or 2D context');
     var win = canvas.ownerDocument.defaultView || window, doc = canvas.ownerDocument;
     var container = o.container || canvas.parentNode, stage = o.stage || container;
     var reduced = o.reducedMotion === 'auto' ? !!(win.matchMedia && win.matchMedia('(prefers-reduced-motion: reduce)').matches) : !!o.reducedMotion;
     var AUTO = reduced ? 0 : Math.max(0, Math.min(1, +o.autonomy || 0));
     var seed = o.seed == null ? SESSION_SEED : (o.seed >>> 0);
     var r = rng(seed), i;
-    var N = typeof o.count === 'function' ? o.count(win.innerWidth) : (o.count || (win.innerWidth < 760 ? 900 : 1600));
+    // the GPU path draws ~2× the particles for the same frame budget
+    var N = typeof o.count === 'function' ? o.count(win.innerWidth) : (o.count || (gl ? (win.innerWidth < 760 ? 1400 : 2800) : (win.innerWidth < 760 ? 900 : 1600)));
     var names = (o.shapes || ORDER).slice();
     for (i = 0; i < names.length; i++) if (!SHAPES[names[i]]) throw new Error('aurora-field: unknown shape "' + names[i] + '"');
     var cycleList = (o.rotation || names).slice();
@@ -321,10 +342,10 @@
     var shape = o.initial || names[0], autoAt = 0, pinnedUntil = 0, born = 0, introDone = false;
     S[shape].w = 1;
     var CW = 0, CH = 0, DPR = 1, cx = 0, cy = 0, R = 1, D = Math.max(1.6, +o.depth || 2.8);
-    var rotY = 0, rotX = -0.32, vy = 0.9, kick = 0, mx = -1e4, my = -1e4, pointerIn = false, par = 0, down = null, waves = [], sig = [];
+    var rotY = 0, rotX = -0.32, rotZ = 0, pose = null, vy = 0.9, kick = 0, mx = -1e4, my = -1e4, pointerIn = false, par = 0, down = null, waves = [], sig = [];
     var BUCKETS = 11, bCount = i32(BUCKETS + 1), bIdx = i32((BUCKETS + 1) * N), hotIdx = i32(N), litIdx = i32(N);
     var fps = 60, fAcc = 0, fN = 0, level = o.quality === 'low' ? 3 : 0, good = 0, spunAt = 0;
-    var raf = 0, last = 0, running = false, wanted = true, inView = true, destroyed = false, listeners = [], settle = 0, clock = 0;
+    var raf = 0, last = 0, running = false, wanted = true, inView = true, destroyed = false, listeners = [], settle = 0, clock = 0, GLR = null, lost = false;
     var glowCache = null, glowKey = '', haloCache = null, haloKey = '';
     // scouts: a few particles leave the shape, orbit with a trail, and come home
     var SCOUTS = [], MAXSCOUTS = Math.round(N * 0.008 * AUTO), TRAIL = 10;
@@ -376,7 +397,26 @@
     }
     function burst() { if (S[shape].adj) for (var k = 0; k < 14; k++) fire(shape, Math.floor(Math.random() * N)); }
 
-    function draw(t) {
+    // project every particle once per frame; both renderers read SX/SY/ZZ
+    var P1 = [0, 0, 0];
+    var maxEdge2 = 1;
+    function projectAll() {
+      maxEdge2 = (R * 0.22) * (R * 0.22);
+      var c1 = Math.cos(rotY), s1 = Math.sin(rotY), c2 = Math.cos(rotX), s2 = Math.sin(rotX), c3 = Math.cos(rotZ), s3 = Math.sin(rotZ), n;
+      for (n = 0; n < N; n++) {
+        var x = X[n] * c1 - Z[n] * s1, z = X[n] * s1 + Z[n] * c1, y = Y[n] * c2 - z * s2; z = Y[n] * s2 + z * c2;
+        var kk = D / (D + z), xr = x * c3 - y * s3, yr = x * s3 + y * c3;
+        SX[n] = xr * R * kk; SY[n] = yr * R * kk; ZZ[n] = z;
+      }
+    }
+    function proj3(v, out) {
+      var c1 = Math.cos(rotY), s1 = Math.sin(rotY), c2 = Math.cos(rotX), s2 = Math.sin(rotX), c3 = Math.cos(rotZ), s3 = Math.sin(rotZ);
+      var x = v[0] * c1 - v[2] * s1, z = v[0] * s1 + v[2] * c1, y = v[1] * c2 - z * s2; z = v[1] * s2 + z * c2;
+      var kk = D / (D + z); out[0] = cx + (x * c3 - y * s3) * R * kk; out[1] = cy + (x * s3 + y * c3) * R * kk; out[2] = z;
+      return out;
+    }
+    function draw(t) { projectAll(); if (GLR) GLR.draw(t); else draw2D(t); }
+    function draw2D(t) {
       var pal = o.palette, k, j, p, n;
       var stp = step();
       ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, CW, CH);
@@ -387,12 +427,6 @@
         ctx.fillRect(st[0] * CW - par * 8 * st[2], st[1] * CH, st[2], st[2]);
       }
       ctx.globalAlpha = 1;
-      // project every particle once
-      var c1 = Math.cos(rotY), s1 = Math.sin(rotY), c2 = Math.cos(rotX), s2 = Math.sin(rotX);
-      for (n = 0; n < N; n++) {
-        var x = X[n] * c1 - Z[n] * s1, z = X[n] * s1 + Z[n] * c1, y = Y[n] * c2 - z * s2; z = Y[n] * s2 + z * c2;
-        var kk = D / (D + z); SX[n] = x * R * kk; SY[n] = y * R * kk; ZZ[n] = z;
-      }
       var gs = glowSprite();
       if (gs) ctx.drawImage(gs, cx - R * 1.5, cy - R * 1.5, R * 3, R * 3);
       ctx.globalCompositeOperation = 'lighter';
@@ -404,18 +438,16 @@
           ctx.strokeStyle = rgba(pal.point, 0.13 * w); ctx.lineWidth = 0.7; ctx.beginPath();
           for (i = 0; i < pairs.length; i += stp) {
             var A = OWN[pairs[i][0]], B = OWN[pairs[i][1]]; if ((ZZ[A] > 0.35 && ZZ[B] > 0.35) || SC[A] > 0 || SC[B] > 0) continue;
+            var ex2 = SX[A] - SX[B], ey2 = SY[A] - SY[B]; if (ex2 * ex2 + ey2 * ey2 > maxEdge2) continue;
             ctx.moveTo(cx + SX[A] + OX[A], cy + SY[A] + OY[A]); ctx.lineTo(cx + SX[B] + OX[B], cy + SY[B] + OY[B]);
           }
           ctx.stroke();
         }
         if (links) {
-          ctx.strokeStyle = rgba(pal.point, 0.18 * w); ctx.lineWidth = 1; ctx.beginPath();
+          ctx.strokeStyle = rgba(pal.point, (sh.def.lineArt ? 0.4 : 0.18) * w); ctx.lineWidth = 1; ctx.beginPath();
           for (i = 0; i < links.length; i++) {
-            var L0 = links[i][0], L1 = links[i][1];
-            var ux = L0[0] * c1 - L0[2] * s1, uz = L0[0] * s1 + L0[2] * c1, uy = L0[1] * c2 - uz * s2; uz = L0[1] * s2 + uz * c2;
-            var vx = L1[0] * c1 - L1[2] * s1, vz = L1[0] * s1 + L1[2] * c1, vyy = L1[1] * c2 - vz * s2; vz = L1[1] * s2 + vz * c2;
-            var ku = D / (D + uz), kv = D / (D + vz);
-            ctx.moveTo(cx + ux * R * ku, cy + uy * R * ku); ctx.lineTo(cx + vx * R * kv, cy + vyy * R * kv);
+            proj3(links[i][0], P1); ctx.moveTo(P1[0], P1[1]);
+            proj3(links[i][1], P1); ctx.lineTo(P1[0], P1[1]);
           }
           ctx.stroke();
         }
@@ -512,6 +544,159 @@
       }
     }
 
+    // ---- the GPU path: three programs, one interleaved buffer each, three draw calls ----
+    // Points are round, anti-aliased discs at whole device pixels (near ones carry a white
+    // specular core), soft halos for lit nodes, additive blending for the bloom; lines are
+    // one gl.LINES call for every edge, link, signal, trail and shockwave.
+    function makeGL() {
+      function hexRGB(h) { h = String(h).replace('#', ''); if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2]; var v = parseInt(h, 16); return [(v >> 16) & 255, (v >> 8) & 255, v & 255]; }
+      function shader(type, src) {
+        var sh = gl.createShader(type); gl.shaderSource(sh, src); gl.compileShader(sh);
+        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error('aurora-field shader: ' + gl.getShaderInfoLog(sh));
+        return sh;
+      }
+      function program(vs, fs, attrs) {
+        var pr = gl.createProgram(); gl.attachShader(pr, shader(gl.VERTEX_SHADER, vs)); gl.attachShader(pr, shader(gl.FRAGMENT_SHADER, fs));
+        for (var a = 0; a < attrs.length; a++) gl.bindAttribLocation(pr, a, attrs[a]);
+        gl.linkProgram(pr);
+        if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error('aurora-field program: ' + gl.getProgramInfoLog(pr));
+        return { p: pr, res: gl.getUniformLocation(pr, 'res'), dpr: gl.getUniformLocation(pr, 'dpr'), u: function (n) { return gl.getUniformLocation(pr, n); } };
+      }
+      var HEAD = 'uniform vec2 res;uniform float dpr;vec4 clip(vec2 q){vec2 c=q/res*2.0-1.0;return vec4(c.x,-c.y,0.0,1.0);}';
+      var PT = program(
+        'attribute vec2 p;attribute float s;attribute vec4 c;attribute float k;' + HEAD +
+        'varying vec4 vc;varying float vk;varying float vs;' +
+        'void main(){gl_Position=clip(floor(p*dpr)+0.5);gl_PointSize=s;vc=c;vk=k;vs=s;}',
+        'precision mediump float;varying vec4 vc;varying float vk;varying float vs;' +
+        'void main(){float d=length(gl_PointCoord-0.5)*2.0;' +
+        'if(vk>1.5){float h=max(0.0,1.0-d);gl_FragColor=vec4(vc.rgb,vc.a*h*h*h);return;}' +
+        'float a=clamp((1.0-d)*vs*0.5,0.0,1.0);' +
+        'vec3 col=vc.rgb;if(vk>0.5){col=mix(col,vec3(1.0),clamp((0.38-d)*vs*0.5,0.0,1.0)*0.9);}' +
+        'gl_FragColor=vec4(col,vc.a*a);}',
+        ['p', 's', 'c', 'k']);
+      var LN = program(
+        'attribute vec2 p;attribute vec4 c;' + HEAD + 'varying vec4 vc;void main(){gl_Position=clip(p*dpr);vc=c;}',
+        'precision mediump float;varying vec4 vc;void main(){gl_FragColor=vc;}',
+        ['p', 'c']);
+      var GW = program(
+        'attribute vec2 p;' + HEAD + 'uniform vec2 ctr;uniform float rad;varying vec2 uv;void main(){uv=p;gl_Position=clip((ctr+p*rad)*dpr);}',
+        'precision mediump float;varying vec2 uv;uniform vec3 c0;uniform vec3 c1;' +
+        'void main(){float d=length(uv);float a=mix(0.13,0.05,smoothstep(0.0,0.5,d))*(1.0-smoothstep(0.5,1.0,d));gl_FragColor=vec4(mix(c0,c1,smoothstep(0.0,0.5,d)),a);}',
+        ['p']);
+      var maxPairs = 0, maxLinks = 0;
+      for (var nm in S) { maxPairs = Math.max(maxPairs, (S[nm].def.pairs || []).length); maxLinks = Math.max(maxLinks, (S[nm].def.links || []).length); }
+      var PMAX = N * 2 + stars.length + 64 + MAXSCOUTS * 2 + 8, LMAX = maxPairs + maxLinks + 64 + (MAXSCOUTS + 2) * TRAIL + 4 * 48 + 8;
+      var PB = new F32(PMAX * 8), LB = new F32(LMAX * 12), np = 0, nl = 0;
+      var pbuf = gl.createBuffer(), lbuf = gl.createBuffer(), qbuf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, pbuf); gl.bufferData(gl.ARRAY_BUFFER, PB.byteLength, gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, lbuf); gl.bufferData(gl.ARRAY_BUFFER, LB.byteLength, gl.DYNAMIC_DRAW);
+      gl.bindBuffer(gl.ARRAY_BUFFER, qbuf); gl.bufferData(gl.ARRAY_BUFFER, new F32([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
+      var maxPt = (gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE) || [1, 64])[1];
+      var HOT = hexRGB(o.palette.hot), STAR = hexRGB(o.palette.star);
+      function pt(x, y, size, c, a, k) {
+        if (np >= PMAX) return; var b = np * 8;
+        PB[b] = x; PB[b + 1] = y; PB[b + 2] = Math.min(maxPt, size); PB[b + 3] = c[0] / 255; PB[b + 4] = c[1] / 255; PB[b + 5] = c[2] / 255; PB[b + 6] = a; PB[b + 7] = k; np++;
+      }
+      function ln(x0, y0, x1, y1, c, a) {
+        if (nl >= LMAX) return; var b = nl * 12, r = c[0] / 255, g = c[1] / 255, bl = c[2] / 255;
+        LB[b] = x0; LB[b + 1] = y0; LB[b + 2] = r; LB[b + 3] = g; LB[b + 4] = bl; LB[b + 5] = a;
+        LB[b + 6] = x1; LB[b + 7] = y1; LB[b + 8] = r; LB[b + 9] = g; LB[b + 10] = bl; LB[b + 11] = a; nl++;
+      }
+      var COL = [0, 0, 0], P2 = [0, 0, 0];
+      function drawGL(t) {
+        var pal = o.palette, fog = pal.fog || pal.point, stp = step(), n, i, j, k;
+        np = 0; nl = 0;
+        // stars
+        for (i = 0; i < stars.length; i++) {
+          var st = stars[i];
+          pt(st[0] * CW - par * 8 * st[2], st[1] * CH, Math.max(1, st[2] * DPR), STAR, 0.12 + 0.28 * (0.5 + 0.5 * Math.sin(t * 0.0011 * st[2] + st[3])) * st[2] / 1.3, 0);
+        }
+        // edges, links, signals: one line batch (1 device px, so a touch brighter than 2D)
+        for (var name in S) {
+          var sh = S[name], w = sh.w * settle; if (w < 0.02) continue;
+          var pairs = sh.def.pairs, links = sh.def.links;
+          if (pairs) for (i = 0; i < pairs.length; i += stp) {
+            var A = OWN[pairs[i][0]], B = OWN[pairs[i][1]]; if ((ZZ[A] > 0.35 && ZZ[B] > 0.35) || SC[A] > 0 || SC[B] > 0) continue;
+            var gx = SX[A] - SX[B], gy = SY[A] - SY[B]; if (gx * gx + gy * gy > maxEdge2) continue;
+            var fa = Math.max(0, Math.min(1, (1 - (ZZ[A] + ZZ[B]) / 2) / 2));
+            ln(cx + SX[A] + OX[A], cy + SY[A] + OY[A], cx + SX[B] + OX[B], cy + SY[B] + OY[B], pal.point, 0.2 * w * (0.4 + 0.6 * fa));
+          }
+          if (links) for (i = 0; i < links.length; i++) {
+            proj3(links[i][0], P1); proj3(links[i][1], P2);
+            ln(P1[0], P1[1], P2[0], P2[1], pal.point, (sh.def.lineArt ? 0.55 : 0.3) * w * (P1[2] < 0.2 || P2[2] < 0.2 ? 1 : 0.3));
+          }
+        }
+        for (i = 0; i < sig.length; i++) {
+          var g = sig[i], ga = OWN[g.a], gb = OWN[g.b], t0 = Math.max(0, g.t - 0.5);
+          ln(cx + SX[ga] + (SX[gb] - SX[ga]) * t0, cy + SY[ga] + (SY[gb] - SY[ga]) * t0, cx + SX[ga] + (SX[gb] - SX[ga]) * g.t, cy + SY[ga] + (SY[gb] - SY[ga]) * g.t, pal.signal, 1);
+        }
+        for (i = 0; i < SCOUTS.length; i++) {
+          var sc = SCOUTS[i], tr = sc.trail, len = Math.min(sc.count, TRAIL);
+          for (j = 1; j < len; j++) {
+            var h0 = (sc.head - j + 1 + TRAIL) % TRAIL, h1 = (sc.head - j + TRAIL) % TRAIL;
+            ln(tr[h0 * 2], tr[h0 * 2 + 1], tr[h1 * 2], tr[h1 * 2 + 1], pal.signal, 0.6 * (1 - j / TRAIL) * sc.fade);
+          }
+        }
+        for (i = 0; i < waves.length; i++) {
+          var wv = waves[i], wa = Math.max(0, 0.5 * (1 - wv.t / 700));
+          for (k = 0; k < 48; k++) { var a0 = k / 48 * TAU, a1 = (k + 1) / 48 * TAU; ln(wv.x + Math.cos(a0) * wv.t, wv.y + Math.sin(a0) * wv.t, wv.x + Math.cos(a1) * wv.t, wv.y + Math.sin(a1) * wv.t, pal.point, wa); }
+        }
+        // particles: continuous depth (no buckets on the GPU) — size, fog and alpha by z
+        for (n = 0; n < N; n += stp) {
+          var x = cx + SX[n] + OX[n], y = cy + SY[n] + OY[n];
+          if (GLOW[n] > 0.25 || SC[n] > 0) {
+            var gl2 = Math.max(GLOW[n], SC[n] > 0 ? 0.8 : 0);
+            pt(x, y, (5 + 8 * gl2) * DPR, pal.point, 0.42, 2);
+            pt(x, y, Math.max(2, 2.4 * DPR), HOT, 1, 0);
+            continue;
+          }
+          if (HOT[n]) { pt(x, y, Math.max(1.5, (ZZ[n] < 0 ? 2.8 : 1.5) * DPR), HOT, 1, ZZ[n] < 0 ? 1 : 0); continue; }
+          var f = Math.max(0, Math.min(1, (1 - ZZ[n]) / 2)), m = Math.pow(f, 0.85), size = Math.max(1.2, (0.7 + 3.1 * Math.pow(f, 1.25)) * DPR);
+          COL[0] = fog[0] + (pal.point[0] - fog[0]) * m; COL[1] = fog[1] + (pal.point[1] - fog[1]) * m; COL[2] = fog[2] + (pal.point[2] - fog[2]) * m;
+          pt(x, y, size, COL, 0.12 + 0.88 * Math.pow(f, 1.5), f > 0.55 && size >= 3 ? 1 : 0);
+        }
+        for (i = 0; i < sig.length; i++) {
+          var g2 = sig[i], a2 = OWN[g2.a], b2 = OWN[g2.b];
+          pt(cx + SX[a2] + (SX[b2] - SX[a2]) * g2.t, cy + SY[a2] + (SY[b2] - SY[a2]) * g2.t, Math.max(3, 4 * DPR), pal.head, 1, 1);
+        }
+        // draw
+        var W = canvas.width, H = canvas.height;
+        gl.viewport(0, 0, W, H); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+        gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE, gl.ONE, gl.ONE);
+        // core glow
+        gl.useProgram(GW.p); gl.uniform2f(GW.res, W, H); gl.uniform1f(GW.dpr, DPR);
+        gl.uniform2f(GW.u('ctr'), cx, cy); gl.uniform1f(GW.u('rad'), R * 1.5);
+        gl.uniform3f(GW.u('c0'), pal.glow[0] / 255, pal.glow[1] / 255, pal.glow[2] / 255); gl.uniform3f(GW.u('c1'), pal.glow2[0] / 255, pal.glow2[1] / 255, pal.glow2[2] / 255);
+        gl.bindBuffer(gl.ARRAY_BUFFER, qbuf); gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
+        gl.disableVertexAttribArray(1); gl.disableVertexAttribArray(2); gl.disableVertexAttribArray(3);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        if (nl) {
+          gl.useProgram(LN.p); gl.uniform2f(LN.res, W, H); gl.uniform1f(LN.dpr, DPR);
+          gl.bindBuffer(gl.ARRAY_BUFFER, lbuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, LB.subarray(0, nl * 12));
+          gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 24, 0);
+          gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 24, 8);
+          gl.drawArrays(gl.LINES, 0, nl * 2);
+        }
+        if (np) {
+          gl.useProgram(PT.p); gl.uniform2f(PT.res, W, H); gl.uniform1f(PT.dpr, DPR);
+          gl.bindBuffer(gl.ARRAY_BUFFER, pbuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, PB.subarray(0, np * 8));
+          gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 32, 0);
+          gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 32, 8);
+          gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 4, gl.FLOAT, false, 32, 12);
+          gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 1, gl.FLOAT, false, 32, 28);
+          gl.drawArrays(gl.POINTS, 0, np);
+        }
+      }
+      return {
+        draw: drawGL,
+        destroy: function () {
+          gl.deleteBuffer(pbuf); gl.deleteBuffer(lbuf); gl.deleteBuffer(qbuf);
+          gl.deleteProgram(PT.p); gl.deleteProgram(LN.p); gl.deleteProgram(GW.p);
+          gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+        }
+      };
+    }
+
     function scoutTarget(sc, out) {
       var a = sc.a;
       out[0] = Math.cos(a) * sc.r; out[1] = Math.sin(a * 0.7 + sc.tilt) * 0.35 + sc.tilt * 0.2; out[2] = Math.sin(a) * sc.r;
@@ -526,14 +711,22 @@
       }
       for (var nm in S) S[nm].w += ((nm === shape ? 1 : 0) - S[nm].w) * Math.min(1, dt * 3);
       if (def.facing && !down) {
-        // turn to face the viewer, then hold with a slow sway
         vy += (0 - vy) * Math.min(1, dt * 2.5);
-        var base = Math.round(rotY / TAU) * TAU, want = base + Math.sin(clock * 0.42) * 0.38;
-        rotY += (want - rotY) * Math.min(1, dt * 2.2);
-        rotX += (-0.1 + Math.sin(clock * 0.31) * 0.06 - rotX) * Math.min(1, dt * 2);
+        var base = Math.round(rotY / TAU) * TAU;
+        if (pose) {
+          // follow a tracked head: fast, but smoothed so camera jitter never shows
+          var fk = Math.min(1, dt * 14);
+          rotY += (base + pose.yaw - rotY) * fk; rotX += (pose.pitch - 0.06 - rotX) * fk; rotZ += (pose.roll - rotZ) * fk;
+        } else {
+          // turn to face the viewer, then hold with a slow sway
+          rotY += (base + Math.sin(clock * 0.42) * 0.2 - rotY) * Math.min(1, dt * 2.2);
+          rotX += (-0.1 + Math.sin(clock * 0.31) * 0.06 - rotX) * Math.min(1, dt * 2);
+          rotZ += (0 - rotZ) * Math.min(1, dt * 3);
+        }
       } else if (!down) {
         vy += (0.16 - vy) * Math.min(1, dt * 0.9);
         rotX += (-0.32 - rotX) * Math.min(1, dt * 0.6);
+        rotZ += (0 - rotZ) * Math.min(1, dt * 3);
       }
       rotY += (vy + kick) * dt; kick *= Math.pow(0.12, dt);
       if (Math.abs(vy) > 7 && tn > spunAt) { spunAt = tn + 4000; if (o.onSpinout) o.onSpinout(); }
@@ -544,7 +737,7 @@
         var swaps = dt * 3 * AUTO * settle;
         while (Math.random() < swaps) {
           swaps -= 1;
-          var pa = Math.floor(Math.random() * N), pb = Math.max(0, Math.min(N - 1, pa + Math.floor((Math.random() - 0.5) * 240)));
+          var span = def.lineArt ? 8 : 240, pa = Math.floor(Math.random() * N), pb = Math.max(0, Math.min(N - 1, pa + Math.floor((Math.random() - 0.5) * span)));
           var ia = OWN[pa], ib = OWN[pb]; if (SC[ia] > 0 || SC[ib] > 0) continue;
           if (def.bright && (GLOW[ia] > 0.5 || GLOW[ib] > 0.5)) continue;
           OWN[pa] = ib; OWN[pb] = ia; TI[ia] = pb; TI[ib] = pa;
@@ -568,7 +761,7 @@
       }
 
       if (def.bright && settle > 0.25) {
-        var lit = (0.5 + 0.32 * settle) * S[shape].w, br = def.bright;
+        var lit = (0.5 + 0.32 * settle) * S[shape].w * (pose && pose.eyes != null ? 0.15 + 0.85 * pose.eyes : 1), br = def.bright;
         for (k = 0; k < br.length; k++) { var bn = OWN[br[k]]; if (!SC[bn] && GLOW[bn] < lit) GLOW[bn] = lit; }
       }
       // ---- physics: each particle is a damped spring toward its point, swirling in ----
@@ -652,7 +845,7 @@
       raf = win.requestAnimationFrame(frame);
     }
     function sync() {
-      var want = wanted && !destroyed && !reduced && (!o.autoPause || (!doc.hidden && inView));
+      var want = wanted && !destroyed && !lost && !reduced && (!o.autoPause || (!doc.hidden && inView));
       if (want && !running) { running = true; last = 0; if (!raf) raf = win.requestAnimationFrame(frame); }
       else if (!want && running) { running = false; if (raf) { win.cancelAnimationFrame(raf); raf = 0; } }
     }
@@ -711,20 +904,32 @@
       get shape() { return shape; },
       shapes: names.slice(),
       setShape: setShape,
+      // drive facing shapes from a tracked head: {yaw, pitch, roll} in radians, eyes 0…1; null to release
+      setPose: function (p) {
+        pose = p && isFinite(p.yaw) ? { yaw: +p.yaw || 0, pitch: +p.pitch || 0, roll: +p.roll || 0, eyes: p.eyes == null ? null : Math.max(0, Math.min(1, +p.eyes)) } : null;
+        if (!running && !reduced) return api;
+        return api;
+      },
       next: function () { var ci = cycleList.indexOf(shape); return setShape(cycleList[(ci + 1) % cycleList.length], { pin: true }); },
       play: function () { wanted = true; layout(); sync(); return api; },
       pause: function () { wanted = false; sync(); return api; },
       resize: function () { layout(); return api; },
-      stats: function () { return { fps: fps, nodes: Math.ceil(N / step()), running: running, reduced: reduced, shape: shape, quality: level, scouts: SCOUTS.length, settle: Math.round(settle * 100) / 100 }; },
+      stats: function () { return { fps: fps, nodes: Math.ceil(N / step()), running: running, reduced: reduced, shape: shape, quality: level, scouts: SCOUTS.length, settle: Math.round(settle * 100) / 100, renderer: GLR ? 'webgl' : '2d' }; },
       destroy: function () {
         destroyed = true; sync();
         for (var l = 0; l < listeners.length; l++) listeners[l][0].removeEventListener(listeners[l][1], listeners[l][2], listeners[l][3]);
         if (io) io.disconnect();
-        ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height);
+        if (GLR) GLR.destroy(); else { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, canvas.width, canvas.height); }
       }
     };
 
     born = now(); autoAt = born + o.intro + o.cycle;
+    if (gl) {
+      GLR = makeGL();
+      // the GPU can take the context away (driver reset, too many tabs): pause, then rebuild
+      on(canvas, 'webglcontextlost', function (e) { e.preventDefault(); lost = true; sync(); });
+      on(canvas, 'webglcontextrestored', function () { GLR = makeGL(); lost = false; layout(); sync(); });
+    }
     if (reduced) snap(shape);
     layout();
     sync();

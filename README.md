@@ -1,11 +1,12 @@
 # aurora-field
 
-A canvas-2D particle field that assembles into shapes and morphs between them: a neural sphere with signals travelling its synapses, a team of orbs, a stack of platforms with traffic streaming through, an armoured helm that turns to face you with glowing eyes, or any shape you register. Drag to spin it, move through it to part it, click to send a shockwave.
+A canvas-2D particle field that assembles into shapes and morphs between them: a neural sphere with signals travelling its synapses, a team of orbs, a stack of platforms with traffic streaming through, an armoured helm traced from line art that turns to face you (or follows your head, via `setPose`) with glowing eyes, or any shape you register. Drag to spin it, move through it to part it, click to send a shockwave.
 
 **[Live demo →](https://mutaaf.github.io/aurora-field/)** · seen on [mutaafaziz.com](https://mutaafaziz.com)
 
 ![aurora-field: a glowing neural sphere of particles on a night sky](docs/preview.jpg)
 
+- **WebGL first.** Round, anti-aliased points at whole device pixels, with specular cores, soft halos and additive bloom, in three draw calls a frame. That's about 2,800 points by default (1,400 on phones) at 60 fps. Canvas-2D is the automatic fallback, and context loss is handled.
 - **Zero dependencies.** One file, about 32 KB unminified (11 KB gzipped), and ES5, so it can be inlined into pages that support old devices.
 - **Alive.** Every particle is its own damped spring with its own stiffness, so the field swirls into shape instead of easing. Once there, it manages itself: points breathe, trade places with neighbours, send out scouts that orbit with a trail and come home, and light up as signals pass through.
 - **Fast, and it says so.** About 2–3 ms a frame for 1,600 points on a laptop with a retina screen. Particle state lives in typed arrays with no per-frame allocation, shape builds are cached, and the glows are pre-rendered sprites. A governor watches the real frame rate and walks a quality ladder (resolution, then point density) down below 45 fps and back up above 57.
@@ -51,7 +52,7 @@ The canvas fills its `container` (default: its parent). Pass a `stage` element t
 |---|---|---|
 | `container` | `canvas.parentNode` | element whose box sizes the canvas |
 | `stage` | `container` | element whose box centres and sizes the shape |
-| `count` | `900` / `1600` | particle count (below / above 760px), or `(viewportWidth) => n` |
+| `count` | WebGL `1400` / `2800`, 2D `900` / `1600` | particle count (below / above 760px), or `(viewportWidth) => n` |
 | `shapes` | all registered | shapes in the field |
 | `rotation` | `shapes` | which of them auto-cycle, in order; the rest are reachable with `setShape` (a hidden helm, say) |
 | `initial` | `shapes[0]` | first shape |
@@ -62,6 +63,7 @@ The canvas fills its `container` (default: its parent). Pass a `stage` element t
 | `depth` | `2.8` | camera distance in shape radii; lower is more dramatic perspective |
 | `radius` | `min(w·.42, h·.36, 330)` | `(stageW, stageH) => px` |
 | `autonomy` | `1` | `0…1`: breathing, place-trading, scouts, nodes lit by signals; `0` gives pure shapes |
+| `renderer` | `'auto'` | `'webgl'` when available, else `'2d'`; force either |
 | `quality` | `'auto'` | `'auto'` governs itself; `'high'` / `'low'` pin it |
 | `fpsFloor` | `45` | the governor steps down below this |
 | `interactive` | `true` | drag to spin, cursor parts the field, click for a shockwave |
@@ -78,6 +80,7 @@ The canvas fills its `container` (default: its parent). Pass a `stage` element t
 ```js
 field.setShape('platforms', { pin: true })  // or { pin: 5000 }
 field.next()
+field.setPose({ yaw, pitch, roll, eyes })  // steer facing shapes (the helm) from a tracked head; null releases
 field.pause(); field.play()
 field.resize()      // after a layout change the window didn't announce
 field.stats()       // { fps, nodes, running, reduced, shape, quality, scouts, settle }
