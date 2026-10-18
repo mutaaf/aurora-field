@@ -91,7 +91,7 @@ function stubEnv({ reduce = false } = {}) {
   const doc = { hidden: false, defaultView: win, addEventListener: (e) => listeners.push(e), removeEventListener() {} };
   const container = el(1200, 800);
   const canvas = Object.assign(el(1200, 800), { ownerDocument: doc, parentNode: container, getContext: () => ctx, setAttribute() {}, removeAttribute() {} });
-  const pump = (n, t0 = 1000) => { for (let i = 0; i < n; i++) { const q = queue.splice(0); q.forEach(f => f(t0 + i * 16.7)); } };
+  const pump = (n, t0 = 1000, ms = 16.7) => { for (let i = 0; i < n; i++) { const q = queue.splice(0); q.forEach(f => f(t0 + i * ms)); } };
   return { canvas, container, win, calls, listeners, pump };
 }
 
@@ -119,6 +119,41 @@ test('create: reduced motion draws one still frame and never animates', () => {
   assert.equal(f.stats().reduced, true);
   assert.equal(f.stats().running, false);
   assert.equal(env.calls.raf, 0);
+});
+
+test('physics: the field converges onto its shape and stays finite', () => {
+  const env = stubEnv();
+  const f = AF.create(env.canvas, { seed: 9, count: 500, intro: 0, cycle: 0 });
+  env.pump(420);
+  const st = f.stats();
+  assert.ok(st.settle > 0.85, 'settle ' + st.settle);
+  f.destroy();
+});
+
+test('autonomy: scouts go out and come home; autonomy 0 keeps everyone in', () => {
+  const env = stubEnv();
+  const f = AF.create(env.canvas, { seed: 2, count: 1600, intro: 0, cycle: 0 });
+  let most = 0; for (let k = 0; k < 40; k++) { env.pump(60, 1000 + k * 1002); most = Math.max(most, f.stats().scouts); }
+  assert.ok(most > 0 && most <= Math.round(1600 * 0.008), 'scouts ' + most);
+  f.destroy();
+  const env2 = stubEnv();
+  const g = AF.create(env2.canvas, { seed: 2, count: 1600, intro: 0, cycle: 0, autonomy: 0 });
+  env2.pump(1200); assert.equal(g.stats().scouts, 0); g.destroy();
+});
+
+test('governor: a slow device steps quality down, a fast one never does', () => {
+  const slow = stubEnv();
+  const f = AF.create(slow.canvas, { seed: 1, count: 300 });
+  slow.pump(200, 1000, 40);              // 25 fps
+  assert.ok(f.stats().quality >= 2, 'quality ' + f.stats().quality);
+  assert.ok(f.stats().nodes < 300);
+  f.destroy();
+  const fast = stubEnv();
+  const g = AF.create(fast.canvas, { seed: 1, count: 300 });
+  fast.pump(400); assert.equal(g.stats().quality, 0); g.destroy();
+  const pinned = stubEnv();
+  const h = AF.create(pinned.canvas, { seed: 1, count: 300, quality: 'high' });
+  pinned.pump(200, 1000, 40); assert.equal(h.stats().quality, 0); h.destroy();
 });
 
 test('create: refuses a missing canvas', () => {

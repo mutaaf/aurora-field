@@ -1,7 +1,9 @@
-/*! aurora-field v0.1.0 · MIT · https://github.com/mutaaf/aurora-field
+/*! aurora-field v0.2.0 · MIT · https://github.com/mutaaf/aurora-field
  * A canvas-2D particle field that assembles into shapes and morphs between them:
  * a neural sphere with travelling signals, a team of orbs, a stack of platforms.
- * Drag spins it, the cursor parts it, a click sends a shockwave.
+ * Drag spins it, the cursor parts it, a click sends a shockwave. Particles are damped
+ * springs that swirl into place, breathe, trade places and send out scouts; a governor
+ * holds the frame rate; points are snapped to device pixels so they stay crisp.
  * Zero dependencies. ES5 on purpose, so it can be inlined into old-device-friendly pages.
  */
 (function (root, factory) {
@@ -9,7 +11,7 @@
   else root.AuroraField = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var VERSION = '0.1.0';
+  var VERSION = '0.2.0';
   var TAU = Math.PI * 2;
 
   var imul = Math.imul || function (a, b) {
@@ -46,6 +48,7 @@
     if (typeof build !== 'function') throw new Error('aurora-field: shape "' + name + '" needs a build function');
     if (!SHAPES[name]) ORDER.push(name);
     SHAPES[name] = build;
+    if (typeof CACHE !== 'undefined') for (var k in CACHE) if (k.indexOf(name + '|') === 0) delete CACHE[k];
   }
 
   // mind: a Fibonacci sphere with a denser core; synapses to the nearest neighbours
@@ -117,11 +120,13 @@
     initial: null,            // first shape (default: shapes[0])
     cycle: 6500,              // ms per shape; 0 turns auto-cycling off
     pin: 14000,               // ms a setShape(…, {pin:true}) holds before cycling resumes
-    intro: 2600,              // ms for the scatter-to-shape assembly
+    intro: 2600,              // ms before auto-cycling may begin
     stars: 140,
     radius: null,             // function (stageWidth, stageHeight) → px
     maxDpr: 2,
-    fpsFloor: 38,             // below this after 3s, draw every other particle
+    quality: 'auto',          // 'auto' governs itself to hold the frame rate; 'high' | 'low' pin it
+    fpsFloor: 45,             // the governor steps quality down below this, back up above 57
+    autonomy: 1,              // 0…1: breathing, place-trading, scouts, self-lit signals
     interactive: true,
     autoPause: true,          // pause when off-screen or the tab is hidden
     reducedMotion: 'auto',    // 'auto' follows prefers-reduced-motion; true/false forces it
@@ -131,7 +136,7 @@
       signal: [200, 255, 236], head: [220, 255, 244], glow: [123, 227, 195], glow2: [62, 143, 122]
     },
     onShape: null,            // (name) when a shape becomes current
-    onStats: null,            // ({fps, nodes}) once a second while running
+    onStats: null,            // ({fps, nodes, quality}) once a second while running
     onSpinout: null           // () when someone spins it really hard (|ω| > 7 rad/s)
   };
   function merge(base, over) {
@@ -141,6 +146,34 @@
     return out;
   }
   function rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; }
+  var F32 = typeof Float32Array !== 'undefined' ? Float32Array : Array;
+  var I32 = typeof Int32Array !== 'undefined' ? Int32Array : Array;
+  function f32(n) { var a = new F32(n); if (a.fill) a.fill(0); else for (var i = 0; i < n; i++) a[i] = 0; return a; }
+  function i32(n) { var a = new I32(n); if (a.fill) a.fill(0); else for (var i = 0; i < n; i++) a[i] = 0; return a; }
+
+  // ---- shape cache: a shape is built once per (name, count, seed), then shared ----
+  var SESSION_SEED = (Math.random() * 4294967296) >>> 0, CACHE = {}, CACHE_KEYS = [];
+  function hashName(s) { var h = 2166136261; for (var i = 0; i < s.length; i++) h = imul(h ^ s.charCodeAt(i), 16777619); return h >>> 0; }
+  function compile(name, n, seed) {
+    var key = name + '|' + n + '|' + seed;
+    if (CACHE[key]) return CACHE[key];
+    var s = SHAPES[name](n, rng((seed ^ hashName(name)) >>> 0));
+    if (!s || !s.points || s.points.length !== n) throw new Error('aurora-field: shape "' + name + '" must return ' + n + ' points');
+    var T = f32(n * 3), i;
+    for (i = 0; i < n; i++) { T[i * 3] = s.points[i][0]; T[i * 3 + 1] = s.points[i][1]; T[i * 3 + 2] = s.points[i][2]; }
+    var adj = null;
+    if (s.pairs && s.pairs.length) {
+      adj = []; for (i = 0; i < n; i++) adj.push([]);
+      for (i = 0; i < s.pairs.length; i++) { adj[s.pairs[i][0]].push(s.pairs[i][1]); adj[s.pairs[i][1]].push(s.pairs[i][0]); }
+    }
+    var c = { def: s, T: T, adj: adj };
+    CACHE[key] = c; CACHE_KEYS.push(key);
+    if (CACHE_KEYS.length > 24) delete CACHE[CACHE_KEYS.shift()];
+    return c;
+  }
+
+  // quality ladder the governor walks: [particle stride, device-pixel cap]
+  var LADDER = [[1, 99], [1, 1.5], [2, 1.25], [3, 1]];
 
   function create(canvas, options) {
     var o = merge(DEFAULTS, options);
@@ -150,97 +183,129 @@
     var win = canvas.ownerDocument.defaultView || window, doc = canvas.ownerDocument;
     var container = o.container || canvas.parentNode, stage = o.stage || container;
     var reduced = o.reducedMotion === 'auto' ? !!(win.matchMedia && win.matchMedia('(prefers-reduced-motion: reduce)').matches) : !!o.reducedMotion;
-    var r = rng(o.seed), i;
+    var AUTO = reduced ? 0 : Math.max(0, Math.min(1, +o.autonomy || 0));
+    var seed = o.seed == null ? SESSION_SEED : (o.seed >>> 0);
+    var r = rng(seed), i;
     var N = typeof o.count === 'function' ? o.count(win.innerWidth) : (o.count || (win.innerWidth < 760 ? 900 : 1600));
     var names = (o.shapes || ORDER).slice();
     for (i = 0; i < names.length; i++) if (!SHAPES[names[i]]) throw new Error('aurora-field: unknown shape "' + names[i] + '"');
 
-    // particles, then every shape's targets, built once
-    var P = [];
+    // ---- particle state, struct-of-arrays: no per-frame allocation, cache-friendly loops ----
+    var X = f32(N), Y = f32(N), Z = f32(N), VX = f32(N), VY = f32(N), VZ = f32(N);
+    var OX = f32(N), OY = f32(N), SX = f32(N), SY = f32(N), ZZ = f32(N);
+    var W = f32(N), PH = f32(N), GLOW = f32(N), SC = f32(N);
+    var HOT = i32(N), TI = i32(N), OWN = i32(N);
     for (i = 0; i < N; i++) {
       var r0 = between(r, 2.5, 6), th = between(r, 0, TAU), ph = Math.acos(between(r, -1, 1));
-      P.push({ x: r0 * Math.sin(ph) * Math.cos(th), y: r0 * Math.cos(ph), z: r0 * Math.sin(ph) * Math.sin(th),
-        k: between(r, 0.022, 0.06), ox: 0, oy: 0, hot: r() < 0.07, sx: 0, sy: 0, zz: 0 });
+      X[i] = r0 * Math.sin(ph) * Math.cos(th); Y[i] = r0 * Math.cos(ph); Z[i] = r0 * Math.sin(ph) * Math.sin(th);
+      W[i] = between(r, 4.2, 8.5);          // each particle's own spring: some eager, some lazy
+      PH[i] = between(r, 0, TAU);
+      HOT[i] = r() < 0.07 ? 1 : 0;
+      TI[i] = i; OWN[i] = i;                // particle i currently holds point i (they trade later)
     }
     var S = {};
-    for (i = 0; i < names.length; i++) {
-      var s = SHAPES[names[i]](N, r);
-      if (!s || !s.points || s.points.length !== N) throw new Error('aurora-field: shape "' + names[i] + '" must return ' + N + ' points');
-      var adj = null;
-      if (s.pairs && s.pairs.length) {
-        adj = []; for (var a = 0; a < N; a++) adj.push([]);
-        for (a = 0; a < s.pairs.length; a++) { adj[s.pairs[a][0]].push(s.pairs[a][1]); adj[s.pairs[a][1]].push(s.pairs[a][0]); }
-      }
-      S[names[i]] = { def: s, adj: adj, w: 0 };
-    }
+    for (i = 0; i < names.length; i++) { var c0 = compile(names[i], N, seed); S[names[i]] = { def: c0.def, T: c0.T, adj: c0.adj, w: 0 }; }
     var stars = [];
     for (i = 0; i < o.stars; i++) stars.push([r(), r() * 0.8, between(r, 0.4, 1.3), between(r, 0, TAU)]);
 
     var shape = o.initial || names[0], autoAt = 0, pinnedUntil = 0, born = 0, introDone = false;
     S[shape].w = 1;
-    var W = 0, H = 0, DPR = 1, cx = 0, cy = 0, R = 1;
-    var rotY = 0, rotX = -0.32, vy = 0.9, kick = 0, mx = -1e4, my = -1e4, par = 0, down = null, waves = [], sig = [];
-    var BUCKETS = 7, bx = [], fps = 60, fAcc = 0, fN = 0, fT = 0, step = 1, spunAt = 0;
-    for (i = 0; i <= BUCKETS; i++) bx.push([]);
-    var raf = 0, last = 0, running = false, wanted = true, inView = true, destroyed = false, listeners = [], settle = 0;
+    var CW = 0, CH = 0, DPR = 1, cx = 0, cy = 0, R = 1;
+    var rotY = 0, rotX = -0.32, vy = 0.9, kick = 0, mx = -1e4, my = -1e4, pointerIn = false, par = 0, down = null, waves = [], sig = [];
+    var BUCKETS = 7, bCount = i32(BUCKETS + 1), bIdx = i32((BUCKETS + 1) * N), hotIdx = i32(N), litIdx = i32(N);
+    var fps = 60, fAcc = 0, fN = 0, level = o.quality === 'low' ? 3 : 0, good = 0, spunAt = 0;
+    var raf = 0, last = 0, running = false, wanted = true, inView = true, destroyed = false, listeners = [], settle = 0, clock = 0;
+    var glowCache = null, glowKey = '', haloCache = null, haloKey = '';
+    // scouts: a few particles leave the shape, orbit with a trail, and come home
+    var SCOUTS = [], MAXSCOUTS = Math.round(N * 0.008 * AUTO), TRAIL = 10;
 
     function on(el, ev, fn, opt) { el.addEventListener(ev, fn, opt || false); listeners.push([el, ev, fn, opt || false]); }
     function now() { return Date.now(); }
+    function step() { return LADDER[level][0]; }
 
     function layout() {
-      var cr = container.getBoundingClientRect(); W = cr.width; H = cr.height; if (!W || !H) return;
-      DPR = Math.min(win.devicePixelRatio || 1, o.maxDpr);
-      canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+      var cr = container.getBoundingClientRect(); CW = cr.width; CH = cr.height; if (!CW || !CH) return;
+      DPR = Math.min(win.devicePixelRatio || 1, o.maxDpr, LADDER[level][1]);
+      canvas.width = Math.round(CW * DPR); canvas.height = Math.round(CH * DPR);
       var g = stage.getBoundingClientRect();
       cx = g.left - cr.left + g.width / 2; cy = g.top - cr.top + g.height / 2;
       R = o.radius ? o.radius(g.width, g.height) : Math.max(90, Math.min(g.width * 0.42, g.height * 0.36, 330));
+      glowKey = '';
       if (!running) draw(0);
     }
-    function project(p, c1, s1, c2, s2) {
-      var x = p.x * c1 - p.z * s1, z = p.x * s1 + p.z * c1, y = p.y * c2 - z * s2; z = p.y * s2 + z * c2;
-      var k = 3.4 / (3.4 + z); p.sx = x * R * k; p.sy = y * R * k; p.zz = z;
+    // the core glow is a gradient; render it once per size into a sprite, then just blit it
+    function glowSprite() {
+      var key = Math.round(R * DPR) + '|' + o.palette.glow + '|' + o.palette.glow2;
+      if (key === glowKey) return glowCache;
+      glowKey = key; glowCache = null;
+      if (!doc.createElement) return null;
+      var sz = Math.max(2, Math.ceil(R * 3 * DPR)), c = doc.createElement('canvas'), g = c.getContext && c.getContext('2d');
+      if (!g) return null;
+      c.width = sz; c.height = sz;
+      var gr = g.createRadialGradient(sz / 2, sz / 2, 0, sz / 2, sz / 2, sz / 2);
+      gr.addColorStop(0, rgba(o.palette.glow, 0.13)); gr.addColorStop(0.5, rgba(o.palette.glow2, 0.05)); gr.addColorStop(1, rgba(o.palette.glow2, 0));
+      g.fillStyle = gr; g.fillRect(0, 0, sz, sz);
+      glowCache = c; return c;
     }
-    function fire(sh, a) {
-      var adj = S[sh].adj; if (!adj || sig.length >= 60 || !adj[a].length) return;
-      sig.push({ sh: sh, a: a, b: adj[a][Math.floor(Math.random() * adj[a].length)], t: 0, hops: 6 + Math.floor(Math.random() * 10) });
+    // a soft round halo for lit nodes and scouts, rendered once per palette
+    function haloSprite() {
+      var key = String(o.palette.point);
+      if (key === haloKey) return haloCache;
+      haloKey = key; haloCache = null;
+      if (!doc.createElement) return null;
+      var c = doc.createElement('canvas'), g = c.getContext && c.getContext('2d'); if (!g) return null;
+      c.width = c.height = 64;
+      var gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      gr.addColorStop(0, rgba(o.palette.point, 0.55)); gr.addColorStop(0.35, rgba(o.palette.point, 0.18)); gr.addColorStop(1, rgba(o.palette.point, 0));
+      g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+      haloCache = c; return c;
+    }
+    function fire(sh, p) {
+      var adj = S[sh].adj; if (!adj || sig.length >= 60 || !adj[p].length) return;
+      sig.push({ sh: sh, a: p, b: adj[p][Math.floor(Math.random() * adj[p].length)], t: 0, hops: 6 + Math.floor(Math.random() * 10) });
     }
     function burst() { if (S[shape].adj) for (var k = 0; k < 14; k++) fire(shape, Math.floor(Math.random() * N)); }
 
     function draw(t) {
-      var pal = o.palette, k, j, p;
-      ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, W, H);
+      var pal = o.palette, k, j, p, n;
+      var stp = step();
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.clearRect(0, 0, CW, CH);
       ctx.fillStyle = pal.star;
       for (i = 0; i < stars.length; i++) {
         var st = stars[i];
         ctx.globalAlpha = 0.12 + 0.28 * (0.5 + 0.5 * Math.sin(t * 0.0011 * st[2] + st[3])) * st[2] / 1.3;
-        ctx.fillRect(st[0] * W - par * 8 * st[2], st[1] * H, st[2], st[2]);
+        ctx.fillRect(st[0] * CW - par * 8 * st[2], st[1] * CH, st[2], st[2]);
       }
       ctx.globalAlpha = 1;
+      // project every particle once
       var c1 = Math.cos(rotY), s1 = Math.sin(rotY), c2 = Math.cos(rotX), s2 = Math.sin(rotX);
-      for (i = 0; i < N; i++) project(P[i], c1, s1, c2, s2);
-      var cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.5);
-      cg.addColorStop(0, rgba(pal.glow, 0.13)); cg.addColorStop(0.5, rgba(pal.glow2, 0.05)); cg.addColorStop(1, rgba(pal.glow2, 0));
-      ctx.fillStyle = cg; ctx.fillRect(cx - R * 1.5, cy - R * 1.5, R * 3, R * 3);
+      for (n = 0; n < N; n++) {
+        var x = X[n] * c1 - Z[n] * s1, z = X[n] * s1 + Z[n] * c1, y = Y[n] * c2 - z * s2; z = Y[n] * s2 + z * c2;
+        var kk = 3.4 / (3.4 + z); SX[n] = x * R * kk; SY[n] = y * R * kk; ZZ[n] = z;
+      }
+      var gs = glowSprite();
+      if (gs) ctx.drawImage(gs, cx - R * 1.5, cy - R * 1.5, R * 3, R * 3);
       ctx.globalCompositeOperation = 'lighter';
-      // edges follow measured convergence: they fade out mid-morph and in as points arrive,
-      // so the intro reads as stars gathering, not a scribble (on any frame rate)
+      // edges follow measured convergence: they fade out mid-morph and in as points arrive
       for (var name in S) {
         var sh = S[name], w = sh.w * settle; if (w < 0.02) continue;
         var pairs = sh.def.pairs, links = sh.def.links;
         if (pairs) {
           ctx.strokeStyle = rgba(pal.point, 0.13 * w); ctx.lineWidth = 0.7; ctx.beginPath();
-          for (i = 0; i < pairs.length; i += step) {
-            var A = P[pairs[i][0]], B = P[pairs[i][1]]; if (A.zz > 0.35 && B.zz > 0.35) continue;
-            ctx.moveTo(cx + A.sx + A.ox, cy + A.sy + A.oy); ctx.lineTo(cx + B.sx + B.ox, cy + B.sy + B.oy);
+          for (i = 0; i < pairs.length; i += stp) {
+            var A = OWN[pairs[i][0]], B = OWN[pairs[i][1]]; if ((ZZ[A] > 0.35 && ZZ[B] > 0.35) || SC[A] > 0 || SC[B] > 0) continue;
+            ctx.moveTo(cx + SX[A] + OX[A], cy + SY[A] + OY[A]); ctx.lineTo(cx + SX[B] + OX[B], cy + SY[B] + OY[B]);
           }
           ctx.stroke();
         }
         if (links) {
           ctx.strokeStyle = rgba(pal.point, 0.18 * w); ctx.lineWidth = 1; ctx.beginPath();
           for (i = 0; i < links.length; i++) {
-            var u = { x: links[i][0][0], y: links[i][0][1], z: links[i][0][2] }, v = { x: links[i][1][0], y: links[i][1][1], z: links[i][1][2] };
-            project(u, c1, s1, c2, s2); project(v, c1, s1, c2, s2);
-            ctx.moveTo(cx + u.sx, cy + u.sy); ctx.lineTo(cx + v.sx, cy + v.sy);
+            var L0 = links[i][0], L1 = links[i][1];
+            var ux = L0[0] * c1 - L0[2] * s1, uz = L0[0] * s1 + L0[2] * c1, uy = L0[1] * c2 - uz * s2; uz = L0[1] * s2 + uz * c2;
+            var vx = L1[0] * c1 - L1[2] * s1, vz = L1[0] * s1 + L1[2] * c1, vyy = L1[1] * c2 - vz * s2; vz = L1[1] * s2 + vz * c2;
+            var ku = 3.4 / (3.4 + uz), kv = 3.4 / (3.4 + vz);
+            ctx.moveTo(cx + ux * R * ku, cy + uy * R * ku); ctx.lineTo(cx + vx * R * kv, cy + vyy * R * kv);
           }
           ctx.stroke();
         }
@@ -248,81 +313,191 @@
       if (sig.length) {
         ctx.strokeStyle = rgba(pal.signal, 0.95); ctx.lineWidth = 1.8; ctx.beginPath();
         for (i = 0; i < sig.length; i++) {
-          var g = sig[i], ga = P[g.a], gb = P[g.b], t0 = Math.max(0, g.t - 0.5);
-          ctx.moveTo(cx + ga.sx + (gb.sx - ga.sx) * t0, cy + ga.sy + (gb.sy - ga.sy) * t0);
-          ctx.lineTo(cx + ga.sx + (gb.sx - ga.sx) * g.t, cy + ga.sy + (gb.sy - ga.sy) * g.t);
+          var g = sig[i], ga = OWN[g.a], gb = OWN[g.b], t0 = Math.max(0, g.t - 0.5);
+          ctx.moveTo(cx + SX[ga] + (SX[gb] - SX[ga]) * t0, cy + SY[ga] + (SY[gb] - SY[ga]) * t0);
+          ctx.lineTo(cx + SX[ga] + (SX[gb] - SX[ga]) * g.t, cy + SY[ga] + (SY[gb] - SY[ga]) * g.t);
         }
         ctx.stroke();
       }
-      for (i = 0; i <= BUCKETS; i++) bx[i].length = 0;
-      var hot = [];
-      for (i = 0; i < N; i += step) {
-        p = P[i]; if (p.hot) { hot.push(p); continue; }
-        bx[Math.max(0, Math.min(BUCKETS, Math.round((1 - p.zz) / 2 * BUCKETS)))].push(p);
+      // scout trails
+      if (SCOUTS.length) {
+        ctx.lineWidth = 1.2;
+        for (i = 0; i < SCOUTS.length; i++) {
+          var sc = SCOUTS[i], tr = sc.trail, len = Math.min(sc.count, TRAIL);
+          for (j = 1; j < len; j++) {
+            var h0 = (sc.head - j + 1 + TRAIL) % TRAIL, h1 = (sc.head - j + TRAIL) % TRAIL;
+            ctx.strokeStyle = rgba(pal.signal, 0.5 * (1 - j / TRAIL) * sc.fade);
+            ctx.beginPath(); ctx.moveTo(tr[h0 * 2], tr[h0 * 2 + 1]); ctx.lineTo(tr[h1 * 2], tr[h1 * 2 + 1]); ctx.stroke();
+          }
+        }
+      }
+      // points, crisp: identity transform, snapped to whole device pixels, batched by depth
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      for (k = 0; k <= BUCKETS; k++) bCount[k] = 0;
+      var nh = 0, nl = 0;
+      for (n = 0; n < N; n += stp) {
+        if (GLOW[n] > 0.25 || SC[n] > 0) { litIdx[nl++] = n; continue; }
+        if (HOT[n]) { hotIdx[nh++] = n; continue; }
+        k = Math.max(0, Math.min(BUCKETS, Math.round((1 - ZZ[n]) / 2 * BUCKETS)));
+        bIdx[k * N + bCount[k]++] = n;
       }
       for (k = 0; k <= BUCKETS; k++) {
-        var arr = bx[k]; if (!arr.length) continue;
+        var cnt = bCount[k]; if (!cnt) continue;
         ctx.fillStyle = rgba(pal.point, 0.2 + 0.8 * Math.pow(k / BUCKETS, 1.4)); ctx.beginPath();
-        var sz = 0.9 + 2.1 * (k / BUCKETS);
-        for (j = 0; j < arr.length; j++) ctx.rect(cx + arr[j].sx + arr[j].ox - sz / 2, cy + arr[j].sy + arr[j].oy - sz / 2, sz, sz);
+        var sz = Math.max(1, Math.round((0.9 + 2.1 * (k / BUCKETS)) * DPR)), half = sz / 2;
+        for (j = 0; j < cnt; j++) {
+          p = bIdx[k * N + j];
+          ctx.rect(Math.round((cx + SX[p] + OX[p]) * DPR - half), Math.round((cy + SY[p] + OY[p]) * DPR - half), sz, sz);
+        }
         ctx.fill();
       }
       ctx.fillStyle = pal.hot; ctx.beginPath();
-      for (i = 0; i < hot.length; i++) { var h = hot[i], hs = h.zz < 0 ? 2.6 : 1.4; ctx.rect(cx + h.sx + h.ox - hs / 2, cy + h.sy + h.oy - hs / 2, hs, hs); }
+      for (j = 0; j < nh; j++) {
+        p = hotIdx[j]; var hs = Math.max(1, Math.round((ZZ[p] < 0 ? 2.6 : 1.4) * DPR));
+        ctx.rect(Math.round((cx + SX[p] + OX[p]) * DPR - hs / 2), Math.round((cy + SY[p] + OY[p]) * DPR - hs / 2), hs, hs);
+      }
       ctx.fill();
+      // lit nodes (a signal just passed) and scouts: a bright core and a soft halo
+      if (nl) {
+        var hsprite = haloSprite();
+        if (hsprite) for (j = 0; j < nl; j++) {
+          p = litIdx[j]; var hz = (10 + 14 * Math.max(GLOW[p], SC[p] > 0 ? 0.8 : 0)) * DPR;
+          ctx.drawImage(hsprite, (cx + SX[p] + OX[p]) * DPR - hz / 2, (cy + SY[p] + OY[p]) * DPR - hz / 2, hz, hz);
+        }
+        ctx.fillStyle = pal.hot; ctx.beginPath();
+        for (j = 0; j < nl; j++) {
+          p = litIdx[j]; var hc = Math.max(1, Math.round(2.2 * DPR));
+          ctx.rect(Math.round((cx + SX[p] + OX[p]) * DPR - hc / 2), Math.round((cy + SY[p] + OY[p]) * DPR - hc / 2), hc, hc);
+        }
+        ctx.fill();
+      }
       if (sig.length) {
         ctx.fillStyle = rgba(pal.head, 1); ctx.beginPath();
-        for (i = 0; i < sig.length; i++) { var g2 = sig[i], a2 = P[g2.a], b2 = P[g2.b]; ctx.rect(cx + a2.sx + (b2.sx - a2.sx) * g2.t - 1.6, cy + a2.sy + (b2.sy - a2.sy) * g2.t - 1.6, 3.2, 3.2); }
+        var hh = Math.max(2, Math.round(3.2 * DPR));
+        for (i = 0; i < sig.length; i++) {
+          var g2 = sig[i], a2 = OWN[g2.a], b2 = OWN[g2.b];
+          ctx.rect(Math.round((cx + SX[a2] + (SX[b2] - SX[a2]) * g2.t) * DPR - hh / 2), Math.round((cy + SY[a2] + (SY[b2] - SY[a2]) * g2.t) * DPR - hh / 2), hh, hh);
+        }
         ctx.fill();
       }
       ctx.globalCompositeOperation = 'source-over';
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
       for (i = 0; i < waves.length; i++) {
         var wv = waves[i]; ctx.strokeStyle = rgba(pal.point, Math.max(0, 0.45 * (1 - wv.t / 700))); ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(wv.x, wv.y, wv.t, 0, TAU); ctx.stroke();
       }
     }
 
+    function scoutTarget(sc, out) {
+      var a = sc.a;
+      out[0] = Math.cos(a) * sc.r; out[1] = Math.sin(a * 0.7 + sc.tilt) * 0.35 + sc.tilt * 0.2; out[2] = Math.sin(a) * sc.r;
+    }
+    var TT = [0, 0, 0];
     function update(dt, t) {
-      var tn = now(), cur = S[shape], def = cur.def, pts = def.points;
+      var tn = now(), cur = S[shape], def = cur.def, T = cur.T, flowT = t / 1000, n, k;
+      clock += dt;
       if (!introDone && tn - born > o.intro) introDone = true;
       if (introDone && o.cycle > 0 && names.length > 1 && tn > autoAt && tn > pinnedUntil) setShape(names[(names.indexOf(shape) + 1) % names.length]);
-      for (var nm in S) S[nm].w += ((nm === shape ? 1 : 0) - S[nm].w) * 0.05;
+      for (var nm in S) S[nm].w += ((nm === shape ? 1 : 0) - S[nm].w) * Math.min(1, dt * 3);
       if (!down) vy += (0.16 - vy) * Math.min(1, dt * 0.9);
       rotY += (vy + kick) * dt; kick *= Math.pow(0.12, dt);
       if (Math.abs(vy) > 7 && tn > spunAt) { spunAt = tn + 4000; if (o.onSpinout) o.onSpinout(); }
-      var flowT = t / 1000;
-      for (var n = 0; n < N; n++) {
-        var p = P[n], T = (def.flow && def.flow(n, flowT)) || pts[n];
-        var k = p.k * (introDone ? 1.4 : 1) * dt * 60;
-        p.x += (T[0] - p.x) * k; p.y += (T[1] - p.y) * k; p.z += (T[2] - p.z) * k;
-        if (o.interactive) {
-          var dx = cx + p.sx + p.ox - mx, dy = cy + p.sy + p.oy - my, d2 = dx * dx + dy * dy;
-          if (d2 < 8100 && d2 > 0.01) { var d = Math.sqrt(d2), f = (1 - d / 90); f = f * f * 7; p.ox += dx / d * f; p.oy += dy / d * f; }
-          for (var w = 0; w < waves.length; w++) {
-            var wv = waves[w], ex = cx + p.sx - wv.x, ey = cy + p.sy - wv.y, ed = Math.sqrt(ex * ex + ey * ey), band = ed - wv.t;
-            if (band > -20 && band < 6 && ed > 0.1) { var push = (1 - Math.abs(band + 7) / 20) * 5; p.ox += ex / ed * push; p.oy += ey / ed * push; }
+
+      // ---- autonomy: particles manage themselves ----
+      if (AUTO > 0 && introDone) {
+        // trade places with a neighbour now and then (the shape keeps reorganising itself)
+        var swaps = dt * 3 * AUTO * settle;
+        while (Math.random() < swaps) {
+          swaps -= 1;
+          var pa = Math.floor(Math.random() * N), pb = Math.max(0, Math.min(N - 1, pa + Math.floor((Math.random() - 0.5) * 240)));
+          var ia = OWN[pa], ib = OWN[pb]; if (SC[ia] > 0 || SC[ib] > 0) continue;
+          OWN[pa] = ib; OWN[pb] = ia; TI[ia] = pb; TI[ib] = pa;
+        }
+        // scouts leave, orbit, come home
+        if (SCOUTS.length < MAXSCOUTS && settle > 0.7 && Math.random() < dt * 0.9 * AUTO) {
+          var si = Math.floor(Math.random() * N);
+          if (!SC[si]) {
+            SC[si] = between(Math.random, 3, 6);
+            SCOUTS.push({ i: si, a: Math.atan2(Z[si], X[si]), w: between(Math.random, 0.5, 1.1) * (Math.random() < 0.5 ? -1 : 1),
+              r: between(Math.random, 1.3, 1.6), tilt: between(Math.random, -0.6, 0.6), trail: f32(TRAIL * 2), head: 0, count: 0, fade: 0 });
           }
         }
-        p.ox *= 0.9; p.oy *= 0.9;
       }
-      for (w = waves.length - 1; w >= 0; w--) { waves[w].t += dt * 620; if (waves[w].t > 700) waves.splice(w, 1); }
+      for (k = SCOUTS.length - 1; k >= 0; k--) {
+        var sc = SCOUTS[k]; SC[sc.i] -= dt; sc.a += sc.w * dt;
+        sc.fade = Math.min(1, sc.fade + dt * 2) * (SC[sc.i] > 0.6 ? 1 : Math.max(0, SC[sc.i] / 0.6));
+        sc.head = (sc.head + 1) % TRAIL; sc.count++;
+        sc.trail[sc.head * 2] = cx + SX[sc.i] + OX[sc.i]; sc.trail[sc.head * 2 + 1] = cy + SY[sc.i] + OY[sc.i];
+        if (SC[sc.i] <= 0) { SC[sc.i] = 0; GLOW[sc.i] = 1; SCOUTS.splice(k, 1); }
+      }
+
+      // ---- physics: each particle is a damped spring toward its point, swirling in ----
+      var breathe = 0.014 * AUTO, swirlK = 1.6;
+      var near = o.interactive && pointerIn, waveOn = waves.length > 0;
+      for (n = 0; n < N; n++) {
+        var p = TI[n], tx, ty, tz;
+        if (SC[n] > 0) {
+          for (k = 0; k < SCOUTS.length; k++) if (SCOUTS[k].i === n) { scoutTarget(SCOUTS[k], TT); break; }
+          tx = TT[0]; ty = TT[1]; tz = TT[2];
+        } else {
+          var fl = def.flow ? def.flow(p, flowT) : null;
+          if (fl) { tx = fl[0]; ty = fl[1]; tz = fl[2]; } else { tx = T[p * 3]; ty = T[p * 3 + 1]; tz = T[p * 3 + 2]; }
+          if (breathe) {
+            var q = PH[n];
+            tx += breathe * Math.sin(clock * 1.3 + q); ty += breathe * Math.sin(clock * 1.1 + q * 1.7); tz += breathe * Math.cos(clock * 0.9 + q * 0.6);
+          }
+        }
+        var om = W[n] * (introDone ? 1 : 0.55), damp = 1.5 * om;
+        var ex = tx - X[n], ey = ty - Y[n], ez = tz - Z[n];
+        var dist = Math.abs(ex) + Math.abs(ey) + Math.abs(ez), sw = swirlK * Math.min(1, dist);
+        VX[n] += (om * om * ex - damp * VX[n] - ez * sw) * dt;
+        VY[n] += (om * om * ey - damp * VY[n]) * dt;
+        VZ[n] += (om * om * ez - damp * VZ[n] + ex * sw) * dt;
+        X[n] += VX[n] * dt; Y[n] += VY[n] * dt; Z[n] += VZ[n] * dt;
+        if (near) {
+          var dx = cx + SX[n] + OX[n] - mx, dy = cy + SY[n] + OY[n] - my, d2 = dx * dx + dy * dy;
+          if (d2 < 8100 && d2 > 0.01) { var d = Math.sqrt(d2), f = (1 - d / 90); f = f * f * 7; OX[n] += dx / d * f; OY[n] += dy / d * f; if (f > 2) GLOW[n] = Math.max(GLOW[n], 0.4); }
+        }
+        if (waveOn) {
+          for (var wq = 0; wq < waves.length; wq++) {
+            var wv = waves[wq], wx = cx + SX[n] - wv.x, wy = cy + SY[n] - wv.y, ed = Math.sqrt(wx * wx + wy * wy), band = ed - wv.t;
+            if (band > -20 && band < 6 && ed > 0.1) { var push = (1 - Math.abs(band + 7) / 20) * 5; OX[n] += wx / ed * push; OY[n] += wy / ed * push; GLOW[n] = Math.max(GLOW[n], 0.5); }
+          }
+        }
+        OX[n] *= 0.9; OY[n] *= 0.9;
+        if (GLOW[n] > 0) GLOW[n] = Math.max(0, GLOW[n] - dt * 1.6);
+      }
+      for (var w = waves.length - 1; w >= 0; w--) { waves[w].t += dt * 620; if (waves[w].t > 700) waves.splice(w, 1); }
       // how close is the field to its shape? sample 64 particles
       var err = 0, stride = Math.max(1, Math.floor(N / 64)), cnt = 0;
       for (n = 0; n < N; n += stride) {
-        var q = P[n], Q = (def.flow && def.flow(n, flowT)) || pts[n];
-        err += Math.abs(Q[0] - q.x) + Math.abs(Q[1] - q.y) + Math.abs(Q[2] - q.z); cnt++;
+        if (SC[n] > 0) continue;
+        var pp = TI[n], fq = def.flow ? def.flow(pp, flowT) : null;
+        err += Math.abs((fq ? fq[0] : T[pp * 3]) - X[n]) + Math.abs((fq ? fq[1] : T[pp * 3 + 1]) - Y[n]) + Math.abs((fq ? fq[2] : T[pp * 3 + 2]) - Z[n]); cnt++;
       }
-      var target = Math.max(0, Math.min(1, 1 - (err / cnt) * 4));
+      // breathing is part of being in shape, so it doesn't count as error
+      var target = cnt ? Math.max(0, Math.min(1, 1 - Math.max(0, err / cnt - breathe * 2.2) * 4)) : 1;
       settle += (target - settle) * Math.min(1, dt * 6);
-      if (cur.adj && Math.random() < dt * 12) fire(shape, Math.floor(Math.random() * N));
+      // signals: fire on their own; each node they reach lights up
+      if (cur.adj && Math.random() < dt * (6 + 8 * AUTO)) fire(shape, Math.floor(Math.random() * N));
       for (var s = sig.length - 1; s >= 0; s--) {
         var g = sig[s]; if (g.sh !== shape) { sig.splice(s, 1); continue; }
         g.t += dt * 3.2;
         if (g.t >= 1) {
+          if (AUTO) GLOW[OWN[g.b]] = Math.max(GLOW[OWN[g.b]], 0.6 + 0.4 * AUTO);
           var adj = S[g.sh].adj[g.b];
           if (--g.hops > 0 && adj.length) { g.a = g.b; g.b = adj[Math.floor(Math.random() * adj.length)]; g.t = 0; } else sig.splice(s, 1);
         }
       }
+    }
+    // the governor: holds the frame rate by walking a quality ladder, and walks back up
+    function govern() {
+      if (o.quality !== 'auto') return;
+      var was = level;
+      if (fps < o.fpsFloor && level < LADDER.length - 1) { level++; good = 0; }
+      else if (fps >= 57 && level > 0) { if (++good >= 3) { level--; good = 0; } }
+      else good = 0;
+      if (level !== was && LADDER[level][1] !== LADDER[was][1]) layout();
     }
     function frame(t) {
       raf = 0; if (!running) return;
@@ -330,9 +505,9 @@
       update(dt, t); draw(t);
       fAcc += dt; fN++;
       if (fAcc >= 1) {
-        fps = Math.round(fN / fAcc); fAcc = 0; fN = 0; fT++;
-        if (fT === 3 && fps < o.fpsFloor && step === 1) step = 2;
-        if (o.onStats) o.onStats({ fps: fps, nodes: Math.ceil(N / step) });
+        fps = Math.round(fN / fAcc); fAcc = 0; fN = 0;
+        govern();
+        if (o.onStats) o.onStats({ fps: fps, nodes: Math.ceil(N / step()), quality: level });
       }
       raf = win.requestAnimationFrame(frame);
     }
@@ -342,8 +517,8 @@
       else if (!want && running) { running = false; if (raf) { win.cancelAnimationFrame(raf); raf = 0; } }
     }
     function snap(name) {
-      var pts = S[name].def.points;
-      for (var n = 0; n < N; n++) { P[n].x = pts[n][0]; P[n].y = pts[n][1]; P[n].z = pts[n][2]; }
+      var T = S[name].T;
+      for (var n = 0; n < N; n++) { var p = TI[n]; X[n] = T[p * 3]; Y[n] = T[p * 3 + 1]; Z[n] = T[p * 3 + 2]; VX[n] = VY[n] = VZ[n] = 0; }
       settle = 1;
     }
     function setShape(name, opt) {
@@ -362,7 +537,8 @@
     function pos(e) { var b = canvas.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; }
     if (o.interactive) {
       on(canvas, 'pointermove', function (e) {
-        var p = pos(e); mx = p[0]; my = p[1]; par = mx / (W || 1) - 0.5;
+        var p = pos(e); mx = p[0]; my = p[1]; par = mx / (CW || 1) - 0.5;
+        pointerIn = Math.abs(mx - cx) < R * 1.8 + 90 && Math.abs(my - cy) < R * 1.8 + 90;
         if (down) {
           var dx = p[0] - down[0];
           vy = dx * 0.06 * 60 / Math.max(16, now() - down[2] + 16);
@@ -371,7 +547,7 @@
           if (!running) draw(0);
         }
       });
-      on(canvas, 'pointerleave', function () { mx = my = -1e4; });
+      on(canvas, 'pointerleave', function () { mx = my = -1e4; pointerIn = false; });
       on(canvas, 'pointerdown', function (e) {
         var p = pos(e); down = [p[0], p[1], now(), 0]; canvas.setAttribute('data-dragging', '');
         if (e.pointerType !== 'touch' && canvas.setPointerCapture) try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
@@ -379,7 +555,7 @@
       on(canvas, 'pointerup', function (e) {
         if (!down) return; var moved = down[3]; down = null; canvas.removeAttribute('data-dragging');
         if (moved < 6) { var p = pos(e); waves.push({ x: p[0], y: p[1], t: 0 }); if (waves.length > 4) waves.shift(); kick += 0.8; burst(); }
-        if (e.pointerType === 'touch') mx = my = -1e4;
+        if (e.pointerType === 'touch') { mx = my = -1e4; pointerIn = false; }
       });
       on(canvas, 'pointercancel', function () { down = null; canvas.removeAttribute('data-dragging'); });
     }
@@ -399,7 +575,7 @@
       play: function () { wanted = true; layout(); sync(); return api; },
       pause: function () { wanted = false; sync(); return api; },
       resize: function () { layout(); return api; },
-      stats: function () { return { fps: fps, nodes: Math.ceil(N / step), running: running, reduced: reduced, shape: shape }; },
+      stats: function () { return { fps: fps, nodes: Math.ceil(N / step()), running: running, reduced: reduced, shape: shape, quality: level, scouts: SCOUTS.length, settle: Math.round(settle * 100) / 100 }; },
       destroy: function () {
         destroyed = true; sync();
         for (var l = 0; l < listeners.length; l++) listeners[l][0].removeEventListener(listeners[l][1], listeners[l][2], listeners[l][3]);

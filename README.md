@@ -6,8 +6,10 @@ A canvas-2D particle field that assembles into shapes and morphs between them: a
 
 ![aurora-field: a glowing neural sphere of particles on a night sky](docs/preview.jpg)
 
-- **Zero dependencies.** One file, about 20 KB unminified, and ES5, so it can be inlined into pages that support old devices.
-- **Honest performance.** 1,600 points at 60 fps on a laptop and 900 on phones. It measures its own frame rate and halves the drawn points if it drops below 38 fps. Device-pixel-ratio aware, capped at 2×.
+- **Zero dependencies.** One file, about 32 KB unminified (11 KB gzipped), and ES5, so it can be inlined into pages that support old devices.
+- **Alive.** Every particle is its own damped spring with its own stiffness, so the field swirls into shape instead of easing. Once there, it manages itself: points breathe, trade places with neighbours, send out scouts that orbit with a trail and come home, and light up as signals pass through.
+- **Fast, and it says so.** About 2–3 ms a frame for 1,600 points on a laptop with a retina screen. Particle state lives in typed arrays with no per-frame allocation, shape builds are cached, and the glows are pre-rendered sprites. A governor watches the real frame rate and walks a quality ladder (resolution, then point density) down below 45 fps and back up above 57.
+- **Crisp.** Points are snapped to whole device pixels, so they stay sharp on retina screens instead of smearing.
 - **Polite.** Pauses off-screen and in hidden tabs. Under `prefers-reduced-motion` it draws one still frame.
 - **Deterministic when you want it.** Pass a `seed` and the same field is drawn every time.
 
@@ -57,13 +59,16 @@ The canvas fills its `container` (default: its parent). Pass a `stage` element t
 | `intro` | `2600` | ms before auto-cycling may begin |
 | `stars` | `140` | background stars (twinkle, slight parallax) |
 | `radius` | `min(w·.42, h·.36, 330)` | `(stageW, stageH) => px` |
+| `autonomy` | `1` | `0…1`: breathing, place-trading, scouts, nodes lit by signals; `0` gives pure shapes |
+| `quality` | `'auto'` | `'auto'` governs itself; `'high'` / `'low'` pin it |
+| `fpsFloor` | `45` | the governor steps down below this |
 | `interactive` | `true` | drag to spin, cursor parts the field, click for a shockwave |
 | `autoPause` | `true` | pause when off-screen or the tab is hidden |
 | `reducedMotion` | `'auto'` | `true` / `false` overrides `prefers-reduced-motion` |
 | `seed` | `null` | number → deterministic field |
 | `palette` | aurora | `{ point:[r,g,b], hot, star, signal:[r,g,b], head:[r,g,b], glow:[r,g,b], glow2:[r,g,b] }` |
 | `onShape` | | `(name)` when a shape becomes current |
-| `onStats` | | `({ fps, nodes })` once a second while running |
+| `onStats` | | `({ fps, nodes, quality })` once a second while running |
 | `onSpinout` | | `()` when someone spins it really hard |
 
 ## API
@@ -73,7 +78,7 @@ field.setShape('platforms', { pin: true })  // or { pin: 5000 }
 field.next()
 field.pause(); field.play()
 field.resize()      // after a layout change the window didn't announce
-field.stats()       // { fps, nodes, running, reduced, shape }
+field.stats()       // { fps, nodes, running, reduced, shape, quality, scouts, settle }
 field.destroy()     // removes listeners and clears the canvas
 
 AuroraField.register(name, build)  // add a shape, before create()
@@ -108,7 +113,11 @@ The demo registers a double helix this way; see `index.html`.
 
 ## How it draws
 
-Each frame rotates every point around Y and then X, applies a light perspective, and sorts points into eight depth buckets. Each bucket is filled with a single `rect` path, so 1,600 points cost eight fills, not 1,600. Edges are one stroked path. Additive blending (`lighter`) gives the glow without blur filters. Edges fade with *measured* convergence: the field samples 64 points each frame to see how close it is to its shape. That keeps the intro and every morph clean at any frame rate.
+- **Physics.** Each particle is a semi-implicit-Euler damped spring toward the point it holds (ζ ≈ 0.75, ω between 4.2 and 8.5 per particle), plus a small swirl around the vertical axis while it travels, so arrivals spiral in.
+- **Autonomy.** Particles hold a *point* of the shape, not a fixed slot (`TI` / `OWN` maps). Neighbours swap points a few times a second, scouts leave on short orbits, and every node a signal reaches lights up.
+- **Drawing.** Every point is projected once per frame, then sorted into eight depth buckets. Each bucket is one `rect` path at whole device pixels, so 1,600 points cost eight fills, not 1,600. Edges are one stroked path. Glows (the core light, the halos on lit nodes) are pre-rendered sprites. Additive blending (`lighter`) gives the bloom without blur filters.
+- **Convergence.** The field samples 64 points each frame to measure how close it is to its shape, and edges fade with that measure. The intro and every morph stay clean at any frame rate.
+- **Governor.** One frame-rate check a second; quality steps down a rung below `fpsFloor` and back up after three good seconds.
 
 ## Develop
 

@@ -76,6 +76,7 @@
         <div class="row" role="group" aria-label="Palette"><span class="k">palette</span><span id="palettes" class="row"></span></div>
         <div class="row"><label class="k" for="count">nodes</label><input id="count" type="range" min="200" max="3000" step="100" value="1600"><output id="countv">1600</output></div>
         <div class="row"><span class="k">cycle</span><button class="chip" id="cycle" aria-pressed="true">auto · 6.5s</button></div>
+        <div class="row"><span class="k">autonomy</span><button class="chip" id="auto" aria-pressed="true">on · breathe, trade, scout</button></div>
         <pre id="code" aria-label="Code for the current settings"></pre>
       </div>
     </div>
@@ -103,7 +104,7 @@
     mono:{point:[220,224,228],hot:'#FFFFFF',star:'#DDE3E6',signal:[245,247,248],head:[255,255,255],glow:[200,205,210],glow2:[90,95,100]}
   };
   var SW={aurora:'#7BE3C3',ember:'#FF9E5E',ice:'#8CBEFF',mono:'#DCE0E4'};
-  var state={palette:'aurora',count:innerWidth<760?900:1600,cycle:true,shape:'mind'}, field=null;
+  var state={palette:'aurora',count:innerWidth<760?900:1600,cycle:true,auto:true,shape:'mind'}, field=null;
   var canvas=document.getElementById('field'), sky=document.getElementById('sky'), stage=document.getElementById('stage');
   var statsEl=document.getElementById('stats'), shapesEl=document.getElementById('shapes'), palEl=document.getElementById('palettes');
   document.getElementById('ver').textContent='v'+AuroraField.version;
@@ -116,7 +117,7 @@
       '<span class="c">// npm i aurora-field   ·   or one &lt;script&gt; tag</span>\n'+
       '<span class="f">const</span> field = AuroraField.<span class="f">create</span>(canvas, {\n'+
       '  shapes: [<span class="s">'+esc(AuroraField.shapes().map(function(s){return "'"+s+"'"}).join(', '))+'</span>],\n'+
-      '  count: <span class="s">'+state.count+'</span>,'+(state.cycle?'':'\n  cycle: <span class="s">0</span>,')+esc(p)+'\n'+
+      '  count: <span class="s">'+state.count+'</span>,'+(state.cycle?'':'\n  cycle: <span class="s">0</span>,')+(state.auto?'':'\n  autonomy: <span class="s">0</span>,')+esc(p)+'\n'+
       '  onShape: name =&gt; caption(name),\n});\n'+
       'field.<span class="f">setShape</span>(<span class="s">\''+state.shape+'\'</span>, { pin: <span class="s">true</span> });';
   }
@@ -133,8 +134,8 @@
   function mark(s){ state.shape=s; [].forEach.call(shapesEl.children,function(b){b.setAttribute('aria-pressed',String(b.textContent===s))}); code(); }
   function build(){
     if(field) field.destroy();
-    field=AuroraField.create(canvas,{container:sky,stage:stage,count:state.count,cycle:state.cycle?6500:0,palette:PALETTES[state.palette],initial:state.shape,
-      onShape:mark, onStats:function(s){statsEl.innerHTML='<b>'+s.nodes.toLocaleString('en-US')+'</b> nodes · <b>'+s.fps+'</b> fps'},
+    field=AuroraField.create(canvas,{container:sky,stage:stage,count:state.count,cycle:state.cycle?6500:0,autonomy:state.auto?1:0,palette:PALETTES[state.palette],initial:state.shape,
+      onShape:mark, onStats:function(s){var st=field.stats();statsEl.innerHTML='<b>'+s.nodes.toLocaleString('en-US')+'</b> nodes · <b>'+s.fps+'</b> fps · quality '+(['high','retina-lite','balanced','eco'][s.quality])+' · '+st.scouts+' scouts out'},
       onSpinout:function(){statsEl.innerHTML='<b>1.21 GW</b>'}});
     code();
   }
@@ -143,6 +144,8 @@
   count.onchange=function(){state.count=+count.value; build()};
   var cyc=document.getElementById('cycle');
   cyc.onclick=function(){ state.cycle=!state.cycle; cyc.setAttribute('aria-pressed',String(state.cycle)); cyc.textContent=state.cycle?'auto · 6.5s':'off'; build(); };
+  var au=document.getElementById('auto');
+  au.onclick=function(){ state.auto=!state.auto; au.setAttribute('aria-pressed',String(state.auto)); au.textContent=state.auto?'on · breathe, trade, scout':'off · pure shapes'; build(); };
   build(); chips();
 })();
 </script>

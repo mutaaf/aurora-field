@@ -1,23 +1,42 @@
 {
   "name": "aurora-field",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A zero-dependency canvas particle field that assembles into shapes and morphs between them: a neural sphere with travelling signals, a team of orbs, a stack of platforms. Drag, part, shockwave.",
   "main": "src/aurora-field.js",
   "browser": "src/aurora-field.js",
   "types": "src/aurora-field.d.ts",
   "exports": {
-    ".": { "types": "./src/aurora-field.d.ts", "default": "./src/aurora-field.js" },
+    ".": {
+      "types": "./src/aurora-field.d.ts",
+      "default": "./src/aurora-field.js"
+    },
     "./package.json": "./package.json"
   },
-  "files": ["src", "README.md", "LICENSE"],
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "test": "node test/run.mjs",
     "demo": "python3 -m http.server 8080"
   },
-  "keywords": ["canvas", "particles", "neural network", "hero", "animation", "generative", "landing page", "zero-dependency"],
+  "keywords": [
+    "canvas",
+    "particles",
+    "neural network",
+    "hero",
+    "animation",
+    "generative",
+    "landing page",
+    "zero-dependency"
+  ],
   "author": "Mutaaf Aziz (https://mutaafaziz.com)",
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/mutaaf/aurora-field.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mutaaf/aurora-field.git"
+  },
   "homepage": "https://mutaaf.github.io/aurora-field/",
   "sideEffects": false
 }
