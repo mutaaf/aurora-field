@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>aurora-field</title>
+<meta name="description" content="A zero-dependency canvas particle field that assembles into shapes and morphs between them. Drag it, part it, shock it.">
+<meta property="og:title" content="aurora-field">
+<meta property="og:description" content="A zero-dependency canvas particle field: a neural sphere, a team, a platform stack, and any shape you register.">
+<meta property="og:image" content="https://mutaaf.github.io/aurora-field/docs/preview.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0B0F12">
+<style>
+  :root{--night:#0B0F12;--ink:#F2F5F6;--dim:#8A9399;--faint:#56616A;--line:rgba(255,255,255,.08);--aurora:#7BE3C3;--aurora2:#3E8F7A;
+    --sans:"Avenir Next","Avenir","Segoe UI Variable Text","Segoe UI","Helvetica Neue",Arial,sans-serif;--mono:"SF Mono",Menlo,Consolas,"Liberation Mono",monospace}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--night);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  body{overflow-x:hidden}
+  .sky{position:relative;min-height:100vh;min-height:100svh;overflow:hidden;background:radial-gradient(120% 80% at 70% 20%,#121A1F 0,var(--night) 62%)}
+  .aur{position:absolute;inset:-20% -10% auto;height:75%;pointer-events:none;opacity:.8}
+  .aur i{position:absolute;display:block;border-radius:50%;filter:blur(60px);mix-blend-mode:screen;animation:drift 22s ease-in-out infinite alternate}
+  .aur i:nth-child(1){left:38%;top:8%;width:56%;height:34%;background:radial-gradient(closest-side,rgba(123,227,195,.42),transparent)}
+  .aur i:nth-child(2){left:58%;top:22%;width:40%;height:22%;background:radial-gradient(closest-side,rgba(62,143,122,.5),transparent);animation-duration:28s;animation-delay:-9s}
+  @keyframes drift{50%{transform:translate3d(-6%,4%,0) scaleX(1.25)}100%{transform:translate3d(5%,-3%,0) scaleX(.9)}}
+  canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:pan-y}
+  canvas[data-dragging]{cursor:grabbing}
+  .stage{position:absolute;top:0;right:0;bottom:0;width:58%;pointer-events:none}
+  .ui{position:relative;z-index:2;max-width:1160px;margin:0 auto;padding:40px 32px 32px;min-height:100vh;min-height:100svh;display:flex;flex-direction:column;pointer-events:none}
+  .ui a,.ui button,.ui input,.ui label,.ui pre,.ui select{pointer-events:auto}
+  header{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;padding-bottom:18px;border-bottom:1px solid var(--line);font:12px var(--mono);letter-spacing:.06em;color:var(--dim)}
+  header b{font:600 16px var(--sans);letter-spacing:.01em;color:var(--ink)}
+  header a{color:var(--dim);text-decoration:none;margin-left:16px}
+  header a:hover{color:var(--aurora)}
+  .copy{max-width:520px;margin-top:12vh}
+  h1{margin:0;font-size:clamp(40px,6vw,72px);line-height:1;font-weight:500;letter-spacing:-.035em}
+  h1 em{font-style:normal;color:var(--aurora)}
+  .lede{margin:20px 0 0;font-size:16px;line-height:1.6;color:#97A1A7;max-width:42ch}
+  .panel{margin-top:28px;display:grid;gap:14px;max-width:520px}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .row .k{width:76px;font:11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+  .chip{all:unset;box-sizing:border-box;cursor:pointer;min-height:36px;padding:0 14px;display:inline-flex;align-items:center;border-radius:999px;font:500 13px var(--sans);color:var(--dim);box-shadow:inset 0 0 0 1px #2A3237;transition:color .2s,box-shadow .2s,background .2s}
+  .chip:hover{color:var(--ink);box-shadow:inset 0 0 0 1px #45515A}
+  .chip[aria-pressed="true"]{color:#0B0F12;background:var(--aurora);box-shadow:none}
+  .chip[aria-pressed="true"] .sw{box-shadow:0 0 0 2px #0B0F12}
+  .chip:focus-visible{outline:2px solid var(--aurora);outline-offset:2px}
+  .sw{width:16px;height:16px;border-radius:50%;margin-right:8px}
+  input[type=range]{width:180px;accent-color:var(--aurora)}
+  output{font:12px var(--mono);color:var(--dim);min-width:5ch}
+  pre{margin:0;padding:16px 18px;border-radius:4px;background:rgba(11,15,18,.72);box-shadow:inset 0 0 0 1px var(--line);font:12.5px/1.65 var(--mono);color:#C9D2D6;overflow:auto;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+  pre .c{color:var(--faint)} pre .s{color:var(--aurora)} pre .f{color:#E6ECEF}
+  footer{margin-top:auto;padding-top:24px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px 24px;border-top:1px solid var(--line);font:11.5px var(--mono);letter-spacing:.04em;color:var(--faint)}
+  footer b{color:var(--aurora);font-weight:500}
+  footer a{color:var(--dim)}
+  @media(max-width:860px){
+    .stage{position:relative;width:auto;height:min(340px,42vh);margin-top:8px}
+    .ui{padding:24px 18px 24px}
+    .copy{margin-top:0}
+    .row .k{width:100%}
+    input[type=range]{width:100%}
+  }
+  @media(prefers-reduced-motion:reduce){.aur i{animation:none}}
+</style>
+</head>
+<body>
+<section class="sky" id="sky">
+  <div class="aur" aria-hidden="true"><i></i><i></i></div>
+  <canvas id="field" aria-label="An interactive particle field. Drag to spin, click for a shockwave."></canvas>
+  <div class="ui">
+    <header><b>aurora-field</b><span><span id="ver">v0.1.0</span> · MIT · 0 deps<a href="https://github.com/mutaaf/aurora-field">GitHub</a><a href="https://mutaafaziz.com">seen on mutaafaziz.com</a></span></header>
+    <div class="stage" id="stage" aria-hidden="true"></div>
+    <div class="copy">
+      <h1>Points that <em>assemble</em>.</h1>
+      <p class="lede">A canvas-2D particle field that becomes a neural sphere, a team, a stack of platforms, or any shape you register. Drag to spin it, move through it to part it, click to send a shockwave. One file, zero dependencies, ES5.</p>
+      <div class="panel">
+        <div class="row" role="group" aria-label="Shape"><span class="k">shape</span><span id="shapes" class="row"></span></div>
+        <div class="row" role="group" aria-label="Palette"><span class="k">palette</span><span id="palettes" class="row"></span></div>
+        <div class="row"><label class="k" for="count">nodes</label><input id="count" type="range" min="200" max="3000" step="100" value="1600"><output id="countv">1600</output></div>
+        <div class="row"><span class="k">cycle</span><button class="chip" id="cycle" aria-pressed="true">auto · 6.5s</button></div>
+        <pre id="code" aria-label="Code for the current settings"></pre>
+      </div>
+    </div>
+    <footer><span id="stats">— nodes · — fps</span><span>drag to spin · move to part · click to pulse</span><span>by <a href="https://mutaafaziz.com">Mutaaf Aziz</a></span></footer>
+  </div>
+</section>
+<script src="src/aurora-field.js"></script>
+<script>
+(function(){
+  // a custom shape, to show the register API: a double helix
+  AuroraField.register('helix', function(n, r){
+    var pts=[], links=[];
+    for(var i=0;i<n;i++){
+      var strand=i%2, t=(i/n)*1.9-0.95, a=t*9+strand*Math.PI, rad=0.42;
+      if(i%11===0){ var u=r(); pts.push([Math.cos(a)*rad*(1-2*u),t,Math.sin(a)*rad*(1-2*u)]); }
+      else pts.push([Math.cos(a)*rad+(r()-0.5)*0.03,t+(r()-0.5)*0.02,Math.sin(a)*rad+(r()-0.5)*0.03]);
+    }
+    for(var k=0;k<24;k++){ var tt=k/24*1.9-0.95, aa=tt*9; links.push([[Math.cos(aa)*0.42,tt,Math.sin(aa)*0.42],[Math.cos(aa+Math.PI)*0.42,tt,Math.sin(aa+Math.PI)*0.42]]); }
+    return {points:pts, links:links, kick:1};
+  });
+  var PALETTES={
+    aurora:{point:[123,227,195],hot:'#F4FFFB',star:'#CFE9E0',signal:[200,255,236],head:[220,255,244],glow:[123,227,195],glow2:[62,143,122]},
+    ember:{point:[255,158,94],hot:'#FFF4E8',star:'#FFE2C9',signal:[255,214,170],head:[255,236,214],glow:[255,140,80],glow2:[160,60,30]},
+    ice:{point:[140,190,255],hot:'#F2F7FF',star:'#D6E6FF',signal:[200,225,255],head:[230,240,255],glow:[120,170,255],glow2:[50,80,160]},
+    mono:{point:[220,224,228],hot:'#FFFFFF',star:'#DDE3E6',signal:[245,247,248],head:[255,255,255],glow:[200,205,210],glow2:[90,95,100]}
+  };
+  var SW={aurora:'#7BE3C3',ember:'#FF9E5E',ice:'#8CBEFF',mono:'#DCE0E4'};
+  var state={palette:'aurora',count:innerWidth<760?900:1600,cycle:true,shape:'mind'}, field=null;
+  var canvas=document.getElementById('field'), sky=document.getElementById('sky'), stage=document.getElementById('stage');
+  var statsEl=document.getElementById('stats'), shapesEl=document.getElementById('shapes'), palEl=document.getElementById('palettes');
+  document.getElementById('ver').textContent='v'+AuroraField.version;
+  var count=document.getElementById('count'), countv=document.getElementById('countv');
+  count.value=state.count; countv.textContent=state.count;
+  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')}
+  function code(){
+    var p=state.palette==='aurora'?'':"\n  palette: AuroraField.palettes."+state.palette+",";
+    document.getElementById('code').innerHTML=
+      '<span class="c">// npm i aurora-field   ·   or one &lt;script&gt; tag</span>\n'+
+      '<span class="f">const</span> field = AuroraField.<span class="f">create</span>(canvas, {\n'+
+      '  shapes: [<span class="s">'+esc(AuroraField.shapes().map(function(s){return "'"+s+"'"}).join(', '))+'</span>],\n'+
+      '  count: <span class="s">'+state.count+'</span>,'+(state.cycle?'':'\n  cycle: <span class="s">0</span>,')+esc(p)+'\n'+
+      '  onShape: name =&gt; caption(name),\n});\n'+
+      'field.<span class="f">setShape</span>(<span class="s">\''+state.shape+'\'</span>, { pin: <span class="s">true</span> });';
+  }
+  function chips(){
+    shapesEl.innerHTML=''; AuroraField.shapes().forEach(function(s){
+      var b=document.createElement('button'); b.className='chip'; b.textContent=s; b.setAttribute('aria-pressed',String(s===state.shape));
+      b.onclick=function(){ field.setShape(s,{pin:true}); mark(s); }; shapesEl.appendChild(b);
+    });
+    palEl.innerHTML=''; Object.keys(PALETTES).forEach(function(k){
+      var b=document.createElement('button'); b.className='chip'; b.innerHTML='<span class="sw" style="background:'+SW[k]+'"></span>'+k; b.setAttribute('aria-pressed',String(k===state.palette));
+      b.onclick=function(){ state.palette=k; build(); chips(); }; palEl.appendChild(b);
+    });
+  }
+  function mark(s){ state.shape=s; [].forEach.call(shapesEl.children,function(b){b.setAttribute('aria-pressed',String(b.textContent===s))}); code(); }
+  function build(){
+    if(field) field.destroy();
+    field=AuroraField.create(canvas,{container:sky,stage:stage,count:state.count,cycle:state.cycle?6500:0,palette:PALETTES[state.palette],initial:state.shape,
+      onShape:mark, onStats:function(s){statsEl.innerHTML='<b>'+s.nodes.toLocaleString('en-US')+'</b> nodes · <b>'+s.fps+'</b> fps'},
+      onSpinout:function(){statsEl.innerHTML='<b>1.21 GW</b>'}});
+    code();
+  }
+  AuroraField.palettes=PALETTES;
+  count.oninput=function(){countv.textContent=count.value};
+  count.onchange=function(){state.count=+count.value; build()};
+  var cyc=document.getElementById('cycle');
+  cyc.onclick=function(){ state.cycle=!state.cycle; cyc.setAttribute('aria-pressed',String(state.cycle)); cyc.textContent=state.cycle?'auto · 6.5s':'off'; build(); };
+  build(); chips();
+})();
+</script>
+</body>
+</html>
