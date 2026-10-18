@@ -1,6 +1,6 @@
 # aurora-field
 
-A canvas-2D particle field that assembles into shapes and morphs between them: a neural sphere with signals travelling its synapses, a team of orbs, a stack of platforms with traffic streaming through, an armoured helm traced from line art that turns to face you (or follows your head, via `setPose`) with glowing eyes, or any shape you register. Drag to spin it, move through it to part it, click to send a shockwave.
+A WebGL particle field (with a canvas-2D fallback) that assembles into shapes and morphs between them: a neural sphere with signals travelling its synapses, a team of orbs, a stack of platforms with traffic streaming through, an armoured helm, traced from line art over a holographic scan of its shell, that turns to face you (or follows your head, via `setPose`) with glowing eyes, or any shape you register. Drag to spin it, move through it to part it, click to send a shockwave.
 
 **[Live demo →](https://mutaaf.github.io/aurora-field/)** · seen on [mutaafaziz.com](https://mutaafaziz.com)
 

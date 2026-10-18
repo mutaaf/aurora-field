@@ -1,6 +1,6 @@
 {
   "name": "aurora-field",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "A zero-dependency canvas particle field that assembles into shapes and morphs between them: a neural sphere with travelling signals, a team of orbs, a stack of platforms, a helm. Drag, part, shockwave.",
   "main": "src/aurora-field.js",
   "browser": "src/aurora-field.js",

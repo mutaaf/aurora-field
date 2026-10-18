@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.0 — 2026-10-18
+- **The helm, rebuilt as a true helmet.** One scale for both axes, so it is no longer stretched 1.4× wide. It's now a real head volume: rounded-box cross-sections, deeper front to back than side to side, with a proud faceplate. Turned to the side, it reads as a helmet instead of a slab.
+- **Crisper.** No jitter on the seams, which now hug the curved shell. The random surface fill is gone: the face is clean line art, and the sides and back are a holographic scan of contour rings that carry signals. Ear discs sit on the sides of the shell.
+
 ## 0.4.0 — 2026-10-18
 - **WebGL renderer** (default when available): round anti-aliased points snapped to device pixels, specular cores, soft halos and additive bloom, with edges, links, signals, trails and shockwaves in a single `gl.LINES` batch. Three draw calls a frame. Default counts double (2,800 / 1,400). Canvas-2D is the automatic fallback (`renderer: '2d'` forces it), and WebGL context loss pauses and rebuilds.
 - **`setPose({ yaw, pitch, roll, eyes })`**: a tracked head drives facing shapes, and `eyes` (0…1) dims their bright points on a blink. The projection gains roll.

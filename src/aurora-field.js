@@ -1,4 +1,4 @@
-/*! aurora-field v0.4.0 · MIT · https://github.com/mutaaf/aurora-field
+/*! aurora-field v0.5.0 · MIT · https://github.com/mutaaf/aurora-field
  * A canvas-2D particle field that assembles into shapes and morphs between them:
  * a neural sphere with travelling signals, a team of orbs, a stack of platforms, a helm.
  * Drag spins it, the cursor parts it, a click sends a shockwave. Particles are damped
@@ -13,7 +13,7 @@
   else root.AuroraField = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var VERSION = '0.4.0';
+  var VERSION = '0.5.0';
   var TAU = Math.PI * 2;
 
   var imul = Math.imul || function (a, b) {
@@ -117,35 +117,35 @@
   });
 
   // helm: an armoured helmet traced from line art — forehead tab, temple screws, a V brow,
-  // angular eye slits, cheek slashes, a mouth block with stacked chin plates, ear pieces —
-  // drawn as particle lines over a 3D shell so it still turns in space. Faces the viewer.
-  // Authored in a 1024×1536 drawing (y down, like the screen); mirrored for the right side.
+  // angular eye slits, cheek slashes, a mouth block with stacked chin plates, ear discs —
+  // laid onto a real head volume (rounded-box cross-sections, deeper than it is wide) so it
+  // turns in space. The twist: the shell is a holographic scan, contour rings that carry signals.
+  // Authored in a 1024×1536 drawing (y down, like the screen) at one scale for both axes.
   register('helm', function (n, r) {
-    var CX = 512, CY = 650, SX = 330, SY = 470;
-    function U(x) { return (x - CX) / SX; }
-    function V(y) { return (y - CY) / SY; }
+    var CX = 512, CY = 645, S = 470, k;
     function M(P) { var o = []; for (var i = 0; i < P.length; i++) o.push([2 * CX - P[i][0], P[i][1]]); return o; }
-    // silhouette (left half, crown → chin): half-width of the head at each height
-    var SIL = [[512, 172], [390, 182], [285, 220], [215, 295], [182, 410], [178, 500], [196, 620], [218, 740], [246, 860], [296, 960], [366, 1040], [438, 1098], [512, 1116]];
-    function half(v) {
-      var y = v * SY + CY;
-      if (y <= SIL[0][1]) return 0.02;
-      for (var i = 0; i < SIL.length - 1; i++) if (y <= SIL[i + 1][1]) {
-        var f = (y - SIL[i][1]) / (SIL[i + 1][1] - SIL[i][1]); return (CX - (SIL[i][0] + (SIL[i + 1][0] - SIL[i][0]) * f)) / SX;
-      }
-      return 0.02;
+    function lerpT(T, y) {
+      if (y <= T[0][0]) return T[0][1];
+      for (var i = 0; i < T.length - 1; i++) if (y <= T[i + 1][0]) return T[i][1] + (T[i + 1][1] - T[i][1]) * (y - T[i][0]) / (T[i + 1][0] - T[i][0]);
+      return T[T.length - 1][1];
     }
-    var PLATE_TOP = 600, MOUTH_TOP = 912;
-    // depth of the front surface (camera space: negative z is toward the viewer)
-    function front(u, v) {
-      var w = half(v), q = w > 0 ? 1 - (u / w) * (u / w) : 0, y = v * SY + CY;
-      if (q < 0) q = 0;
-      var z = -0.78 * Math.pow(q, 0.55) * (y < 300 ? 0.75 + 0.25 * (y - 172) / 128 : 1);
-      if (y > PLATE_TOP - 15 && y < MOUTH_TOP + 200) z -= 0.05 * Math.exp(-(u * u) / 0.02);   // faceplate ridge
-      if (y > PLATE_TOP && y < MOUTH_TOP) z -= 0.035;                                          // the plate stands proud
-      return z;
+    // front silhouette (drawing y → half-width px) and side profile (drawing y → depth px, front and back)
+    var SIL = [[172, 40], [182, 122], [220, 227], [295, 297], [410, 330], [500, 334], [620, 316], [740, 294], [860, 266], [960, 226], [1040, 178], [1100, 124], [1126, 96]];
+    var DF = [[172, 60], [190, 170], [240, 270], [330, 340], [450, 372], [600, 388], [760, 396], [900, 384], [1000, 360], [1080, 318], [1126, 296]];
+    var DB = [[172, 60], [190, 200], [250, 330], [360, 410], [520, 432], [680, 418], [820, 370], [940, 300], [1040, 250], [1116, 236]];
+    function half(y) { return (lerpT(SIL, y - 24) + 2 * lerpT(SIL, y) + lerpT(SIL, y + 24)) / 4; }   // eased through the knots
+    var PF = 2.6, PB = 2.2;
+    // a point on the shell: drawing (x, y) on the front, z toward the viewer is negative
+    function frontZ(x, y) {
+      var w = half(y), a = Math.min(1, Math.abs(x - CX) / Math.max(1, w));
+      return -lerpT(DF, y) * Math.pow(1 - Math.pow(a, PF), 1 / PF);
     }
-    function at(x, y, lift) { var u = U(x), v = V(y); return [u, v, front(u, v) - (lift || 0)]; }
+    var PLATE_TOP = 590, PLATE_BOT = 1120;
+    function at(x, y, lift) {
+      var z = frontZ(x, y), ax = Math.abs(x - CX);
+      if (y > PLATE_TOP && ax < half(y) * 0.72) z -= 14;                                  // the faceplate stands proud
+      return [(x - CX) / S, (y - CY) / S, (z - (lift || 0)) / S];
+    }
     // the line art
     var LINES = [], L = function (P, w, glow) { LINES.push({ p: P, w: w || 1, glow: !!glow }); };
     var tabOuter = [[398, 182], [403, 255], [425, 375], [458, 412], [566, 412], [599, 375], [621, 255], [626, 182]];
@@ -158,73 +158,88 @@
     var mouth = [[413, 912], [612, 912], [606, 968], [590, 1002], [434, 1002], [418, 968], [413, 912]];
     var mouthLine = [[420, 965], [604, 965]];
     var chin1 = [[424, 1010], [600, 1010], [592, 1062], [432, 1062], [424, 1010]];
-    var chin2 = [[436, 1075], [588, 1075], [578, 1118], [446, 1118], [436, 1075]];
-    var earL = [[148, 505], [192, 492], [205, 560], [200, 700], [170, 762], [150, 705], [148, 505]];
-    var jawL = [[232, 930], [255, 1000], [300, 1090]];
-    var crown = [[196, 620], [182, 410], [215, 295], [285, 220], [390, 186], [512, 180], [634, 186], [739, 220], [809, 295], [842, 410], [828, 620]];
-    L(tabOuter, 1.2); L(tabInner, 0.8); L(brow, 1.4);
+    var chin2 = [[436, 1075], [588, 1075], [578, 1112], [446, 1112], [436, 1075]];
+    // the jaw: the lower silhouette, from the cheek to the chin
+    var jaw = []; for (k = 0; k <= 12; k++) { var yj = 640 + k / 12 * 470; jaw.push([CX - half(yj) * 0.93, yj]); }
+    L(tabOuter, 1.1); L(tabInner, 0.8); L(brow, 1.4);
     L(eyeL, 1.3, true); L(M(eyeL), 1.3, true);
     L(plateL, 1.1); L(M(plateL), 1.1); L(slashL, 0.9); L(M(slashL), 0.9); L(cheekL, 0.7); L(M(cheekL), 0.7);
-    L(mouth, 1.1); L(mouthLine, 0.6); L(chin1, 0.9); L(chin2, 0.8);
-    L(earL, 0.9); L(M(earL), 0.9); L(jawL, 0.7); L(M(jawL), 0.7); L(crown, 1.2);
-    L(SIL.slice(6), 0.9); L(M(SIL.slice(6)), 0.9);
-    // budget: line art 52%, eye fill 7%, screws 1.5%, front shell 26%, the rest the back of the head
-    var pts = [], pairs = [], bright = [], links = [], i, k, j;
-    var total = 0, lens = [];
-    for (i = 0; i < LINES.length; i++) {
-      var P = LINES[i].p, len = 0; for (k = 0; k < P.length - 1; k++) len += Math.sqrt(Math.pow(P[k + 1][0] - P[k][0], 2) + Math.pow(P[k + 1][1] - P[k][1], 2));
-      lens.push(len * LINES[i].w); total += len * LINES[i].w;
-    }
-    var lineBudget = Math.floor(n * 0.52);
-    for (i = 0; i < LINES.length; i++) {
-      var Pl = LINES[i].p, cnt = Math.max(4, Math.round(lineBudget * lens[i] / total)), segs = [], tot = 0;
-      for (k = 0; k < Pl.length - 1; k++) { var sl = Math.sqrt(Math.pow(Pl[k + 1][0] - Pl[k][0], 2) + Math.pow(Pl[k + 1][1] - Pl[k][1], 2)); segs.push(sl); tot += sl; }
-      var start = pts.length;
-      for (j = 0; j < cnt && pts.length < n; j++) {
-        var d = (j + 0.5) / cnt * tot, s = 0;
-        while (s < segs.length - 1 && d > segs[s]) { d -= segs[s]; s++; }
-        var f = segs[s] ? d / segs[s] : 0;
-        if (LINES[i].glow) bright.push(pts.length);
-        pts.push(at(Pl[s][0] + (Pl[s + 1][0] - Pl[s][0]) * f + (r() - 0.5) * 2.2, Pl[s][1] + (Pl[s + 1][1] - Pl[s][1]) * f + (r() - 0.5) * 2.2, 0.012));
-        if (j) pairs.push([pts.length - 2, pts.length - 1]);
+    L(mouth, 1.1); L(mouthLine, 0.6); L(chin1, 0.9); L(chin2, 0.8); L(jaw, 0.9); L(M(jaw), 0.9);
+    var pts = [], pairs = [], bright = [], links = [], i, j;
+    function seg(P) { var s = [], t = 0; for (var q = 0; q < P.length - 1; q++) { var l = Math.sqrt(Math.pow(P[q + 1][0] - P[q][0], 2) + Math.pow(P[q + 1][1] - P[q][1], 2)); s.push(l); t += l; } return { s: s, t: t }; }
+    function along(P, sg, d) { var s = 0; while (s < sg.s.length - 1 && d > sg.s[s]) { d -= sg.s[s]; s++; } var f = sg.s[s] ? d / sg.s[s] : 0; return [P[s][0] + (P[s + 1][0] - P[s][0]) * f, P[s][1] + (P[s + 1][1] - P[s][1]) * f]; }
+    // a 3D polyline as particles, evenly spaced, joined so signals can run along it
+    function run3(Q, cnt, glow) {
+      var sg = seg3(Q);
+      for (var q = 0; q < cnt && pts.length < n; q++) {
+        if (glow) bright.push(pts.length);
+        pts.push(along3(Q, sg, (q + 0.5) / cnt * sg.t));
+        if (q) pairs.push([pts.length - 2, pts.length - 1]);
       }
-      for (k = 0; k < Pl.length - 1; k++) links.push([at(Pl[k][0], Pl[k][1], 0.012), at(Pl[k + 1][0], Pl[k + 1][1], 0.012)]);
-      if (pts.length >= n) break;
     }
-    // eyes: fill the slits so they glow as shapes, not outlines
+    function seg3(Q) { var s = [], t = 0; for (var q = 0; q < Q.length - 1; q++) { var l = Math.sqrt(Math.pow(Q[q + 1][0] - Q[q][0], 2) + Math.pow(Q[q + 1][1] - Q[q][1], 2) + Math.pow(Q[q + 1][2] - Q[q][2], 2)); s.push(l); t += l; } return { s: s, t: t }; }
+    function along3(Q, sg, d) { var s = 0; while (s < sg.s.length - 1 && d > sg.s[s]) { d -= sg.s[s]; s++; } var f = sg.s[s] ? d / sg.s[s] : 0; return [Q[s][0] + (Q[s + 1][0] - Q[s][0]) * f, Q[s][1] + (Q[s + 1][1] - Q[s][1]) * f, Q[s][2] + (Q[s + 1][2] - Q[s][2]) * f]; }
+    // drawn lines go onto the shell: subdivide so they hug the curve
+    function lift3(P, lift) { var sg = seg(P), m = Math.max(2, Math.ceil(sg.t / 12)), Q = []; for (var q = 0; q <= m; q++) { var p = along(P, sg, q / m * sg.t); Q.push(at(p[0], p[1], lift)); } return Q; }
+    // a cross-section of the shell at drawing height y: a rounded box, deeper behind than in front
+    function ring(y, m) {
+      var w = half(y), df = lerpT(DF, y), db = lerpT(DB, y), Q = [];
+      for (var q = 0; q <= m; q++) {
+        var a = q / m * Math.PI * 2, c = Math.cos(a), s = Math.sin(a), p = s < 0 ? PF : PB;
+        var ex = Math.pow(Math.abs(c), 2 / p) * (c < 0 ? -1 : 1), ez = Math.pow(Math.abs(s), 2 / p) * (s < 0 ? -1 : 1);
+        Q.push([ex * w / S, (y - CY) / S, (ez < 0 ? ez * df : ez * db) / S]);
+      }
+      return Q;
+    }
+    // ear discs on the sides
+    function ear(side, rad) {
+      var Q = [], y0 = 560, z0 = 40;
+      for (var q = 0; q <= 28; q++) { var a = q / 28 * Math.PI * 2, y = y0 + Math.sin(a) * rad; Q.push([side * (half(y) + 10) / S, (y - CY) / S, (z0 + Math.cos(a) * rad) / S]); }
+      return Q;
+    }
+    // budget: seams 54%, eye glow 6%, screws 1.5%, scan rings the rest
+    var art = LINES.map(function (l) { return { Q: lift3(l.p, 4), w: l.w, glow: l.glow }; });
+    art.push({ Q: ear(-1, 64), w: 0.7 }, { Q: ear(1, 64), w: 0.7 }, { Q: ear(-1, 30), w: 0.5 }, { Q: ear(1, 30), w: 0.5 });
+    var tot = 0; for (i = 0; i < art.length; i++) { art[i].len = seg3(art[i].Q).t; tot += art[i].len * art[i].w; }
+    var lineBudget = Math.floor(n * 0.54);
+    for (i = 0; i < art.length; i++) {
+      run3(art[i].Q, Math.max(4, Math.round(lineBudget * art[i].len * art[i].w / tot)), art[i].glow);
+      for (k = 0; k < art[i].Q.length - 1; k += 1) links.push([art[i].Q[k], art[i].Q[k + 1]]);
+    }
     function inPoly(P, x, y) {
       var c = false;
       for (var a = 0, b = P.length - 1; a < P.length; b = a++)
         if ((P[a][1] > y) !== (P[b][1] > y) && x < (P[b][0] - P[a][0]) * (y - P[a][1]) / (P[b][1] - P[a][1]) + P[a][0]) c = !c;
       return c;
     }
-    var eyes = [eyeL, M(eyeL)], eyeFill = Math.floor(n * 0.045);
+    // eyes: fill the slits so they glow as shapes, not outlines
+    var eyes = [eyeL, M(eyeL)], eyeFill = Math.floor(n * 0.06);
     for (i = 0, k = 0; i < eyeFill && k < eyeFill * 60 && pts.length < n; k++) {
-      var E = eyes[k % 2], ex = 250 + r() * 200, ey = 580 + r() * 64;
-      if (k % 2) ex = 2 * CX - ex;
-      if (!inPoly(E, ex, ey)) continue;
-      bright.push(pts.length); pts.push(at(ex, ey, 0.02)); i++;
+      var ex = 250 + r() * 200, ey = 580 + r() * 64; if (k % 2) ex = 2 * CX - ex;
+      if (!inPoly(eyes[k % 2], ex, ey)) continue;
+      bright.push(pts.length); pts.push(at(ex, ey, 8)); i++;
     }
     // temple screws: two small rings
-    var screws = [[270, 255], [752, 245]], sc = Math.floor(n * 0.015);
-    for (i = 0; i < sc && pts.length < n; i++) {
-      var S0 = screws[i % 2], a2 = r() * Math.PI * 2, rr = i % 3 ? 12 : 5;
-      pts.push(at(S0[0] + Math.cos(a2) * rr, S0[1] + Math.sin(a2) * rr, 0.01));
+    var screws = [[270, 255], [754, 255]], sc = Math.floor(n * 0.015);
+    for (i = 0; i < sc && pts.length < n; i++) { var S0 = screws[i % 2], a2 = (i / sc) * Math.PI * 12, rr = i % 3 ? 11 : 4; pts.push(at(S0[0] + Math.cos(a2) * rr, S0[1] + Math.sin(a2) * rr, 4)); }
+    // the scan: contour rings round the shell, skipping the face so the seams read clean
+    var RINGS = 13, left = n - pts.length, per = [], rt = 0, levels = [];
+    for (k = 0; k < RINGS; k++) {
+      var yl = 210 + k / (RINGS - 1) * 760, Q = ring(yl, 96), keep = [];
+      for (j = 0; j < Q.length; j++) { var p0 = Q[j], face = p0[2] < -0.22 && yl > 250 && Math.abs(p0[0]) < half(yl) / S * 0.82; keep.push(!face); }
+      levels.push({ Q: Q, keep: keep }); var sl = seg3(Q).t; per.push(sl); rt += sl;
     }
-    // front shell: even fill inside the silhouette, skipping the eye slits
-    var shell = Math.floor(n * 0.17);
-    for (i = 0, k = 0; i < shell && k < shell * 30 && pts.length < n; k++) {
-      var vy = -1 + r() * 2, w = half(vy), vx = (r() * 2 - 1) * w, x0 = vx * SX + CX, y0 = vy * SY + CY;
-      if (inPoly(eyeL, x0, y0) || inPoly(eyes[1], x0, y0)) continue;
-      pts.push([vx, vy, front(vx, vy)]); i++;
+    for (k = 0; k < RINGS && pts.length < n; k++) {
+      var lv = levels[k], sgr = seg3(lv.Q), cnt = Math.round(left * per[k] / rt), prev = -1;
+      for (j = 0; j < cnt && pts.length < n; j++) {
+        var d = (j + 0.5) / cnt * sgr.t, s = 0; while (s < sgr.s.length - 1 && d > sgr.s[s]) { d -= sgr.s[s]; s++; }
+        if (!lv.keep[s]) { prev = -1; continue; }
+        pts.push(along3(lv.Q, sgr, (j + 0.5) / cnt * sgr.t));
+        if (prev >= 0) pairs.push([prev, pts.length - 1]); prev = pts.length - 1;
+      }
     }
-    // the back of the head, sparse, so turning shows a solid
-    for (k = 0; pts.length < n; k++) {
-      var bv = -1 + r() * 2, bw = half(bv), bu = (r() * 2 - 1) * bw, q2 = bw > 0 ? 1 - (bu / bw) * (bu / bw) : 0;
-      pts.push([bu, bv, 0.62 * Math.pow(Math.max(0, q2), 0.5)]);
-    }
-    // fit the stage: the drawing is taller than it is wide
-    var K = 0.84, out = pts.slice(0, n);
+    while (pts.length < n) pts.push(pts[Math.floor(r() * pts.length)].slice());
+    var K = 0.9, out = pts.slice(0, n);
     for (k = 0; k < out.length; k++) out[k] = [out[k][0] * K, out[k][1] * K, out[k][2] * K];
     for (k = 0; k < links.length; k++) links[k] = [[links[k][0][0] * K, links[k][0][1] * K, links[k][0][2] * K], [links[k][1][0] * K, links[k][1][1] * K, links[k][1][2] * K]];
     return { points: out, pairs: pairs, links: links, bright: bright, facing: true, kick: 0.2, lineArt: true };
