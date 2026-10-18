@@ -20,11 +20,11 @@ test('version matches package.json', () => {
   assert.ok(src.startsWith('/*! aurora-field v' + pkg.version + ' '), 'banner carries the version');
 });
 
-test('ships the three built-in shapes, in order', () => {
-  assert.deepEqual(AF.shapes(), ['mind', 'teams', 'platforms']);
+test('ships the four built-in shapes, in order', () => {
+  assert.deepEqual(AF.shapes(), ['mind', 'teams', 'platforms', 'helm']);
 });
 
-for (const name of ['mind', 'teams', 'platforms']) {
+for (const name of ['mind', 'teams', 'platforms', 'helm']) {
   test(name + ': n finite points inside a 1.3 box', () => {
     for (const n of [64, 900, 1600]) {
       const s = AF.build(name, n, 7);
@@ -58,6 +58,30 @@ test('platforms: streams flow upward and wrap', () => {
   assert.ok(a && b && b[1] !== a[1]);
   for (let t = 0; t < 20; t += 0.37) { const y = s.flow(0, t)[1]; assert.ok(y >= -0.8 && y <= 0.8); }
   assert.equal(s.flow(899, 0), null, 'layer points are static');
+});
+
+test('helm: faces forward, eyes glow from the front, seams carry signals', () => {
+  for (const n of [600, 900, 1600]) {
+    const s = AF.build('helm', n, 4);
+    assert.equal(s.facing, true);
+    assert.ok(s.bright.length >= n * 0.06, 'eye points ' + s.bright.length);
+    for (const i of s.bright) { const p = s.points[i]; assert.ok(p[2] < -0.4 && p[1] < -0.05 && p[1] > -0.32, 'eye at ' + p + ' (camera space: -z is toward the viewer, -y is up)'); }
+    for (const [a, b] of s.pairs) assert.ok(a >= 0 && b < n && a !== b);
+    assert.ok(s.pairs.length > n * 0.12);
+    const ys = s.points.map(p => p[1]);
+    assert.ok(Math.min(...ys) < -0.85 && Math.max(...ys) > 0.9, 'shell covers crown to jaw');
+  }
+});
+
+test('rotation: only listed shapes auto-cycle; unknown ones are refused', () => {
+  const env = stubEnv();
+  const seen = [];
+  const f = AF.create(env.canvas, { seed: 1, count: 300, intro: 0, cycle: 1, shapes: ['mind', 'teams', 'helm'], rotation: ['mind', 'teams'], onShape: s => seen.push(s) });
+  for (let k = 0; k < 30; k++) env.pump(3, 1000 + k * 100);
+  assert.ok(seen.length > 0 && !seen.includes('helm'));
+  f.setShape('helm'); assert.equal(f.shape, 'helm');
+  f.destroy();
+  assert.throws(() => AF.create(stubEnv().canvas, { shapes: ['mind'], rotation: ['teams'] }), /not in shapes/);
 });
 
 test('register: custom shapes join the cycle; bad ones are refused', () => {

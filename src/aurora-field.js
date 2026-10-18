@@ -1,6 +1,6 @@
-/*! aurora-field v0.2.0 · MIT · https://github.com/mutaaf/aurora-field
+/*! aurora-field v0.3.0 · MIT · https://github.com/mutaaf/aurora-field
  * A canvas-2D particle field that assembles into shapes and morphs between them:
- * a neural sphere with travelling signals, a team of orbs, a stack of platforms.
+ * a neural sphere with travelling signals, a team of orbs, a stack of platforms, a helm.
  * Drag spins it, the cursor parts it, a click sends a shockwave. Particles are damped
  * springs that swirl into place, breathe, trade places and send out scouts; a governor
  * holds the frame rate; points are snapped to device pixels so they stay crisp.
@@ -11,7 +11,7 @@
   else root.AuroraField = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var VERSION = '0.2.0';
+  var VERSION = '0.3.0';
   var TAU = Math.PI * 2;
 
   var imul = Math.imul || function (a, b) {
@@ -41,7 +41,9 @@
   //   pairs?: [[i,j]…]  edges that light up and carry signals,
   //   links?: [[[x,y,z],[x,y,z]]…]  static segments drawn with the shape,
   //   flow?:  function (i, t) → [x,y,z] | null  per-frame target for animated points,
-  //   kick?:  extra spin when the shape arrives }
+  //   kick?:  extra spin when the shape arrives,
+  //   bright?: [i…] points that glow while the shape is up (eyes, beacons),
+  //   facing?: true to turn and hold the shape toward the viewer (with a slow sway) }
   var SHAPES = {};
   var ORDER = [];
   function register(name, build) {
@@ -107,16 +109,120 @@
       points: pts, kick: 0.6,
       flow: function (idx, t) {
         var s = streams[idx];
-        return s ? [s[0], ((s[2] + t * 0.12) % 1) * 1.6 - 0.8, s[1]] : null;
+        return s ? [s[0], 0.8 - ((s[2] + t * 0.12) % 1) * 1.6, s[1]] : null;  // screen y is down: this rises
       }
     };
+  });
+
+  // helm: an armoured helmet that turns to face you. Shell, faceplate seams that carry
+  // signals like circuitry, a crest, a jaw ring, and two eye slits that glow.
+  register('helm', function (n, r) {
+    var A = 0.74, B = 1, C = 0.84;
+    // silhouette: crown, a slight cheek flare, then a squared jaw
+    function width(y) { return y > 0.5 ? 1 - (y - 0.5) * 0.25 : y > -0.3 ? 1 + (0.5 - Math.abs(y + 0.05)) * 0.04 : 1 - (-0.3 - y) * 0.38; }
+    function shellZ(x, y) {
+      var u = x / (A * width(y)), v = y / B, q = 1 - u * u - v * v;
+      return q <= 0 ? 0 : C * Math.pow(q, 0.42);                                   // boxier than an ellipsoid
+    }
+    function inPoly(P, x, y) {
+      var c = false;
+      for (var i = 0, j = P.length - 1; i < P.length; j = i++)
+        if ((P[i][1] > y) !== (P[j][1] > y) && x < (P[j][0] - P[i][0]) * (y - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) c = !c;
+      return c;
+    }
+    var PLATE = [[-0.36, 0.6], [-0.47, 0.3], [-0.5, 0.02], [-0.44, -0.3], [-0.32, -0.6], [-0.15, -0.84], [0.15, -0.84], [0.32, -0.6], [0.44, -0.3], [0.5, 0.02], [0.47, 0.3], [0.36, 0.6], [0, 0.7], [-0.36, 0.6]];
+    // the faceplate stands proud of the shell and is flatter
+    function plateZ(x, y) { return shellZ(x, y) * 0.9 + 0.075; }
+    function eyeHit(x, y) {                                                        // trapezoid slits: tall at the nose, thin at the temple
+      var ax = Math.abs(x); if (ax < 0.08 || ax > 0.37) return false;
+      var t = (ax - 0.08) / 0.29, top = 0.235 - t * 0.012, bottom = 0.165 + t * 0.045;
+      return y < top && y > bottom;
+    }
+    function face(x, y, lift) { return [x, y, (inPoly(PLATE, x, y) ? plateZ(x, y) : shellZ(x, y)) + (lift || 0)]; }
+    function polyline(P, count, jit, lift) {
+      var segs = [], total = 0, i, out = [];
+      for (i = 0; i < P.length - 1; i++) { var dx = P[i + 1][0] - P[i][0], dy = P[i + 1][1] - P[i][1], L = Math.sqrt(dx * dx + dy * dy); segs.push(L); total += L; }
+      for (i = 0; i < count; i++) {
+        var d = (i + 0.5) / count * total, s = 0;
+        while (s < segs.length - 1 && d > segs[s]) { d -= segs[s]; s++; }
+        var f = segs[s] ? d / segs[s] : 0;
+        out.push(face(P[s][0] + (P[s + 1][0] - P[s][0]) * f + (r() - 0.5) * jit, P[s][1] + (P[s + 1][1] - P[s][1]) * f + (r() - 0.5) * jit, lift));
+      }
+      return out;
+    }
+    var pts = [], pairs = [], bright = [], links = [], i, k;
+    function run(P, count, jit, lift) { var start = pts.length, a = polyline(P, count, jit, lift); for (var j = 0; j < a.length; j++) { pts.push(a[j]); if (j) pairs.push([start + j - 1, start + j]); } }
+    var seams = Math.floor(n * 0.2);
+    run(PLATE, Math.floor(seams * 0.42), 0.004, 0.012);
+    run([[-0.46, 0.33], [-0.2, 0.31], [0, 0.36], [0.2, 0.31], [0.46, 0.33]], Math.floor(seams * 0.14), 0.004, 0.014);     // brow ridge
+    run([[-0.2, -0.47], [-0.07, -0.5], [0.07, -0.5], [0.2, -0.47]], Math.floor(seams * 0.08), 0.003, 0.012);               // mouth
+    run([[-0.44, -0.3], [-0.24, -0.34], [-0.1, -0.66]], Math.floor(seams * 0.1), 0.003, 0.012);                            // cheek seams
+    run([[0.44, -0.3], [0.24, -0.34], [0.1, -0.66]], Math.floor(seams * 0.1), 0.003, 0.012);
+    run([[0, 0.7], [0, 0.99]], Math.max(2, seams - pts.length), 0.004, 0.012);   // crest
+    // eyes: dense, sharp, glowing
+    var eyes = Math.floor(n * 0.075), edge = Math.floor(eyes * 0.55);
+    // half the eye points trace each slit's outline (crisp edges), half fill it
+    for (i = 0; i < edge; i++) {
+      var sd = i % 2 ? 1 : -1, u = (i >> 1) / Math.max(1, (edge >> 1) - 1), q = u * 4, e2;
+      if (q < 1) e2 = [0.08 + q * 0.29, 0.235 - q * 0.012];                          // top edge, nose → temple
+      else if (q < 2) e2 = [0.37, 0.223 - (q - 1) * 0.013];                          // temple end
+      else if (q < 3) e2 = [0.37 - (q - 2) * 0.29, 0.21 - (q - 2) * 0.045];          // bottom edge, temple → nose
+      else e2 = [0.08, 0.165 + (q - 3) * 0.07];                                      // nose end
+      bright.push(pts.length); pts.push(face(sd * e2[0], e2[1], 0.022));
+    }
+    for (i = edge, k = 0; i < eyes && k < eyes * 30; k++) {
+      var ex = (r() * 2 - 1) * 0.37, ey = 0.16 + r() * 0.08;
+      if (!eyeHit(ex, ey)) continue;
+      bright.push(pts.length); pts.push(face(ex, ey, 0.02)); i++;
+    }
+    // ear discs: a ring and a hub on each side
+    var ears = Math.floor(n * 0.04);
+    for (i = 0; i < ears; i++) {
+      var s = i % 2 ? 1 : -1, a = r() * Math.PI * 2, rad = i % 3 ? 0.15 : 0.07;
+      pts.push([s * (A * 1.01 + 0.015), 0.04 + Math.sin(a) * rad, Math.cos(a) * rad * 1.1 - 0.02]);
+    }
+    // faceplate surface, denser than the shell so the plate reads as one piece
+    var plate = Math.floor(n * 0.25);
+    for (i = 0, k = 0; i < plate && k < plate * 40; k++) {
+      var fx = (r() * 2 - 1) * 0.5, fy = -0.84 + r() * 1.54;
+      if (!inPoly(PLATE, fx, fy) || eyeHit(fx, fy)) continue;
+      pts.push([fx, fy, plateZ(fx, fy)]); i++;
+    }
+    // jaw ring and neck seal
+    var jaw = Math.floor(n * 0.04);
+    for (i = 0; i < jaw; i++) { var ja = i / jaw * Math.PI * 2; pts.push([Math.cos(ja) * A * 0.58, -0.93, Math.sin(ja) * C * 0.6]); }
+    // the shell, everywhere the plate isn't
+    var rest = n - pts.length, M = Math.ceil(rest * 1.7) + 8, ga = Math.PI * (3 - Math.sqrt(5)), cand = [];
+    for (k = 0; k < M; k++) {
+      var y = 1 - (k + 0.5) / M * 2, rr = Math.sqrt(Math.max(0, 1 - y * y)), an = ga * k;
+      var px = Math.cos(an) * rr * A * width(y), py = y * B, pz = Math.sin(an) * rr;
+      pz = (pz < 0 ? -1 : 1) * C * Math.pow(Math.abs(pz), 0.84);
+      if (pz > 0 && inPoly(PLATE, px, py)) continue;
+      cand.push([px, py, pz]);
+    }
+    for (k = 0; k < rest && cand.length; k++) pts.push(cand[Math.min(cand.length - 1, Math.floor(k * cand.length / rest))]);
+    while (pts.length < n) pts.push(face((r() - 0.5) * 0.6, (r() - 0.5) * 1.4, 0));
+    function lineOf(P, lift) { for (var q = 0; q < P.length - 1; q++) links.push([face(P[q][0], P[q][1], lift), face(P[q + 1][0], P[q + 1][1], lift)]); }
+    lineOf(PLATE, 0.012);
+    lineOf([[-0.46, 0.33], [-0.2, 0.31], [0, 0.36], [0.2, 0.31], [0.46, 0.33]], 0.014);
+    lineOf([[-0.2, -0.47], [-0.07, -0.5], [0.07, -0.5], [0.2, -0.47]], 0.012);
+    lineOf([[-0.44, -0.3], [-0.24, -0.34], [-0.1, -0.66]], 0.012);
+    lineOf([[0.44, -0.3], [0.24, -0.34], [0.1, -0.66]], 0.012);
+    lineOf([[0, 0.7], [0, 0.99]], 0.012);
+    // authored y-up and face-forward (+z); the camera looks down +z with y down,
+    // so flip both once on the way out and the face turns toward the viewer
+    var out = pts.slice(0, n);
+    for (k = 0; k < out.length; k++) out[k] = [out[k][0], -out[k][1], -out[k][2]];
+    for (k = 0; k < links.length; k++) links[k] = [[links[k][0][0], -links[k][0][1], -links[k][0][2]], [links[k][1][0], -links[k][1][1], -links[k][1][2]]];
+    return { points: out, pairs: pairs, links: links, bright: bright, facing: true, kick: 0.2 };
   });
 
   var DEFAULTS = {
     container: null,          // element whose box sizes the canvas (default: canvas.parentNode)
     stage: null,              // element whose box places and sizes the shape (default: container)
     count: null,              // particle count, or function (width) → count; default 900 / 1600
-    shapes: null,             // cycle order (default: every registered shape)
+    shapes: null,             // shapes in this field (default: every registered shape)
+    rotation: null,           // which of them auto-cycle, in order (default: all of shapes)
     initial: null,            // first shape (default: shapes[0])
     cycle: 6500,              // ms per shape; 0 turns auto-cycling off
     pin: 14000,               // ms a setShape(…, {pin:true}) holds before cycling resumes
@@ -124,6 +230,7 @@
     stars: 140,
     radius: null,             // function (stageWidth, stageHeight) → px
     maxDpr: 2,
+    depth: 2.8,               // camera distance in shape radii: lower is more dramatic perspective
     quality: 'auto',          // 'auto' governs itself to hold the frame rate; 'high' | 'low' pin it
     fpsFloor: 45,             // the governor steps quality down below this, back up above 57
     autonomy: 1,              // 0…1: breathing, place-trading, scouts, self-lit signals
@@ -133,7 +240,8 @@
     seed: null,               // number → deterministic field
     palette: {
       point: [123, 227, 195], hot: '#F4FFFB', star: '#CFE9E0',
-      signal: [200, 255, 236], head: [220, 255, 244], glow: [123, 227, 195], glow2: [62, 143, 122]
+      signal: [200, 255, 236], head: [220, 255, 244], glow: [123, 227, 195], glow2: [62, 143, 122],
+      fog: [52, 92, 110]      // far points fade toward this, for depth
     },
     onShape: null,            // (name) when a shape becomes current
     onStats: null,            // ({fps, nodes, quality}) once a second while running
@@ -189,6 +297,8 @@
     var N = typeof o.count === 'function' ? o.count(win.innerWidth) : (o.count || (win.innerWidth < 760 ? 900 : 1600));
     var names = (o.shapes || ORDER).slice();
     for (i = 0; i < names.length; i++) if (!SHAPES[names[i]]) throw new Error('aurora-field: unknown shape "' + names[i] + '"');
+    var cycleList = (o.rotation || names).slice();
+    for (i = 0; i < cycleList.length; i++) if (names.indexOf(cycleList[i]) < 0) throw new Error('aurora-field: rotation shape "' + cycleList[i] + '" is not in shapes');
 
     // ---- particle state, struct-of-arrays: no per-frame allocation, cache-friendly loops ----
     var X = f32(N), Y = f32(N), Z = f32(N), VX = f32(N), VY = f32(N), VZ = f32(N);
@@ -210,9 +320,9 @@
 
     var shape = o.initial || names[0], autoAt = 0, pinnedUntil = 0, born = 0, introDone = false;
     S[shape].w = 1;
-    var CW = 0, CH = 0, DPR = 1, cx = 0, cy = 0, R = 1;
+    var CW = 0, CH = 0, DPR = 1, cx = 0, cy = 0, R = 1, D = Math.max(1.6, +o.depth || 2.8);
     var rotY = 0, rotX = -0.32, vy = 0.9, kick = 0, mx = -1e4, my = -1e4, pointerIn = false, par = 0, down = null, waves = [], sig = [];
-    var BUCKETS = 7, bCount = i32(BUCKETS + 1), bIdx = i32((BUCKETS + 1) * N), hotIdx = i32(N), litIdx = i32(N);
+    var BUCKETS = 11, bCount = i32(BUCKETS + 1), bIdx = i32((BUCKETS + 1) * N), hotIdx = i32(N), litIdx = i32(N);
     var fps = 60, fAcc = 0, fN = 0, level = o.quality === 'low' ? 3 : 0, good = 0, spunAt = 0;
     var raf = 0, last = 0, running = false, wanted = true, inView = true, destroyed = false, listeners = [], settle = 0, clock = 0;
     var glowCache = null, glowKey = '', haloCache = null, haloKey = '';
@@ -281,7 +391,7 @@
       var c1 = Math.cos(rotY), s1 = Math.sin(rotY), c2 = Math.cos(rotX), s2 = Math.sin(rotX);
       for (n = 0; n < N; n++) {
         var x = X[n] * c1 - Z[n] * s1, z = X[n] * s1 + Z[n] * c1, y = Y[n] * c2 - z * s2; z = Y[n] * s2 + z * c2;
-        var kk = 3.4 / (3.4 + z); SX[n] = x * R * kk; SY[n] = y * R * kk; ZZ[n] = z;
+        var kk = D / (D + z); SX[n] = x * R * kk; SY[n] = y * R * kk; ZZ[n] = z;
       }
       var gs = glowSprite();
       if (gs) ctx.drawImage(gs, cx - R * 1.5, cy - R * 1.5, R * 3, R * 3);
@@ -304,7 +414,7 @@
             var L0 = links[i][0], L1 = links[i][1];
             var ux = L0[0] * c1 - L0[2] * s1, uz = L0[0] * s1 + L0[2] * c1, uy = L0[1] * c2 - uz * s2; uz = L0[1] * s2 + uz * c2;
             var vx = L1[0] * c1 - L1[2] * s1, vz = L1[0] * s1 + L1[2] * c1, vyy = L1[1] * c2 - vz * s2; vz = L1[1] * s2 + vz * c2;
-            var ku = 3.4 / (3.4 + uz), kv = 3.4 / (3.4 + vz);
+            var ku = D / (D + uz), kv = D / (D + vz);
             ctx.moveTo(cx + ux * R * ku, cy + uy * R * ku); ctx.lineTo(cx + vx * R * kv, cy + vyy * R * kv);
           }
           ctx.stroke();
@@ -341,15 +451,29 @@
         k = Math.max(0, Math.min(BUCKETS, Math.round((1 - ZZ[n]) / 2 * BUCKETS)));
         bIdx[k * N + bCount[k]++] = n;
       }
+      // depth: far layers are small, dim and fogged; near layers are larger, saturated,
+      // and get a one-pixel specular core, so the front reads sharp and the back recedes
+      var fog = pal.fog || pal.point;
       for (k = 0; k <= BUCKETS; k++) {
         var cnt = bCount[k]; if (!cnt) continue;
-        ctx.fillStyle = rgba(pal.point, 0.2 + 0.8 * Math.pow(k / BUCKETS, 1.4)); ctx.beginPath();
-        var sz = Math.max(1, Math.round((0.9 + 2.1 * (k / BUCKETS)) * DPR)), half = sz / 2;
+        var f = k / BUCKETS, m = Math.pow(f, 0.85);
+        var col = [Math.round(fog[0] + (pal.point[0] - fog[0]) * m), Math.round(fog[1] + (pal.point[1] - fog[1]) * m), Math.round(fog[2] + (pal.point[2] - fog[2]) * m)];
+        ctx.fillStyle = rgba(col, 0.1 + 0.9 * Math.pow(f, 1.5)); ctx.beginPath();
+        var sz = Math.max(1, Math.round((0.6 + 2.9 * Math.pow(f, 1.25)) * DPR)), half = sz / 2;
         for (j = 0; j < cnt; j++) {
           p = bIdx[k * N + j];
           ctx.rect(Math.round((cx + SX[p] + OX[p]) * DPR - half), Math.round((cy + SY[p] + OY[p]) * DPR - half), sz, sz);
         }
         ctx.fill();
+        if (f > 0.55 && sz >= 3) {
+          var core = Math.max(1, Math.round(sz * 0.38)), ch = core / 2;
+          ctx.fillStyle = 'rgba(255,255,255,' + (0.35 + 0.5 * (f - 0.55) / 0.45) + ')'; ctx.beginPath();
+          for (j = 0; j < cnt; j++) {
+            p = bIdx[k * N + j];
+            ctx.rect(Math.round((cx + SX[p] + OX[p]) * DPR - ch), Math.round((cy + SY[p] + OY[p]) * DPR - ch), core, core);
+          }
+          ctx.fill();
+        }
       }
       ctx.fillStyle = pal.hot; ctx.beginPath();
       for (j = 0; j < nh; j++) {
@@ -361,7 +485,7 @@
       if (nl) {
         var hsprite = haloSprite();
         if (hsprite) for (j = 0; j < nl; j++) {
-          p = litIdx[j]; var hz = (10 + 14 * Math.max(GLOW[p], SC[p] > 0 ? 0.8 : 0)) * DPR;
+          p = litIdx[j]; var hz = (6 + 9 * Math.max(GLOW[p], SC[p] > 0 ? 0.8 : 0)) * DPR;
           ctx.drawImage(hsprite, (cx + SX[p] + OX[p]) * DPR - hz / 2, (cy + SY[p] + OY[p]) * DPR - hz / 2, hz, hz);
         }
         ctx.fillStyle = pal.hot; ctx.beginPath();
@@ -397,9 +521,20 @@
       var tn = now(), cur = S[shape], def = cur.def, T = cur.T, flowT = t / 1000, n, k;
       clock += dt;
       if (!introDone && tn - born > o.intro) introDone = true;
-      if (introDone && o.cycle > 0 && names.length > 1 && tn > autoAt && tn > pinnedUntil) setShape(names[(names.indexOf(shape) + 1) % names.length]);
+      if (introDone && o.cycle > 0 && cycleList.length > 1 && tn > autoAt && tn > pinnedUntil) {
+        var ci = cycleList.indexOf(shape); setShape(cycleList[(ci + 1) % cycleList.length]);
+      }
       for (var nm in S) S[nm].w += ((nm === shape ? 1 : 0) - S[nm].w) * Math.min(1, dt * 3);
-      if (!down) vy += (0.16 - vy) * Math.min(1, dt * 0.9);
+      if (def.facing && !down) {
+        // turn to face the viewer, then hold with a slow sway
+        vy += (0 - vy) * Math.min(1, dt * 2.5);
+        var base = Math.round(rotY / TAU) * TAU, want = base + Math.sin(clock * 0.42) * 0.38;
+        rotY += (want - rotY) * Math.min(1, dt * 2.2);
+        rotX += (-0.1 + Math.sin(clock * 0.31) * 0.06 - rotX) * Math.min(1, dt * 2);
+      } else if (!down) {
+        vy += (0.16 - vy) * Math.min(1, dt * 0.9);
+        rotX += (-0.32 - rotX) * Math.min(1, dt * 0.6);
+      }
       rotY += (vy + kick) * dt; kick *= Math.pow(0.12, dt);
       if (Math.abs(vy) > 7 && tn > spunAt) { spunAt = tn + 4000; if (o.onSpinout) o.onSpinout(); }
 
@@ -411,6 +546,7 @@
           swaps -= 1;
           var pa = Math.floor(Math.random() * N), pb = Math.max(0, Math.min(N - 1, pa + Math.floor((Math.random() - 0.5) * 240)));
           var ia = OWN[pa], ib = OWN[pb]; if (SC[ia] > 0 || SC[ib] > 0) continue;
+          if (def.bright && (GLOW[ia] > 0.5 || GLOW[ib] > 0.5)) continue;
           OWN[pa] = ib; OWN[pb] = ia; TI[ia] = pb; TI[ib] = pa;
         }
         // scouts leave, orbit, come home
@@ -431,6 +567,10 @@
         if (SC[sc.i] <= 0) { SC[sc.i] = 0; GLOW[sc.i] = 1; SCOUTS.splice(k, 1); }
       }
 
+      if (def.bright && settle > 0.25) {
+        var lit = (0.5 + 0.32 * settle) * S[shape].w, br = def.bright;
+        for (k = 0; k < br.length; k++) { var bn = OWN[br[k]]; if (!SC[bn] && GLOW[bn] < lit) GLOW[bn] = lit; }
+      }
       // ---- physics: each particle is a damped spring toward its point, swirling in ----
       var breathe = 0.014 * AUTO, swirlK = 1.6;
       var near = o.interactive && pointerIn, waveOn = waves.length > 0;
@@ -571,7 +711,7 @@
       get shape() { return shape; },
       shapes: names.slice(),
       setShape: setShape,
-      next: function () { return setShape(names[(names.indexOf(shape) + 1) % names.length], { pin: true }); },
+      next: function () { var ci = cycleList.indexOf(shape); return setShape(cycleList[(ci + 1) % cycleList.length], { pin: true }); },
       play: function () { wanted = true; layout(); sync(); return api; },
       pause: function () { wanted = false; sync(); return api; },
       resize: function () { layout(); return api; },

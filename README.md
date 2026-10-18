@@ -1,6 +1,6 @@
 # aurora-field
 
-A canvas-2D particle field that assembles into shapes and morphs between them: a neural sphere with signals travelling its synapses, a team of orbs, a stack of platforms with traffic streaming through, or any shape you register. Drag to spin it, move through it to part it, click to send a shockwave.
+A canvas-2D particle field that assembles into shapes and morphs between them: a neural sphere with signals travelling its synapses, a team of orbs, a stack of platforms with traffic streaming through, an armoured helm that turns to face you with glowing eyes, or any shape you register. Drag to spin it, move through it to part it, click to send a shockwave.
 
 **[Live demo →](https://mutaaf.github.io/aurora-field/)** · seen on [mutaafaziz.com](https://mutaafaziz.com)
 
@@ -9,7 +9,7 @@ A canvas-2D particle field that assembles into shapes and morphs between them: a
 - **Zero dependencies.** One file, about 32 KB unminified (11 KB gzipped), and ES5, so it can be inlined into pages that support old devices.
 - **Alive.** Every particle is its own damped spring with its own stiffness, so the field swirls into shape instead of easing. Once there, it manages itself: points breathe, trade places with neighbours, send out scouts that orbit with a trail and come home, and light up as signals pass through.
 - **Fast, and it says so.** About 2–3 ms a frame for 1,600 points on a laptop with a retina screen. Particle state lives in typed arrays with no per-frame allocation, shape builds are cached, and the glows are pre-rendered sprites. A governor watches the real frame rate and walks a quality ladder (resolution, then point density) down below 45 fps and back up above 57.
-- **Crisp.** Points are snapped to whole device pixels, so they stay sharp on retina screens instead of smearing.
+- **Deep and crisp.** Twelve depth layers under a strong perspective: far points are small, dim and fogged, near ones are large and saturated, with a one-pixel specular core. Everything is snapped to whole device pixels, so it stays sharp on retina screens.
 - **Polite.** Pauses off-screen and in hidden tabs. Under `prefers-reduced-motion` it draws one still frame.
 - **Deterministic when you want it.** Pass a `seed` and the same field is drawn every time.
 
@@ -52,12 +52,14 @@ The canvas fills its `container` (default: its parent). Pass a `stage` element t
 | `container` | `canvas.parentNode` | element whose box sizes the canvas |
 | `stage` | `container` | element whose box centres and sizes the shape |
 | `count` | `900` / `1600` | particle count (below / above 760px), or `(viewportWidth) => n` |
-| `shapes` | all registered | cycle order |
+| `shapes` | all registered | shapes in the field |
+| `rotation` | `shapes` | which of them auto-cycle, in order; the rest are reachable with `setShape` (a hidden helm, say) |
 | `initial` | `shapes[0]` | first shape |
 | `cycle` | `6500` | ms per shape; `0` turns auto-cycling off |
 | `pin` | `14000` | ms that `setShape(name, {pin:true})` holds before cycling resumes |
 | `intro` | `2600` | ms before auto-cycling may begin |
 | `stars` | `140` | background stars (twinkle, slight parallax) |
+| `depth` | `2.8` | camera distance in shape radii; lower is more dramatic perspective |
 | `radius` | `min(w·.42, h·.36, 330)` | `(stageW, stageH) => px` |
 | `autonomy` | `1` | `0…1`: breathing, place-trading, scouts, nodes lit by signals; `0` gives pure shapes |
 | `quality` | `'auto'` | `'auto'` governs itself; `'high'` / `'low'` pin it |
@@ -66,7 +68,7 @@ The canvas fills its `container` (default: its parent). Pass a `stage` element t
 | `autoPause` | `true` | pause when off-screen or the tab is hidden |
 | `reducedMotion` | `'auto'` | `true` / `false` overrides `prefers-reduced-motion` |
 | `seed` | `null` | number → deterministic field |
-| `palette` | aurora | `{ point:[r,g,b], hot, star, signal:[r,g,b], head:[r,g,b], glow:[r,g,b], glow2:[r,g,b] }` |
+| `palette` | aurora | `{ point:[r,g,b], hot, star, signal:[r,g,b], head:[r,g,b], glow:[r,g,b], glow2:[r,g,b], fog:[r,g,b] }` |
 | `onShape` | | `(name)` when a shape becomes current |
 | `onStats` | | `({ fps, nodes, quality })` once a second while running |
 | `onSpinout` | | `()` when someone spins it really hard |
@@ -88,7 +90,7 @@ AuroraField.shapes()               // registered names
 
 ## Custom shapes
 
-A shape is a function that turns `n` particles into targets in a roughly unit box:
+A shape is a function that turns `n` particles into targets in a roughly unit box. Coordinates are in camera space: `+x` is right, `+y` is **down** and `+z` is **away** from the viewer, so a face that should look at you sits at negative `z`.
 
 ```js
 AuroraField.register('ring', function (n, random) {
@@ -104,7 +106,9 @@ AuroraField.register('ring', function (n, random) {
     flow: function (i, t) {         // optional: per-frame target for animated points
       return null;                  //   (t in seconds; null means "use points[i]")
     },
-    kick: 0.8                       // optional: extra spin on arrival
+    kick: 0.8,                      // optional: extra spin on arrival
+    bright: [0, 1, 2],              // optional: points that glow while the shape is up
+    facing: false                   // optional: turn and hold toward the viewer
   };
 });
 ```
