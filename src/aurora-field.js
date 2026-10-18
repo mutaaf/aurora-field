@@ -456,6 +456,7 @@
         ctx.strokeStyle = rgba(pal.signal, 0.95); ctx.lineWidth = 1.8; ctx.beginPath();
         for (i = 0; i < sig.length; i++) {
           var g = sig[i], ga = OWN[g.a], gb = OWN[g.b], t0 = Math.max(0, g.t - 0.5);
+          var hx = SX[ga] - SX[gb], hy = SY[ga] - SY[gb]; if (hx * hx + hy * hy > maxEdge2) continue;
           ctx.moveTo(cx + SX[ga] + (SX[gb] - SX[ga]) * t0, cy + SY[ga] + (SY[gb] - SY[ga]) * t0);
           ctx.lineTo(cx + SX[ga] + (SX[gb] - SX[ga]) * g.t, cy + SY[ga] + (SY[gb] - SY[ga]) * g.t);
         }
@@ -628,6 +629,7 @@
         }
         for (i = 0; i < sig.length; i++) {
           var g = sig[i], ga = OWN[g.a], gb = OWN[g.b], t0 = Math.max(0, g.t - 0.5);
+          var hx = SX[ga] - SX[gb], hy = SY[ga] - SY[gb]; if (hx * hx + hy * hy > maxEdge2) continue;
           ln(cx + SX[ga] + (SX[gb] - SX[ga]) * t0, cy + SY[ga] + (SY[gb] - SY[ga]) * t0, cx + SX[ga] + (SX[gb] - SX[ga]) * g.t, cy + SY[ga] + (SY[gb] - SY[ga]) * g.t, pal.signal, 1);
         }
         for (i = 0; i < SCOUTS.length; i++) {
@@ -812,7 +814,7 @@
       var target = cnt ? Math.max(0, Math.min(1, 1 - Math.max(0, err / cnt - breathe * 2.2) * 4)) : 1;
       settle += (target - settle) * Math.min(1, dt * 6);
       // signals: fire on their own; each node they reach lights up
-      if (cur.adj && Math.random() < dt * (6 + 8 * AUTO)) fire(shape, Math.floor(Math.random() * N));
+      if (cur.adj && settle > 0.6 && Math.random() < dt * (6 + 8 * AUTO)) fire(shape, Math.floor(Math.random() * N));
       for (var s = sig.length - 1; s >= 0; s--) {
         var g = sig[s]; if (g.sh !== shape) { sig.splice(s, 1); continue; }
         g.t += dt * 3.2;
