@@ -1,4 +1,4 @@
-/*! aurora-field v2.0.0 · MIT · https://github.com/mutaaf/aurora-field
+/*! aurora-field v2.0.1 · MIT · https://github.com/mutaaf/aurora-field
  * A particle field that assembles into shapes and morphs between them: a neural sphere
  * with travelling signals, a team of orbs, a stack of platforms, an armoured helm, a ranger
  * helmet — or text, SVG paths, images and point clouds (fromText/fromSVG/fromImage/fromPoints,
@@ -17,7 +17,7 @@
   else root.AuroraField = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var VERSION = '2.0.0';
+  var VERSION = '2.0.1';
   var TAU = Math.PI * 2;
 
   var imul = Math.imul || function (a, b) {
