@@ -1,5 +1,25 @@
 # Changelog
 
+## 3.0.0 — 2026-10-19
+- **Stories as data.**
+  - `stage(canvas, board, opts)` plays a storyboard. Each trade beat runs the pen's drawing, the moment it went wrong (a pulse at an anchor), an AI orb, light spreading from the chest, and a caption with a count-up. Crew beats line up a lit crew.
+  - `load()` swaps a board in at the next beat. `focus()` holds a trade. `headless` swaps the HUD for events.
+  - `validate()` checks boards against the vocabulary and limits, with house rules through `text`. `schema({ strict })` emits JSON Schema (an OpenAI structured-outputs shape), so an AI can write boards.
+- **Everything as data, plus plugins.**
+  - Props are primitives placed by point references (a joint, along a bone, between joints).
+  - Actions are keyframe-free terms (`sin`, `pulse`, `swing`, `burst`, `hold`).
+  - `use({ poses, props, actions, trades, palettes, shapes })` extends the vocabulary without touching the engine. `vocab()` lists it.
+- **21 trades and 13 poses:**
+  - New poses: `pole`, `carry`, `reach`, `push`, `spray`, `tray`.
+  - New props: roller, rake, skimmer, mop, bucket, sprayer, box, windowpane, solarpanel, dolly, chainsaw, trowel, bullfloat, fence, fan, hvacunit, garagedoor, tray, gauge, remote, cap.
+  - `registerCrew(only?)` registers trades lazily. `crewGroup(trades)` builds any lineup.
+- **React:** `aurora-field/react` gives you `<AuroraStage src fallback live focus />`, with ETag polling, so open pages follow a changed board without a deploy.
+- **Studio:** a storyboard editor that validates as you type, plays, and publishes to a scene endpoint.
+- **Release:**
+  - `field.add(names)` adds shapes to a live field. `clock: 'manual'` emits `frame`.
+  - A publish workflow (tag `v*`, npm provenance) and SRI-pinned CDN snippets in the README.
+  - The bundle budget is now 45 KB gzipped, for the engine, the people and the stage together (42.4 KB today).
+
 ## 3.0.0-alpha.1 — 2026-10-19
 Quality and speed, ahead of the stage, plugin and React work in 3.0.
 - **Drawings that read as people.** `figure().line` is now an outline instead of stick bones.

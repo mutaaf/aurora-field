@@ -15,6 +15,7 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const args = process.argv.slice(2), flags = new Set(args.filter(a => a.startsWith('--'))), only = args.filter(a => !a.startsWith('--'));
 const TRADES = ['contractor', 'plumber', 'electrician', 'roofer', 'manager', 'realtor'];
 const TRACE = 2400;
+const ONLY = process.env.TRADES ? process.env.TRADES.split(',') : null;
 
 const line = t => `crew:${t}:line`, lit = t => `crew:${t}:lit`;
 const SHEETS = {
@@ -24,6 +25,8 @@ const SHEETS = {
   fill: { cols: 4, cells: ['contractor', 'roofer', 'realtor'].flatMap(t => [[0], [250], [700], [2600]].map(([ms]) => ({ label: `${t} · lit +${ms}ms`, shapes: [line(t), lit(t)], steps: ms ? [[line(t), 2800], [lit(t), ms, { arrive: { from: 'chest', ms: 1100 } }]] : [[line(t), 2800]], opts: { blank: true } }))) },
   // close up: the lit body at hero size
   close: { cols: 3, cells: ['contractor', 'roofer', 'realtor'].map(t => ({ label: `${t} · lit close`, shapes: [lit(t)], steps: [[lit(t), 2600]], opts: { radius: 220 } })) },
+  // every trade in the vocabulary: drawn, then lit
+  trades: { cols: 6, cells: ['contractor', 'plumber', 'electrician', 'roofer', 'manager', 'realtor', 'hvac', 'painter', 'landscaper', 'cleaner', 'pest', 'pool', 'restoration', 'mover', 'solar', 'window', 'garagedoor', 'arborist', 'fencer', 'concrete', 'host'].filter(t => !ONLY || ONLY.includes(t)).flatMap(t => [{ label: t + ' · drawn', shapes: [line(t)], steps: [[line(t), 3200]], opts: { blank: true, stars: 0 } }, { label: t + ' · lit', shapes: [lit(t)], steps: [[lit(t), 2600]], opts: { stars: 0 } }]) },
   // the crew, the 2D fallback, reduced motion
   crew: { cols: 3, cells: [
     { label: 'crew:all', shapes: ['crew:all'], steps: [['crew:all', 3000]] },

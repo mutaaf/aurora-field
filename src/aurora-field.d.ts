@@ -115,6 +115,8 @@ export interface Field {
   advance(ms: number): Field;
   /** Compile shapes ahead of use, one per idle slice (shapes otherwise compile on first setShape). */
   prepare(names?: string[], done?: () => void): Field;
+  /** Add registered shapes to a live field; they compile on first use. */
+  add(names: string[]): Field;
   next(): Field;
   play(): Field;
   pause(): Field;
@@ -181,24 +183,80 @@ export interface ImageOptions { threshold?: number; invert?: boolean; alpha?: bo
 export function fromImage(source: ImageData | { width: number; height: number; data: ArrayLike<number> } | CanvasImageSource, options?: ImageOptions): ShapeBuilder;
 export function fromText(text: string, options?: ImageOptions & { font?: string }): ShapeBuilder;
 export function parsePath(d: string): Array<{ p: Array<[number, number]>; closed: boolean }>;
-export type PoseName = 'stand' | 'tablet' | 'wrench' | 'hammer' | 'phone' | 'keys' | 'inspect';
-export type PropName = 'hardhat' | 'tablet' | 'wrench' | 'pipe' | 'toolbelt' | 'tester' | 'hammer' | 'phone' | 'clipboard' | 'keys' | 'yardsign';
-export type CrewName = 'contractor' | 'plumber' | 'electrician' | 'roofer' | 'manager' | 'realtor';
+export type PoseName = 'stand' | 'tablet' | 'wrench' | 'hammer' | 'phone' | 'keys' | 'inspect' | 'pole' | 'carry' | 'reach' | 'push' | 'spray' | 'tray' | (string & {});
+export type PropName = 'hardhat' | 'cap' | 'tablet' | 'wrench' | 'pipe' | 'toolbelt' | 'tester' | 'gauge' | 'hammer' | 'phone' | 'clipboard' | 'keys' | 'remote' | 'yardsign' | 'roller' | 'rake' | 'skimmer' | 'mop' | 'bucket' | 'sprayer' | 'box' | 'windowpane' | 'solarpanel' | 'dolly' | 'chainsaw' | 'trowel' | 'bullfloat' | 'fence' | 'fan' | 'hvacunit' | 'garagedoor' | 'tray' | (string & {});
+export type CrewName = 'contractor' | 'plumber' | 'electrician' | 'roofer' | 'manager' | 'realtor' | 'hvac' | 'painter' | 'landscaper' | 'cleaner' | 'pest' | 'pool' | 'restoration' | 'mover' | 'solar' | 'window' | 'garagedoor' | 'arborist' | 'fencer' | 'concrete' | 'host' | (string & {});
+/** A point on a figure: absolute, a joint (+ offset), along a bone, or between two joints; x / y / z pin an axis. */
+export type PointRef = Vec3 | { j: string; from?: string; t?: number; d?: Vec3; x?: number; y?: number; z?: number } | { mid: [string, string]; d?: Vec3; x?: number; y?: number; z?: number };
+export type Prim =
+  | { k: 'cyl'; a: PointRef; b: PointRef; r?: number; ra?: number; rb?: number }
+  | { k: 'ell'; c: PointRef; r: Vec3; half?: boolean }
+  | { k: 'box'; c: PointRef; h: Vec3; tilt?: [number, number, number, number]; along?: { j: string; from: string }; len?: number }
+  | { k: 'ring'; c: PointRef; r: [number, number]; ex?: number; ez?: number; band?: number; plane?: Vec3 | { j: string; from: string } };
+/** A prop as data: which joint carries it, and its primitives. */
+export interface PropDef { owner: string; prims: Prim[]; name?: string }
+/** One term of an action: turn a joint's subtree about another joint. */
+export interface ActionTerm { pivot: string; joint: string; axis: Vec3; amp: number; rate?: number; wave?: 'sin' | 'pulse' | 'swing' | 'burst' | 'hold'; gate?: number; phase?: number }
 export interface FigureSpec {
   /** A named pose, or joint positions (pelvis, chest, neck, head, shL/elL/haL, shR/elR/haR, hipL/knL/anL/toL, hipR/knR/anR/toR) in a ~1.8-tall box, y down, facing −z. */
   pose?: PoseName | Record<string, Vec3>;
-  /** The idle action (defaults to the pose's own): the hammer swings, the wrench turns, the head nods on the phone. */
-  action?: PoseName;
-  props?: PropName[];
+  /** The idle action: a name (defaults to the pose's own) or terms as data. */
+  action?: string | ActionTerm[];
+  props?: Array<PropName | PropDef>;
   /** ms the pen takes to draw the line figure. Default 1800. */
   trace?: number;
 }
 /** One person, two builders: line (a stick figure a pen traces) and lit (the same person as a lit, solid mannequin). Shared pose, idle loop and anchors (head, chest, hand, prop, feet). */
-export function figure(spec?: FigureSpec): { line: ShapeBuilder; lit: ShapeBuilder; anchors: Record<string, Vec3> };
+export function figure(spec?: FigureSpec | CrewName): { line: ShapeBuilder; lit: ShapeBuilder; anchors: Record<string, Vec3> };
 /** Several shapes in one, each placed and scaled: [builder, [x, y, z], scale]. Anchors are prefixed by part index ('0.chest'). */
 export function group(parts: Array<[ShapeBuilder, Vec3, number]>): ShapeBuilder;
-/** Register crew:<trade>:line, crew:<trade>:lit for each trade, and crew:all. Idempotent; returns the trades. */
-export function registerCrew(): CrewName[];
+/** Register crew:<trade>:line and crew:<trade>:lit for every trade (or just the ones named), and crew:all. Idempotent. */
+export function registerCrew(only?: CrewName | CrewName[]): CrewName[];
+/** A lit lineup of trades as one shape. */
+export function crewGroup(trades: CrewName[]): ShapeBuilder;
+export function trades(): CrewName[];
+export interface Plugin { poses?: Record<string, Record<string, Vec3>>; props?: Record<string, PropDef>; actions?: Record<string, ActionTerm[]>; trades?: Record<string, FigureSpec>; palettes?: Record<string, Partial<Palette>>; shapes?: Record<string, ShapeBuilder | ShapeData>; beats?: Record<string, unknown> }
+/** Add vocabulary and shapes without touching the engine. Chainable. */
+export function use(plugin: Plugin): typeof AuroraField;
+export function vocab(): { poses: string[]; props: string[]; actions: string[]; trades: string[]; palettes: string[]; joints: string[] };
+
+export type Anchor = 'head' | 'chest' | 'hand' | 'prop' | 'feet';
+export interface Caption { who?: string; did: string; metric?: { to: number; from?: number; prefix?: string; suffix?: string; ms?: number } }
+export interface TradeBeat { trade: CrewName | FigureSpec; draw?: { ms?: number }; moment?: { text: string; at?: Anchor; ms?: number }; ai?: { ms?: number; text?: string }; fill?: { from?: Anchor; ms?: number }; caption?: Caption; hold?: number }
+export interface CrewBeat { crew: CrewName[] | true; caption?: Caption; hold?: number }
+/** A story as data: trades drawn, the moment it went wrong, the AI, the fill, the outcome; then the crew. */
+export interface Storyboard { version: 1; loop?: boolean; palette?: PaletteName | Partial<Palette>; light?: Partial<LightRig>; beats: Array<TradeBeat | CrewBeat> }
+export interface StageOptions extends Pick<Options, 'container' | 'stage' | 'count' | 'radius' | 'depth' | 'interactive' | 'quality' | 'renderer' | 'reducedMotion' | 'clock' | 'maxDpr' | 'seed' | 'stars' | 'palette' | 'light'> {
+  /** No DOM overlay: listen to 'phase', 'caption' and 'overlay' events and draw your own. */
+  headless?: boolean;
+  /** false: don't inject the default HUD styles (.af-hud, .af-caption, .af-moment, .af-orb). */
+  styles?: boolean;
+  /** Extra text rules for validate(), e.g. house style; return a message to refuse. */
+  text?: (value: string, path: string) => string | null | undefined;
+}
+export interface StageBeatEvent { index: number; beat: TradeBeat | CrewBeat }
+export interface StagePhaseEvent { index: number; phase: 'draw' | 'moment' | 'ai' | 'fill' | 'caption' | 'crew' | 'hold'; text?: string }
+export interface Stage {
+  readonly field: Field; readonly storyboard: Storyboard; readonly index: number; readonly phase: string;
+  /** Swap in a storyboard at the next beat; returns the validation (an invalid board is refused, the old one plays on). */
+  load(board: Storyboard): { ok: boolean; errors: string[] };
+  goto(beat: number): Stage;
+  /** Show a trade now and hold it; null lets the story carry on. */
+  focus(trade: string | null): Stage;
+  advance(ms: number): Stage;
+  play(): Stage; pause(): Stage;
+  on(event: 'beat', fn: (e: StageBeatEvent) => void): Stage;
+  on(event: 'phase', fn: (e: StagePhaseEvent) => void): Stage;
+  on(event: 'caption', fn: (c: Caption) => void): Stage;
+  on(event: 'overlay', fn: (e: { el: string; on: boolean }) => void): Stage;
+  on(event: 'load' | 'loop', fn: (a?: unknown) => void): Stage;
+  off(event: string, fn?: (...a: any[]) => void): Stage;
+  destroy(): void;
+}
+export function stage(canvas: HTMLCanvasElement | OffscreenCanvas, storyboard: Storyboard, options?: StageOptions): Stage;
+export function validate(storyboard: unknown, options?: Pick<StageOptions, 'text'>): { ok: boolean; errors: string[] };
+/** JSON Schema for a storyboard with today's vocabulary as enums; strict: OpenAI structured-outputs shape. */
+export function schema(options?: { strict?: boolean }): Record<string, unknown>;
 export const crew: CrewName[];
 export const poses: PoseName[];
 export function build(name: string, n: number, seed?: number): Shape;
@@ -211,6 +269,7 @@ declare const AuroraField: {
   armour: typeof armour; offload: typeof offload; serve: typeof serve; fromPoints: typeof fromPoints; fromSVG: typeof fromSVG;
   fromImage: typeof fromImage; fromText: typeof fromText; parsePath: typeof parsePath;
   figure: typeof figure; group: typeof group; registerCrew: typeof registerCrew; crew: typeof crew; poses: typeof poses;
+  use: typeof use; vocab: typeof vocab; crewGroup: typeof crewGroup; trades: typeof trades; stage: typeof stage; validate: typeof validate; schema: typeof schema;
 };
 export default AuroraField;
 declare global { interface Window { AuroraField: typeof AuroraField } }

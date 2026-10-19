@@ -30,6 +30,60 @@ A WebGL particle field (with a canvas-2D fallback) that assembles into **lit, so
 - **Polite.** Pauses off-screen and in hidden tabs. Under `prefers-reduced-motion` it draws one still frame.
 - **Deterministic when you want it.** Pass a `seed` and the same field is drawn every time.
 
+## Quickstart: a story in five lines
+
+```html
+<div id="hero" style="position:relative;height:80vh;background:#0b0b0d"><canvas id="c"></canvas></div>
+<script src="https://cdn.jsdelivr.net/npm/aurora-field@3.0.0/dist/aurora-field.min.js"
+        integrity="sha384-qCwjcAjZLhr3dBuhsPORiaYO2t75IRzRoEu69iTef/kw18mlbdFJLyV6cSbYQKUn" crossorigin="anonymous"></script>
+<script>
+  AuroraField.stage(document.getElementById('c'), { version: 1, beats: [
+    { trade: 'roofer', moment: { text: '9:47 PM · missed call', at: 'hand' }, caption: { who: 'Roofer', did: 'Call answered · job booked' } },
+    { crew: true, caption: { did: 'Your whole crew · on autopilot' } } ] });
+</script>
+```
+
+A pen of light draws a roofer on a blank canvas. A missed call pulses at his hand, and an AI orb comes for it. The light spreads from his chest until he stands lit, and the outcome gets a caption. Then the whole crew stands together.
+
+### Stories as data: `stage()`, `validate()`, `schema()`
+
+- **A storyboard is JSON.** `{ version: 1, beats: [...] }`. A beat is one of two kinds:
+  - **A trade:** `trade`, plus optional `draw`, `moment` (`{ text, at, ms }`), `ai`, `fill` (`{ from, ms }`), `caption` (`{ who, did, metric: { to, suffix } }`) and `hold`.
+  - **The crew:** `crew` (a list of trades, or `true`), with `caption` and `hold`.
+- **`AuroraField.validate(board, { text })`** checks a board against today's vocabulary and limits. Pass `text` to add house style rules. Use it on anything that came from a server, an editor or an AI.
+- **`AuroraField.schema({ strict: true })`** is the JSON Schema, with the trades as an enum. It's in the shape OpenAI structured outputs accept, so a model can write boards directly.
+- **`AuroraField.stage(canvas, board, opts)`** plays a board and draws the HUD: the moment's pulse, the AI orb, and a caption with a count-up. Restyle it through `.af-hud`, `.af-caption`, `.af-moment` and `.af-orb`, or pass `headless: true` and listen to `phase` and `caption` events.
+- **The stage API:**
+  - `stage.load(board)` swaps a story in at the next beat. An invalid board is refused, and the old one plays on.
+  - `stage.focus('plumber')` shows one trade and holds it. Use it on hover.
+  - With `clock: 'manual'` and `stage.advance(ms)`, you can render or test frame by frame.
+
+### React: `aurora-field/react`
+
+```jsx
+import { AuroraStage } from 'aurora-field/react';
+<AuroraStage src="/api/scene?vertical=roofers" fallback={board} live={60} focus={hovered} />
+```
+
+- The fallback plays at once.
+- The fetched board takes over at the next beat.
+- With `live`, it polls the URL with ETags while the page is visible. Change the board on your server and open pages follow within a minute, with no deploy.
+
+### Plugins and vocabulary: `use()`, `vocab()`
+
+Every pose, prop, action and trade is data, so new ones arrive as plugins, from JSON:
+
+```js
+AuroraField.use({
+  props: { flag: { owner: 'haL', prims: [{ k: 'cyl', a: { j: 'haL' }, b: { j: 'haL', d: [0, -0.3, 0] }, r: 0.008 }] } },
+  actions: { wave: [{ pivot: 'elL', joint: 'haL', axis: [0, 0, 1], amp: 0.3, rate: 3 }] },
+  trades: { guide: { pose: 'keys', props: ['flag', 'cap'], action: 'wave' } }
+});
+```
+
+- **Built in:** 21 trades (contractor, plumber, electrician, roofer, property manager, realtor, HVAC, painter, landscaper, cleaner, pest control, pool, restoration, mover, solar, window, garage door, arborist, fencer, concrete, hospitality) and 13 poses.
+- **`vocab()`** lists everything that's registered.
+
 ## Install
 
 ```sh
