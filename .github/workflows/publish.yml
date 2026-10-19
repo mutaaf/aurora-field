@@ -1,10 +1,13 @@
-# Publish to npm when a version tag is pushed (git tag v3.0.0 && git push --tags).
-# Needs the NPM_TOKEN repository secret (an npm automation token). Provenance links the
-# package to this workflow run.
+# Publish to npm with Trusted Publishing (OIDC): no token to store or rotate. npm trusts this
+# workflow in this repo (npmjs.com → aurora-field → Settings → Trusted Publisher), and every
+# release carries provenance.
+#   Release: bump package.json, merge, then: git tag vX.Y.Z && git push --tags
+#   Or run it by hand (Actions → Publish → Run workflow) to publish the version in package.json.
 name: Publish
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 permissions:
   contents: read
   id-token: write
@@ -15,13 +18,20 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           registry-url: https://registry.npmjs.org
+      # trusted publishing needs npm 11.5.1 or later
+      - run: npm install -g npm@11
       - run: npm ci
       - run: npm test
       - run: npm run budget
       - name: The tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/')
         run: test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Skip if this version is already on npm
+        id: check
+        run: |
+          V=$(node -p "require('./package.json').version")
+          if npm view "aurora-field@$V" version >/dev/null 2>&1; then echo "aurora-field@$V is already published"; echo "skip=1" >> "$GITHUB_OUTPUT"; fi
+      - if: steps.check.outputs.skip != '1'
+        run: npm publish --access public
