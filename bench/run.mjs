@@ -20,7 +20,8 @@ function env(kind) {
   return { canvas, pump: (n) => { for (let i = 0; i < n; i++) { const q = queue.splice(0); t += 16.7; q.forEach(f => f(t)); } } };
 }
 const rows = [];
-for (const kind of ['gl', '2d']) for (const shape of ['mind', 'helm']) for (const n of [2800, 10000, 30000]) {
+if (AF.registerCrew) AF.registerCrew();
+for (const kind of ['gl', '2d']) for (const shape of ['mind', 'helm'].concat(AF.registerCrew ? ['crew:contractor:lit'] : [])) for (const n of [2800, 10000, 30000]) {
   const e = env(kind);
   const f = AF.create(e.canvas, { seed: 1, count: n, shapes: [shape], cycle: 0, intro: 0, quality: 'high', autoPause: false, renderer: kind === 'gl' ? 'webgl' : '2d' });
   e.pump(120);                                  // settle and warm the JIT

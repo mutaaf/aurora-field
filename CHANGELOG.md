@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.1.0 — 2026-10-19
+- **People, drawn then lit.** `figure(spec)` builds a person from an 18-joint skeleton in two forms.
+  - **The line form** is a modern stick figure: bones, joint nodes and prop outlines, with pairs along every stroke for signals. A pen traces it from the chin round.
+  - **The lit form** is the same person as a sleek, solid mannequin: a lofted torso, tapered limbs and an egg head, sampled evenly (R2 low-discrepancy) with analytic normals and surfels. Seams at the collar, waist, wrists and knees carry signals, a visor line crosses the face, and a bright core sits at the chest. Props take the accent tone.
+  - **Shared by both:** pose, props, anchors (`head`, `chest`, `hand`, `prop`, `feet`) and an idle loop. Every point rides its joint through `flow`: breathing, a weight shift, a glance, and the trade's action (the hammer swings, the wrench turns, the head nods on the phone).
+  - **The crew:** `registerCrew()` (or `create({ crew: true })`, which also works in workers) adds a contractor, plumber, electrician, roofer, property manager and realtor, each as `crew:<trade>:line` and `crew:<trade>:lit`, plus `crew:all`. `group()` composes shapes.
+- **The pen.** Any shape can carry `trace: { order, ms }`. Undrawn points wait unseen at the pen, which shows as a bright tip; points glint as they're drawn; edges appear only between drawn points. Place-trading pauses while it draws. The field emits `traced` once a drawing is done, and `field.trace()` replays it.
+- **`blank: true`** starts from an empty sky, with particles born unseen at the centre. `field.signal(at, hops, count)` sends signals from an anchor or a point. `flow(i, t, since)` now gets the seconds since the shape arrived.
+- **The studio** has a crew panel: draw any trade, *draw again*, or *loop the crew*.
+- `<aurora-field crew blank>`. `create` now explains an unknown `initial` shape instead of failing later. Bench: `crew:contractor:lit` costs the same per frame as the lit helm (0.26 ms at 2,800 points).
+
 ## 2.0.0 — 2026-10-19
 - **Lit, solid shapes.** Shapes can carry `normals`, and the field lights them as they turn: ambient, a key light, a rim at the silhouette, and a sheen (`light: true | false | { dir, ambient, key, rim, spec, shine }`, live through `set`). Shapes can also carry per-point `alpha` and `surfel` widths. On WebGL, a surfel is a soft lit disc as wide as the gap to its neighbours, so a sparse skin reads as a continuous surface (`surfels`, default on).
 - **The helmets, as objects.** `armour()` grows a `surface`: a skin laid in even rows round the whole head, with `panels` that tone front regions. Normals come from the shell's implicit form, so everything on it is lit. Fills are sampled on a jittered grid, so eyes read solid. The **helm** wears a gold faceplate over a red shell. The **ranger** is a white helmet with a gold band and crest and a black glass visor. Lit shapes drop the random sparkle points, which read as noise on a surface.

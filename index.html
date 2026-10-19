@@ -156,6 +156,12 @@
       <div class="row"><button class="chip" id="cycle" aria-pressed="true">auto-cycle</button><button class="chip" id="follow" aria-pressed="false" title="The helmets look at your cursor">follow cursor</button></div>
     </div></details>
 
+    <details open><summary>crew · drawn, then lit</summary><div class="sec">
+      <div class="row" id="crew" role="group" aria-label="Crew"></div>
+      <div class="row"><button class="chip" id="enlighten" aria-pressed="false">loop the crew</button><button class="chip" id="redraw">draw again</button></div>
+      <p class="note">A pen draws each worker on a blank canvas, then a signal reaches them and they fill into a lit body (figure(), registerCrew()).</p>
+    </div></details>
+
     <details open><summary>look</summary><div class="sec">
       <div class="row" id="palettes" role="group" aria-label="Palette"></div>
       <div class="lab"><span>light · drag the sun</span><output id="lightv">on</output></div>
@@ -226,6 +232,8 @@
     for(var k=0;k<24;k++){ var tt=k/24*1.9-0.95, aa=tt*9; links.push([[Math.cos(aa)*0.42,tt,Math.sin(aa)*0.42],[Math.cos(aa+Math.PI)*0.42,tt,Math.sin(aa+Math.PI)*0.42]]); }
     return {points:pts, links:links, kick:1};
   });
+  AF.registerCrew();
+  function isCrew(s){ return s.indexOf('crew:')===0; }
   var FACE_CH=['eyeBlinkL','eyeBlinkR','jawOpen','smileL','smileR','pucker','press','mouthL','mouthR','chinRaise','cheekPuff','squintL','squintR','browUp','browDownL','browDownR'];
   var PAL=AF.palettes, PALS=Object.keys(PAL), D0=AF.defaults.palette, LR0=AF.defaults.lightRig;
   var RIGGED={helm:1,ranger:1};
@@ -268,11 +276,17 @@
     if(builtAs&&builtAs!==want){ var c2=canvas.cloneNode(false); canvas.parentNode.replaceChild(c2,canvas); canvas=c2; canvas.addEventListener('pointerdown',quiet); }
     builtAs=want;
     field=AF.create(canvas,{container:$('sky'),stage:$('stage'),count:state.count,cycle:state.cycle?6500:0,autonomy:state.auto,palette:state.palette,
-      initial:state.shape,light:lightOpt(),surfels:state.surfels,depth:state.depth,renderer:state.r2d?'2d':'auto'});
+      initial:state.shape,rotation:AF.shapes().filter(function(s){ return !isCrew(s); }),light:lightOpt(),surfels:state.surfels,depth:state.depth,renderer:state.r2d?'2d':'auto'});
     field.on('shape',function(s){ if(s!==state.shape){ state.shape=s; marks(); syncURL(); } });
     field.on('stats',function(s){
       var st=field.stats();
       statsEl.innerHTML='<b>'+s.nodes.toLocaleString('en-US')+'</b> nodes · <b>'+s.fps+'</b> fps · '+st.renderer+' · '+(['high','retina-lite','balanced','eco'][s.quality])+(st.scouts?' · '+st.scouts+' scouts out':'');
+    });
+    // the crew: when the pen finishes, a signal comes in and the drawing fills into a body
+    field.on('traced',function(s){
+      if(!isCrew(s)) return;
+      field.signal('head',40,6);
+      clearTimeout(crewT); crewT=setTimeout(function(){ field.setShape(s.replace(':line',':lit'),{pin:true}); field.signal('chest',30,8); if(crewLoop) crewT=setTimeout(nextCrew,3800); },650);
     });
     field.on('spinout',function(){ statsEl.innerHTML='<b>1.21 GW</b>'; });
     paused=false; $('pause').setAttribute('aria-pressed','false');
@@ -285,7 +299,10 @@
   function swatch(k){ var p=PAL[k], a=hex(p.point||D0.point), b=hex(p.accent||p.point||D0.point); return '<span class="sw" style="background:linear-gradient(135deg,'+a+' 50%,'+b+' 50%)"></span>'; }
   function marks(){
     var sh=$('shapes'); sh.innerHTML='';
-    AF.shapes().forEach(function(s){ sh.appendChild(chip(s,s===state.shape,function(){ pick(s); })); });
+    AF.shapes().forEach(function(s){ if(!isCrew(s)) sh.appendChild(chip(s,s===state.shape,function(){ pick(s); })); });
+    var cr=$('crew'); cr.innerHTML='';
+    AF.crew.forEach(function(c){ cr.appendChild(chip(c,state.shape.indexOf('crew:'+c+':')===0,function(){ crewLoop=false; $('enlighten').setAttribute('aria-pressed','false'); drawCrew(c); })); });
+    cr.appendChild(chip('all',state.shape==='crew:all',function(){ crewLoop=false; clearTimeout(crewT); pick('crew:all'); }));
     var pl=$('palettes'); pl.innerHTML='';
     PALS.forEach(function(k){ pl.appendChild(chip(k,k===state.palette,function(){ setPalette(k); },swatch(k))); });
     var rig=!!RIGGED[state.shape];
@@ -297,6 +314,18 @@
     if(RIGGED[s]&&(state.palette==='mark-iii'||state.palette==='ranger')) setPalette(s==='ranger'?'ranger':'mark-iii',true);
     field.setShape(s,{pin:true}); marks(); syncURL();
   }
+  var crewT=0, crewLoop=false;
+  function drawCrew(c){
+    clearTimeout(crewT);
+    if(state.palette==='mark-iii') setPalette('ranger',true);
+    state.shape='crew:'+c+':line'; field.setShape(state.shape,{pin:60000}); field.trace(); marks(); syncURL();
+  }
+  function nextCrew(){
+    var at=-1; AF.crew.forEach(function(c,i){ if(state.shape.indexOf('crew:'+c+':')===0) at=i; });
+    drawCrew(AF.crew[(at+1)%AF.crew.length]);
+  }
+  $('enlighten').onclick=function(){ crewLoop=!crewLoop; this.setAttribute('aria-pressed',String(crewLoop)); if(crewLoop) nextCrew(); else clearTimeout(crewT); };
+  $('redraw').onclick=function(){ var m=state.shape.match(/^crew:([a-z]+):/); drawCrew(m?m[1]:AF.crew[0]); };
   function setPalette(k,quiet){ state.palette=k; field.set({palette:k}); if(!quiet){ marks(); syncURL(); } }
 
   // ---- look ----

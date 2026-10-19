@@ -1,7 +1,7 @@
 {
   "name": "aurora-field",
-  "version": "2.0.0",
-  "description": "A zero-dependency WebGL particle field that assembles into lit, solid shapes and morphs between them: a neural sphere, rigged helmets you drive with your face, text, SVG, images. Lighting, surfels, two-tone palettes, a web component, worker mode.",
+  "version": "2.1.0",
+  "description": "A zero-dependency WebGL particle field that assembles into lit, solid shapes and morphs between them: a neural sphere, rigged helmets you drive with your face, people drawn by a pen of light then lit, text, SVG, images. Lighting, surfels, two-tone palettes, a web component, worker mode.",
   "main": "src/aurora-field.js",
   "browser": "src/aurora-field.js",
   "types": "src/aurora-field.d.ts",
