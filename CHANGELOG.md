@@ -34,6 +34,9 @@ Quality and speed, ahead of the stage, plugin and React work in 3.0.
 - **The studio** has a crew panel: draw any trade, *draw again*, or *loop the crew*.
 - `<aurora-field crew blank>`. `create` now explains an unknown `initial` shape instead of failing later. Bench: `crew:contractor:lit` costs the same per frame as the lit helm (0.26 ms at 2,800 points).
 
+## 2.0.1 — 2026-10-19
+- Republish of 2.0.0 from its tag. The 2.0.0 tarball on npm was packed from a working tree that held unreleased work; 2.0.1 is exactly the 2.0.0 release. Use 2.0.1.
+
 ## 2.0.0 — 2026-10-19
 - **Lit, solid shapes.** Shapes can carry `normals`, and the field lights them as they turn: ambient, a key light, a rim at the silhouette, and a sheen (`light: true | false | { dir, ambient, key, rim, spec, shine }`, live through `set`). Shapes can also carry per-point `alpha` and `surfel` widths. On WebGL, a surfel is a soft lit disc as wide as the gap to its neighbours, so a sparse skin reads as a continuous surface (`surfels`, default on).
 - **The helmets, as objects.** `armour()` grows a `surface`: a skin laid in even rows round the whole head, with `panels` that tone front regions. Normals come from the shell's implicit form, so everything on it is lit. Fills are sampled on a jittered grid, so eyes read solid. The **helm** wears a gold faceplate over a red shell. The **ranger** is a white helmet with a gold band and crest and a black glass visor. Lit shapes drop the random sparkle points, which read as noise on a surface.
