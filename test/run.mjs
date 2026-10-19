@@ -102,8 +102,15 @@ test('source stays ES5 (it gets inlined into ES5-only pages)', () => {
 });
 
 // ---- create() against a stub canvas: wiring, lifecycle, callbacks ----
-function stubEnv({ reduce = false } = {}) {
-  const calls = { raf: 0 }, listeners = [];
+function stubEnv({ reduce = false, gl = false } = {}) {
+  const calls = { raf: 0, points: null }, listeners = [];
+  // a recording WebGL stub: keeps the last point batch (8 floats a point: x, y, size, rgba, kind)
+  let bound = null, nbuf = 0;
+  const glStub = gl ? new Proxy({
+    getParameter: () => [1, 1024], getShaderParameter: () => true, getProgramParameter: () => true, getExtension: () => null,
+    createBuffer: () => ({ id: ++nbuf }), bindBuffer: (t, b) => { bound = b; },
+    bufferSubData: (t, o, data) => { if (bound && bound.id === 1) calls.points = Array.from(data); },
+  }, { get: (t, k) => (k in t ? t[k] : (typeof k === 'string' && /^[A-Z_0-9]+$/.test(k) ? 1 : () => ({})) ) }) : null;
   const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : (k === 'createRadialGradient' ? () => ({ addColorStop() {} }) : () => {})), set: (t, k, v) => (t[k] = v, true) });
   const el = (w, h) => ({ getBoundingClientRect: () => ({ left: 0, top: 0, width: w, height: h }), addEventListener: (e, f) => listeners.push(e), removeEventListener() {} });
   const queue = [];
@@ -115,7 +122,7 @@ function stubEnv({ reduce = false } = {}) {
   };
   const doc = { hidden: false, defaultView: win, addEventListener: (e) => listeners.push(e), removeEventListener() {} };
   const container = el(1200, 800);
-  const canvas = Object.assign(el(1200, 800), { ownerDocument: doc, parentNode: container, getContext: (type) => (type === '2d' ? ctx : null), setAttribute() {}, removeAttribute() {} });
+  const canvas = Object.assign(el(1200, 800), { ownerDocument: doc, parentNode: container, getContext: (type) => (type === '2d' ? (gl ? null : ctx) : (gl ? glStub : null)), setAttribute() {}, removeAttribute() {} });
   const pump = (n, t0 = 1000, ms = 16.7) => { for (let i = 0; i < n; i++) { const q = queue.splice(0); q.forEach(f => f(t0 + i * ms)); } };
   return { canvas, container, win, calls, listeners, pump };
 }
@@ -323,6 +330,42 @@ test('face rig: helmets move eyelids, jaw, lips, cheeks, chin and brows', () => 
   f.setPose(null); env.pump(40);
   assert.ok(f.stats().settle > 0);
   f.destroy();
+});
+
+test('light: helmets carry unit normals, a lit skin of surfels, and faint skin alpha', () => {
+  for (const name of ['helm', 'ranger']) {
+    const n = 3000, s = AF.build(name, n, 5);
+    assert.equal(s.normals.length, n); assert.equal(s.alpha.length, n); assert.equal(s.surfel.length, n);
+    for (const v of s.normals) assert.ok(Math.abs(Math.hypot(v[0], v[1], v[2]) - 1) < 1e-6, 'unit normal');
+    const skin = []; for (let i = 0; i < n; i++) if (s.surfel[i] > 0) skin.push(i);
+    assert.ok(skin.length > n * 0.25, name + ': a skin, not just seams (' + skin.length + ')');
+    let front = 0, out = 0, back = 0;
+    for (const i of skin) { const p = s.points[i], v = s.normals[i]; if (p[2] < -0.2) { front++; if (v[2] < 0) out++; } if (p[2] > 0.2) back++; }
+    assert.ok(out / front > 0.97, name + ': front skin faces the viewer');
+    assert.ok(back > skin.length * 0.25, name + ': the skin wraps the back of the head');
+    assert.ok(s.alpha.some(a => a < 1) && s.alpha.some(a => a === 1), 'seams stay crisp, the skin is fainter');
+  }
+  // the gold faceplate is a panel: front skin inside it takes the accent tone
+  const h = AF.build('helm', 3000, 5); let gold = 0; for (let i = 0; i < 3000; i++) if (h.surfel[i] > 0 && h.tone[i] === 1) gold++;
+  assert.ok(gold > 100, 'helm: a gold faceplate (' + gold + ')');
+  const kinds = () => { const P = envG.calls.points, k = {}; for (let i = 7; i < P.length; i += 8) k[P[i]] = (k[P[i]] || 0) + 1; return k; };
+  const envG = stubEnv({ gl: true });
+  const g = AF.create(envG.canvas, { seed: 2, count: 900, shapes: ['helm', 'mind'], cycle: 0, intro: 0 });
+  envG.pump(90);
+  assert.equal(g.stats().renderer, 'webgl');
+  assert.ok(kinds()[3] > 200, 'webgl: the lit skin paints surfels (' + kinds()[3] + ')');
+  g.set({ surfels: false }); envG.pump(2); assert.ok(!kinds()[3], 'surfels: false turns them off');
+  g.set({ surfels: true }); g.setShape('mind'); envG.pump(90); assert.ok(!kinds()[3], 'shapes without a skin paint none');
+  g.destroy();
+  for (const renderer of ['webgl', '2d']) {
+    const env = stubEnv({ gl: renderer === 'webgl' });
+    const f = AF.create(env.canvas, { seed: 2, count: 900, shapes: ['helm', 'mind'], cycle: 0, intro: 0, renderer });
+    assert.equal(f.stats().renderer, renderer);
+    env.pump(40); f.set({ light: { dir: [1, 0, -1], rim: 0 } }); env.pump(10);
+    f.set({ light: false }); env.pump(10); f.set({ light: true, surfels: false }); env.pump(10);
+    f.setShape('mind'); env.pump(30);
+    assert.ok(f.stats().settle >= 0); f.destroy();
+  }
 });
 
 test('face: the solver mirrors the head, learns a resting face, and smooths', async () => {

@@ -3,62 +3,124 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>aurora-field</title>
-<meta name="description" content="A zero-dependency canvas particle field that assembles into shapes and morphs between them. Drag it, part it, shock it.">
-<meta property="og:title" content="aurora-field">
-<meta property="og:description" content="A zero-dependency canvas particle field: a neural sphere, a team, a platform stack, and any shape you register.">
+<title>aurora-field studio</title>
+<meta name="description" content="A zero-dependency particle field that assembles into lit, solid shapes and morphs between them. Shape it, light it, drive it with your face, export it.">
+<meta property="og:title" content="aurora-field studio">
+<meta property="og:description" content="A zero-dependency particle field: lit armour you can drive with your face, a neural sphere, your own words and images. Shape it, light it, export it.">
 <meta property="og:image" content="https://mutaaf.github.io/aurora-field/docs/preview.jpg">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="theme-color" content="#0B0F12">
+<meta name="theme-color" content="#080B0D">
 <style>
-  :root{--night:#0B0F12;--ink:#F2F5F6;--dim:#8A9399;--faint:#56616A;--line:rgba(255,255,255,.08);--aurora:#7BE3C3;--aurora2:#3E8F7A;
-    --sans:"Avenir Next","Avenir","Segoe UI Variable Text","Segoe UI","Helvetica Neue",Arial,sans-serif;--mono:"SF Mono",Menlo,Consolas,"Liberation Mono",monospace}
+  :root{--night:#080B0D;--ink:#F2F5F6;--dim:#8A9399;--faint:#56616A;--line:rgba(255,255,255,.08);--glass:rgba(12,17,20,.72);--aurora:#7BE3C3;--aurora2:#3E8F7A;
+    --sans:"Avenir Next","Avenir","Segoe UI Variable Text","Segoe UI","Helvetica Neue",Arial,sans-serif;--mono:"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;--dock:340px}
   *{box-sizing:border-box}
-  html,body{margin:0;height:100%;background:var(--night);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
-  body{overflow-x:hidden}
-  .sky{position:relative;min-height:100vh;min-height:100svh;overflow:hidden;background:radial-gradient(120% 80% at 70% 20%,#121A1F 0,var(--night) 62%)}
-  .aur{position:absolute;inset:-20% -10% auto;height:75%;pointer-events:none;opacity:.8}
-  .aur i{position:absolute;display:block;border-radius:50%;filter:blur(60px);mix-blend-mode:screen;animation:drift 22s ease-in-out infinite alternate}
-  .aur i:nth-child(1){left:38%;top:8%;width:56%;height:34%;background:radial-gradient(closest-side,rgba(123,227,195,.42),transparent)}
-  .aur i:nth-child(2){left:58%;top:22%;width:40%;height:22%;background:radial-gradient(closest-side,rgba(62,143,122,.5),transparent);animation-duration:28s;animation-delay:-9s}
+  html,body{margin:0;height:100%;background:var(--night);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow:hidden}
+  .sky{position:fixed;inset:0;background:radial-gradient(110% 80% at 62% 30%,#111A1F 0,var(--night) 64%)}
+  .aur{position:absolute;inset:-20% -10% auto;height:70%;pointer-events:none;opacity:.7}
+  .aur i{position:absolute;display:block;border-radius:50%;filter:blur(70px);mix-blend-mode:screen;animation:drift 24s ease-in-out infinite alternate}
+  .aur i:nth-child(1){left:30%;top:6%;width:56%;height:34%;background:radial-gradient(closest-side,rgba(123,227,195,.32),transparent)}
+  .aur i:nth-child(2){left:52%;top:22%;width:40%;height:22%;background:radial-gradient(closest-side,rgba(62,143,122,.42),transparent);animation-duration:30s;animation-delay:-9s}
   @keyframes drift{50%{transform:translate3d(-6%,4%,0) scaleX(1.25)}100%{transform:translate3d(5%,-3%,0) scaleX(.9)}}
-  canvas{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:pan-y}
-  canvas[data-dragging]{cursor:grabbing}
-  .stage{position:absolute;top:0;right:0;bottom:0;width:58%;pointer-events:none}
-  .ui{position:relative;z-index:2;max-width:1160px;margin:0 auto;padding:40px 32px 32px;min-height:100vh;min-height:100svh;display:flex;flex-direction:column;pointer-events:none}
-  .ui a,.ui button,.ui input,.ui label,.ui pre,.ui select{pointer-events:auto}
-  header{display:flex;justify-content:space-between;align-items:baseline;gap:16px;flex-wrap:wrap;padding-bottom:18px;border-bottom:1px solid var(--line);font:12px var(--mono);letter-spacing:.06em;color:var(--dim)}
-  header b{font:600 16px var(--sans);letter-spacing:.01em;color:var(--ink)}
-  header a{color:var(--dim);text-decoration:none;margin-left:16px}
-  header a:hover{color:var(--aurora)}
-  .copy{max-width:520px;margin-top:12vh}
-  h1{margin:0;font-size:clamp(40px,6vw,72px);line-height:1;font-weight:500;letter-spacing:-.035em}
+  #field{position:absolute;inset:0;width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+  #field[data-dragging]{cursor:grabbing}
+  .stage{position:absolute;top:64px;left:0;bottom:56px;right:var(--dock);pointer-events:none}
+  body.bare .stage,body.bare .top{right:0}
+  /* top bar */
+  .top{position:fixed;top:0;left:0;right:var(--dock);z-index:5;display:flex;align-items:center;gap:18px;padding:16px 22px;font:12px var(--mono);letter-spacing:.06em;color:var(--dim);pointer-events:none}
+  .top>*{pointer-events:auto}
+  .top b{font:600 16px var(--sans);letter-spacing:.01em;color:var(--ink);white-space:nowrap}
+  .pill{white-space:nowrap}
+  .top .sp{flex:1}
+  .top a{color:var(--dim);text-decoration:none}
+  .top a:hover{color:var(--aurora)}
+  .pill{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border-radius:999px;font:11.5px var(--mono);letter-spacing:.06em;color:var(--dim);box-shadow:inset 0 0 0 1px #263036;background:rgba(8,11,13,.5);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);transition:color .2s,box-shadow .2s}
+  .pill:hover{color:var(--ink);box-shadow:inset 0 0 0 1px #45515A}
+  .pill:focus-visible{outline:2px solid var(--aurora);outline-offset:2px}
+  .pill[aria-pressed="true"]{color:var(--night);background:var(--aurora);box-shadow:none}
+  .rec{width:8px;height:8px;border-radius:50%;background:#FF5A5F}
+  .pill.on .rec{animation:blink 1s steps(2) infinite}
+  @keyframes blink{50%{opacity:.2}}
+  /* the intro, bottom left */
+  .copy{position:fixed;left:22px;bottom:70px;z-index:3;max-width:min(460px,calc(100vw - var(--dock) - 60px));pointer-events:none;transition:opacity .4s}
+  body.bare .copy,body.quiet .copy{opacity:0}
+  h1{margin:0;font-size:clamp(34px,4.4vw,60px);line-height:1;font-weight:500;letter-spacing:-.035em}
   h1 em{font-style:normal;color:var(--aurora)}
-  .lede{margin:20px 0 0;font-size:16px;line-height:1.6;color:#97A1A7;max-width:42ch}
-  .panel{margin-top:28px;display:grid;gap:14px;max-width:520px}
-  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-  .row .k{width:76px;font:11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
-  .chip{all:unset;box-sizing:border-box;cursor:pointer;min-height:36px;padding:0 14px;display:inline-flex;align-items:center;border-radius:999px;font:500 13px var(--sans);color:var(--dim);box-shadow:inset 0 0 0 1px #2A3237;transition:color .2s,box-shadow .2s,background .2s}
+  .lede{margin:14px 0 0;font-size:15px;line-height:1.6;color:#97A1A7;max-width:44ch}
+  /* status line */
+  .foot{position:fixed;left:0;right:var(--dock);bottom:0;z-index:4;display:flex;gap:10px 22px;flex-wrap:wrap;align-items:center;padding:14px 22px;font:11px var(--mono);letter-spacing:.04em;color:var(--faint);pointer-events:none}
+  body.bare .foot{right:0}
+  .foot b{color:var(--aurora);font-weight:500}
+  .foot kbd{font:10.5px var(--mono);border:1px solid #2A3237;border-radius:3px;padding:1px 5px;color:var(--dim)}
+  /* the dock */
+  .dock{position:fixed;top:0;right:0;bottom:0;width:var(--dock);z-index:6;display:flex;flex-direction:column;background:var(--glass);-webkit-backdrop-filter:blur(18px) saturate(1.2);backdrop-filter:blur(18px) saturate(1.2);border-left:1px solid var(--line);transition:transform .35s cubic-bezier(.2,.7,.2,1)}
+  body.bare .dock{transform:translateX(100%)}
+  .dock-h{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 12px;border-bottom:1px solid var(--line);font:11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+  .dock-b{flex:1;overflow:auto;padding:4px 18px 24px;scrollbar-width:thin;scrollbar-color:#2A3237 transparent}
+  details{border-bottom:1px solid var(--line)}
+  summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:15px 0 13px;font:11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+  summary::-webkit-details-marker{display:none}
+  summary:after{content:"+";font-size:14px;color:var(--faint);transition:transform .2s}
+  details[open] summary:after{transform:rotate(45deg)}
+  summary:focus-visible{outline:2px solid var(--aurora);outline-offset:2px}
+  .sec{display:grid;gap:12px;padding:0 0 18px}
+  .row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .lab{display:flex;justify-content:space-between;font:11px var(--mono);color:var(--faint);letter-spacing:.04em}
+  .lab output{color:var(--dim)}
+  .chip{all:unset;box-sizing:border-box;cursor:pointer;min-height:32px;padding:0 12px;display:inline-flex;align-items:center;border-radius:999px;font:500 12.5px var(--sans);color:var(--dim);box-shadow:inset 0 0 0 1px #263036;transition:color .2s,box-shadow .2s,background .2s}
   .chip:hover{color:var(--ink);box-shadow:inset 0 0 0 1px #45515A}
-  .chip[aria-pressed="true"]{color:#0B0F12;background:var(--aurora);box-shadow:none}
-  .chip[aria-pressed="true"] .sw{box-shadow:0 0 0 2px #0B0F12}
+  .chip[aria-pressed="true"]{color:var(--night);background:var(--aurora);box-shadow:none}
   .chip:focus-visible{outline:2px solid var(--aurora);outline-offset:2px}
-  .sw{width:16px;height:16px;border-radius:50%;margin-right:8px}
-  input[type=range]{width:180px;accent-color:var(--aurora)}
-  #word{all:unset;box-sizing:border-box;min-height:36px;padding:0 14px;border-radius:999px;font:500 13px var(--sans);color:var(--ink);box-shadow:inset 0 0 0 1px #2A3237;width:240px}
-  #word:focus-visible{box-shadow:inset 0 0 0 1px var(--aurora)}
-  output{font:12px var(--mono);color:var(--dim);min-width:5ch}
-  pre{margin:0;padding:16px 18px;border-radius:4px;background:rgba(11,15,18,.72);box-shadow:inset 0 0 0 1px var(--line);font:12.5px/1.65 var(--mono);color:#C9D2D6;overflow:auto;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+  .chip .sw{width:14px;height:14px;border-radius:50%;margin-right:7px}
+  .chip[aria-pressed="true"] .sw{box-shadow:0 0 0 2px var(--night)}
+  .chip[disabled]{opacity:.4;cursor:default}
+  input[type=range]{width:100%;margin:0;accent-color:var(--aurora);height:22px}
+  input[type=text]{all:unset;box-sizing:border-box;width:100%;min-height:36px;padding:0 14px;border-radius:999px;font:500 14px var(--sans);color:var(--ink);box-shadow:inset 0 0 0 1px #263036}
+  input[type=text]:focus-visible{box-shadow:inset 0 0 0 1px var(--aurora)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+  .faces{display:grid;grid-template-columns:1fr 1fr;gap:4px 14px}
+  .faces label{display:grid;gap:0;font:10px var(--mono);color:var(--faint)}
+  .faces input{height:18px}
+  /* light pad: drag the sun */
+  .pad{position:relative;height:118px;border-radius:6px;background:radial-gradient(circle at 50% 50%,#17222A 0,#0C1215 70%);box-shadow:inset 0 0 0 1px var(--line);cursor:crosshair;touch-action:none;overflow:hidden}
+  .pad:before{content:"";position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px;border-radius:50%;background:radial-gradient(circle at var(--lx,30%) var(--ly,25%),#E8F4F0 0,#5B6D73 38%,#141B1F 72%);box-shadow:0 0 0 1px rgba(255,255,255,.06)}
+  .pad i{position:absolute;width:14px;height:14px;margin:-7px;border-radius:50%;background:#FFF6D8;box-shadow:0 0 14px 3px rgba(255,230,160,.55);pointer-events:none}
+  .pad span{position:absolute;right:8px;bottom:6px;font:10px var(--mono);color:var(--faint)}
+  .drop{display:grid;place-items:center;min-height:64px;border-radius:6px;border:1px dashed #33414A;font:12px var(--mono);color:var(--faint);text-align:center;padding:10px;cursor:pointer}
+  .drop:hover,.drop.over{border-color:var(--aurora);color:var(--aurora)}
+  pre{margin:0;padding:12px 14px;border-radius:6px;background:rgba(0,0,0,.35);box-shadow:inset 0 0 0 1px var(--line);font:11.5px/1.6 var(--mono);color:#C9D2D6;overflow:auto;max-height:260px;white-space:pre}
   pre .c{color:var(--faint)} pre .s{color:var(--aurora)} pre .f{color:#E6ECEF}
-  footer{margin-top:auto;padding-top:24px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px 24px;border-top:1px solid var(--line);font:11.5px var(--mono);letter-spacing:.04em;color:var(--faint)}
-  footer b{color:var(--aurora);font-weight:500}
-  footer a{color:var(--dim)}
+  .note{font:11px/1.5 var(--mono);color:var(--faint);margin:0}
+  .note b{color:var(--dim);font-weight:500}
+  /* the big drop overlay, and the help */
+  .veil{position:fixed;inset:0;z-index:20;display:none;place-items:center;background:rgba(8,11,13,.82);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);font:500 22px var(--sans);color:var(--aurora)}
+  .veil.on{display:grid}
+  .help{position:fixed;inset:0;z-index:21;display:none;place-items:center;background:rgba(8,11,13,.7);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+  .help.on{display:grid}
+  .help>div{width:min(440px,calc(100vw - 32px));padding:22px 24px;border-radius:10px;background:#0E1418;box-shadow:inset 0 0 0 1px var(--line),0 30px 80px rgba(0,0,0,.6)}
+  .help h2{margin:0 0 14px;font:500 18px var(--sans)}
+  .help dl{display:grid;grid-template-columns:auto 1fr;gap:8px 16px;margin:0;font-size:13.5px;color:var(--dim)}
+  .help dt{font:11.5px var(--mono);color:var(--ink)}
+  .help dd{margin:0}
+  .toast{position:fixed;left:50%;top:70px;z-index:22;transform:translate(-50%,-12px);opacity:0;padding:9px 16px;border-radius:999px;background:#0E1418;box-shadow:inset 0 0 0 1px #2A3237;font:12px var(--mono);color:var(--ink);transition:opacity .25s,transform .25s;pointer-events:none}
+  .toast.on{opacity:1;transform:translate(-50%,0)}
+  .menu{display:none}
   @media(max-width:860px){
-    .stage{position:relative;width:auto;height:min(340px,42vh);margin-top:8px}
-    .ui{padding:24px 18px 24px}
-    .copy{margin-top:0}
-    .row .k{width:100%}
-    input[type=range]{width:100%}
+    :root{--dock:0px}
+    .dock{top:auto;left:0;width:auto;height:min(62vh,560px);border-left:0;border-top:1px solid var(--line);border-radius:14px 14px 0 0;transform:translateY(calc(100% - 52px))}
+    body.open .dock{transform:none}
+    body.bare .dock{transform:translateY(100%)}
+    .dock-h{cursor:pointer;padding:18px}
+    .stage{top:56px;bottom:calc(52px + 22vh);right:0}
+    .copy{bottom:auto;top:60px;left:18px;max-width:calc(100vw - 36px)}
+    .copy .lede{display:none}
+    h1{font-size:30px}
+    .foot{right:0;bottom:52px;padding:8px 16px}
+    .foot .keys{display:none}
+    .top{padding:12px 14px;gap:10px}
+    .top .hide-s{display:none}
+    .pill .pl{display:none}
+    .pill.on .pl{display:inline}
+    .pill{min-width:36px;justify-content:center}
   }
   @media(prefers-reduced-motion:reduce){.aur i{animation:none}}
 </style>
@@ -67,31 +129,94 @@
 <section class="sky" id="sky">
   <div class="aur" aria-hidden="true"><i></i><i></i></div>
   <canvas id="field" aria-label="An interactive particle field. Drag to spin, click for a shockwave."></canvas>
-  <div class="ui">
-    <header><b>aurora-field</b><span><span id="ver">v0.1.0</span> · MIT · 0 deps<a href="https://github.com/mutaaf/aurora-field">GitHub</a><a href="https://mutaafaziz.com">seen on mutaafaziz.com</a></span></header>
-    <div class="stage" id="stage" aria-hidden="true"></div>
-    <div class="copy">
-      <h1>Points that <em>assemble</em>.</h1>
-      <p class="lede">A WebGL particle field (with a canvas-2D fallback) that becomes a neural sphere, a team, a stack of platforms, an armoured helm or a ranger helmet that turns to face you, or anything you give it: text, SVG paths, images, point clouds. Two-tone palettes, live options, a web component, and an off-main-thread worker mode. Drag to spin it, move through it to part it, click to send a shockwave. One file, zero dependencies, ES5.</p>
-      <div class="panel">
-        <div class="row" role="group" aria-label="Shape"><span class="k">shape</span><span id="shapes" class="row"></span></div>
-        <div class="row" role="group" aria-label="Palette"><span class="k">palette</span><span id="palettes" class="row"></span></div>
-        <form class="row" id="wordf" role="group" aria-label="Your own shape"><label class="k" for="word">your word</label><input id="word" maxlength="24" placeholder="type a word, press enter" autocomplete="off"></form>
-        <div class="row"><label class="k" for="count">nodes</label><input id="count" type="range" min="400" max="30000" step="200" value="5600"><output id="countv">5600</output></div>
-        <div class="row"><span class="k">cycle</span><button class="chip" id="cycle" aria-pressed="true">auto · 6.5s</button></div>
-        <div class="row"><span class="k">camera</span><button class="chip" id="cam" aria-pressed="false">off · track my face</button><span id="camst" class="k" style="text-transform:none;letter-spacing:0"></span></div>
-        <div class="row"><span class="k">autonomy</span><button class="chip" id="auto" aria-pressed="true">on · breathe, trade, scout</button></div>
-        <pre id="code" aria-label="Code for the current settings"></pre>
-      </div>
-    </div>
-    <footer><span id="stats">— nodes · — fps</span><span>drag to spin · move to part · click to pulse</span><span>by <a href="https://mutaafaziz.com">Mutaaf Aziz</a></span></footer>
-  </div>
+  <div class="stage" id="stage" aria-hidden="true"></div>
 </section>
+
+<header class="top">
+  <b>aurora-field</b><span class="hide-s"><span id="ver">v—</span> · MIT · 0 deps</span>
+  <span class="sp"></span>
+  <button class="pill" id="snap" title="Save a PNG (S)" aria-label="Snapshot">◎<span class="pl"> snapshot</span></button>
+  <button class="pill" id="rec" title="Record a clip (R)" aria-label="Record"><span class="rec"></span><span id="recl" class="pl">record</span></button>
+  <button class="pill" id="share" title="Copy a link to exactly this" aria-label="Copy link">⧉<span class="pl"> link</span></button>
+  <a class="hide-s" href="https://github.com/mutaaf/aurora-field">GitHub</a>
+</header>
+
+<div class="copy">
+  <h1>Points that <em>assemble</em>.</h1>
+  <p class="lede">A particle field that becomes lit, solid armour that turns to face you and wears your expressions, a neural sphere, or anything you give it: a word, an SVG, an image. WebGL with a canvas-2D fallback, one file, zero dependencies.</p>
+</div>
+
+<div class="foot" aria-live="polite"><span id="stats">— nodes · — fps</span><span class="keys"><kbd>←</kbd><kbd>→</kbd> shapes · <kbd>P</kbd> palette · <kbd>L</kbd> light · <kbd>H</kbd> hide · <kbd>?</kbd> more</span></div>
+
+<aside class="dock" id="dock" aria-label="Studio controls">
+  <div class="dock-h" id="dockh"><span>studio</span><span id="dockst">drag · part · pulse</span></div>
+  <div class="dock-b">
+    <details open><summary>shape</summary><div class="sec">
+      <div class="row" id="shapes" role="group" aria-label="Shape"></div>
+      <div class="row"><button class="chip" id="cycle" aria-pressed="true">auto-cycle</button><button class="chip" id="follow" aria-pressed="false" title="The helmets look at your cursor">follow cursor</button></div>
+    </div></details>
+
+    <details open><summary>look</summary><div class="sec">
+      <div class="row" id="palettes" role="group" aria-label="Palette"></div>
+      <div class="lab"><span>light · drag the sun</span><output id="lightv">on</output></div>
+      <div class="pad" id="pad" role="slider" aria-label="Light direction" tabindex="0"><i id="sun"></i><span>surfaces lit · helm, ranger</span></div>
+      <div class="row"><button class="chip" id="light" aria-pressed="true">light</button><button class="chip" id="surf" aria-pressed="true">solid surfaces</button></div>
+      <div class="two">
+        <label><div class="lab"><span>rim</span><output id="rimv">0.5</output></div><input id="rim" type="range" min="0" max="1.5" step="0.05" value="0.5"></label>
+        <label><div class="lab"><span>sheen</span><output id="specv">0.55</output></div><input id="spec" type="range" min="0" max="1.2" step="0.05" value="0.55"></label>
+        <label><div class="lab"><span>perspective</span><output id="depthv">2.8</output></div><input id="depth" type="range" min="1.6" max="6" step="0.1" value="2.8"></label>
+        <label><div class="lab"><span>ambient</span><output id="ambv">0.42</output></div><input id="amb" type="range" min="0" max="1" step="0.02" value="0.42"></label>
+      </div>
+    </div></details>
+
+    <details open><summary>face</summary><div class="sec">
+      <div class="row"><button class="chip" id="cam" aria-pressed="false">camera · track my face</button><button class="chip" id="perform" aria-pressed="false">perform</button></div>
+      <p class="note" id="camst">On-device: the video never leaves this browser. No camera? Drag the sliders, or press perform.</p>
+      <div class="faces" id="faces"></div>
+    </div></details>
+
+    <details><summary>motion</summary><div class="sec">
+      <label><div class="lab"><span>nodes</span><output id="countv">5600</output></div><input id="count" type="range" min="400" max="40000" step="200" value="5600"></label>
+      <label><div class="lab"><span>autonomy · breathe, trade, scout</span><output id="autov">1</output></div><input id="auto" type="range" min="0" max="1" step="0.05" value="1"></label>
+      <div class="row"><button class="chip" id="r2d" aria-pressed="false" title="Force the canvas-2D renderer">2D renderer</button><button class="chip" id="pause" aria-pressed="false">pause</button></div>
+    </div></details>
+
+    <details><summary>make your own</summary><div class="sec">
+      <form id="wordf"><input id="word" type="text" maxlength="24" placeholder="a word, then enter" autocomplete="off" aria-label="Your word"></form>
+      <label class="drop" id="drop" tabindex="0">drop an image or an SVG here, or anywhere<br>(or click to choose one)<input id="file" type="file" accept="image/*,.svg" hidden></label>
+    </div></details>
+
+    <details><summary>code</summary><div class="sec">
+      <pre id="code" aria-label="Code for the current settings"></pre>
+      <div class="row"><button class="chip" id="copy">copy code</button></div>
+    </div></details>
+  </div>
+</aside>
+
+<div class="veil" id="veil">drop it: it becomes the field</div>
+<div class="help" id="help" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts"><div>
+  <h2>Shortcuts</h2>
+  <dl>
+    <dt>← →</dt><dd>previous / next shape</dd>
+    <dt>P</dt><dd>next palette</dd>
+    <dt>L</dt><dd>light on / off</dd>
+    <dt>C</dt><dd>camera (face tracking)</dd>
+    <dt>F</dt><dd>perform: the helmet acts out expressions</dd>
+    <dt>space</dt><dd>pause / play</dd>
+    <dt>S · R</dt><dd>snapshot PNG · record a clip</dd>
+    <dt>H</dt><dd>hide the interface</dd>
+    <dt>drag · click</dt><dd>spin it · send a shockwave</dd>
+  </dl>
+</div></div>
+<div class="toast" id="toast"></div>
+
 <script src="src/aurora-field.js"></script>
 <script>
 (function(){
+  'use strict';
+  var AF = window.AuroraField, $ = function(id){ return document.getElementById(id); };
   // a custom shape, to show the register API: a double helix
-  AuroraField.register('helix', function(n, r){
+  AF.register('helix', function(n, r){
     var pts=[], links=[];
     for(var i=0;i<n;i++){
       var strand=i%2, t=(i/n)*1.9-0.95, a=t*9+strand*Math.PI, rad=0.42;
@@ -101,76 +226,273 @@
     for(var k=0;k<24;k++){ var tt=k/24*1.9-0.95, aa=tt*9; links.push([[Math.cos(aa)*0.42,tt,Math.sin(aa)*0.42],[Math.cos(aa+Math.PI)*0.42,tt,Math.sin(aa+Math.PI)*0.42]]); }
     return {points:pts, links:links, kick:1};
   });
-  var PALETTES=AuroraField.palettes, D=AuroraField.defaults.palette;
-  function hex(c){return 'rgb('+c.join(',')+')'}
-  function swatch(k){var p=PALETTES[k], a=hex(p.point||D.point), b=hex(p.accent||p.point||D.point);return 'linear-gradient(135deg,'+a+' 50%,'+b+' 50%)'}
-  var state={palette:'aurora',count:innerWidth<760?2800:5600,cycle:true,auto:true,shape:'mind',word:''}, field=null;
-  var canvas=document.getElementById('field'), sky=document.getElementById('sky'), stage=document.getElementById('stage');
-  var statsEl=document.getElementById('stats'), shapesEl=document.getElementById('shapes'), palEl=document.getElementById('palettes');
-  document.getElementById('ver').textContent='v'+AuroraField.version;
-  var count=document.getElementById('count'), countv=document.getElementById('countv');
-  count.value=state.count; countv.textContent=state.count;
-  function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')}
-  function code(){
-    var p=state.palette==='aurora'?'':"\n  palette: '"+state.palette+"',";
-    document.getElementById('code').innerHTML=
-      '<span class="c">// npm i aurora-field   ·   or one &lt;script&gt; tag</span>\n'+
-      '<span class="f">const</span> field = AuroraField.<span class="f">create</span>(canvas, {\n'+
-      '  shapes: [<span class="s">'+esc(AuroraField.shapes().map(function(s){return "'"+s+"'"}).join(', '))+'</span>],\n'+
-      '  count: <span class="s">'+state.count+'</span>,'+(state.cycle?'':'\n  cycle: <span class="s">0</span>,')+(state.auto?'':'\n  autonomy: <span class="s">0</span>,')+esc(p)+'\n'+
-      '  onShape: name =&gt; caption(name),\n});\n'+
-      'field.<span class="f">setShape</span>(<span class="s">\''+state.shape+'\'</span>, { pin: <span class="s">true</span> });'+
-      (state.word?'\n<span class="c">// a shape from text (or fromSVG, fromImage, armour)</span>\nAuroraField.<span class="f">register</span>(<span class="s">\'word\'</span>, AuroraField.<span class="f">fromText</span>(<span class="s">'+esc(JSON.stringify(state.word))+'</span>));':'');
-  }
-  function chips(){
-    shapesEl.innerHTML=''; AuroraField.shapes().forEach(function(s){
-      var b=document.createElement('button'); b.className='chip'; b.textContent=s; b.setAttribute('aria-pressed',String(s===state.shape));
-      b.onclick=function(){ field.setShape(s,{pin:true}); mark(s); }; shapesEl.appendChild(b);
-    });
-    palEl.innerHTML=''; Object.keys(PALETTES).forEach(function(k){
-      var b=document.createElement('button'); b.className='chip'; b.innerHTML='<span class="sw" style="background:'+swatch(k)+'"></span>'+k; b.setAttribute('aria-pressed',String(k===state.palette));
-      b.onclick=function(){ state.palette=k; field.set({palette:k}); chips(); code(); }; palEl.appendChild(b);   // live: no rebuild
-    });
-  }
-  function mark(s){ state.shape=s; [].forEach.call(shapesEl.children,function(b){b.setAttribute('aria-pressed',String(b.textContent===s))}); code(); }
-  function build(){
-    if(field) field.destroy();
-    field=AuroraField.create(canvas,{container:sky,stage:stage,count:state.count,cycle:state.cycle?6500:0,autonomy:state.auto?1:0,palette:state.palette,initial:state.shape,
-      onShape:mark, onStats:function(s){var st=field.stats();statsEl.innerHTML='<b>'+s.nodes.toLocaleString('en-US')+'</b> nodes · <b>'+s.fps+'</b> fps · '+st.renderer+' · quality '+(['high','retina-lite','balanced','eco'][s.quality])+' · '+st.scouts+' scouts out'},
-      onSpinout:function(){statsEl.innerHTML='<b>1.21 GW</b>'}});
+  var FACE_CH=['eyeBlinkL','eyeBlinkR','jawOpen','smileL','smileR','pucker','press','mouthL','mouthR','chinRaise','cheekPuff','squintL','squintR','browUp','browDownL','browDownR'];
+  var PAL=AF.palettes, PALS=Object.keys(PAL), D0=AF.defaults.palette, LR0=AF.defaults.lightRig;
+  var RIGGED={helm:1,ranger:1};
+
+  // ---- state, from the URL: every link reproduces exactly what you saw ----
+  var q=new URLSearchParams(location.search);
+  function num(k,d,lo,hi){ var v=parseFloat(q.get(k)); return isFinite(v)?Math.max(lo,Math.min(hi,v)):d; }
+  var state={
+    shape:q.get('shape')||'helm', palette:PAL[q.get('palette')]?q.get('palette'):(q.get('shape')==='ranger'?'ranger':'mark-iii'),
+    count:Math.round(num('count',innerWidth<760?2800:5600,400,40000)), cycle:q.get('cycle')==='1', auto:num('autonomy',1,0,1),
+    light:q.get('light')!=='0', surfels:q.get('surfels')!=='0', lx:num('lx',LR0.dir[0],-1,1), ly:num('ly',LR0.dir[1],-1,1),
+    rim:num('rim',LR0.rim,0,1.5), spec:num('spec',LR0.spec,0,1.2), amb:num('amb',LR0.ambient,0,1), depth:num('depth',2.8,1.6,6),
+    r2d:q.get('renderer')==='2d', follow:q.get('follow')==='1', word:(q.get('word')||'').slice(0,24)
+  };
+  if(state.word) AF.register('word',AF.fromText(state.word,{font:'800 150px system-ui,sans-serif'}));
+  if(AF.shapes().indexOf(state.shape)<0) state.shape='helm';
+  function lightOpt(){ return state.light?{dir:[state.lx,state.ly,-0.6],rim:state.rim,spec:state.spec,ambient:state.amb}:false; }
+  function syncURL(){
+    var p=new URLSearchParams();
+    p.set('shape',state.shape); p.set('palette',state.palette);
+    if(state.count!==(innerWidth<760?2800:5600)) p.set('count',state.count);
+    if(state.cycle) p.set('cycle','1'); if(state.auto!==1) p.set('autonomy',state.auto);
+    if(!state.light) p.set('light','0'); if(!state.surfels) p.set('surfels','0');
+    if(state.lx!==LR0.dir[0]||state.ly!==LR0.dir[1]){ p.set('lx',state.lx.toFixed(2)); p.set('ly',state.ly.toFixed(2)); }
+    if(state.rim!==LR0.rim) p.set('rim',state.rim); if(state.spec!==LR0.spec) p.set('spec',state.spec); if(state.amb!==LR0.ambient) p.set('amb',state.amb);
+    if(state.depth!==2.8) p.set('depth',state.depth); if(state.r2d) p.set('renderer','2d'); if(state.follow) p.set('follow','1');
+    if(state.word&&state.shape==='word') p.set('word',state.word);
+    history.replaceState(null,'','?'+p.toString());
     code();
   }
-  var wf=document.getElementById('wordf'), wi=document.getElementById('word');
-  wf.onsubmit=function(e){ e.preventDefault(); var w=wi.value.trim().slice(0,24); if(!w) return;
-    try{ AuroraField.register('word',AuroraField.fromText(w,{font:'800 150px system-ui,sans-serif'})); state.word=w; state.shape='word'; build(); chips(); }catch(err){ wi.value=''; wi.placeholder=String(err.message||err) } };
-  count.oninput=function(){countv.textContent=count.value};
-  count.onchange=function(){state.count=+count.value; build()};
-  var cyc=document.getElementById('cycle');
-  cyc.onclick=function(){ state.cycle=!state.cycle; cyc.setAttribute('aria-pressed',String(state.cycle)); cyc.textContent=state.cycle?'auto · 6.5s':'off'; build(); };
-  var au=document.getElementById('auto');
-  au.onclick=function(){ state.auto=!state.auto; au.setAttribute('aria-pressed',String(state.auto)); au.textContent=state.auto?'on · breathe, trade, scout':'off · pure shapes'; build(); };
-  // face tracking (aurora-field/face): the helm and the ranger follow your head and mirror your face.
-  // MediaPipe runs in a worker in this page; the video never leaves the browser.
-  var camBtn=document.getElementById('cam'), camSt=document.getElementById('camst'), tracker=null;
-  camBtn.onclick=function(){
-    if(tracker&&tracker.running){ tracker.stop(); return; }
-    camBtn.disabled=true; camSt.textContent='loading the model (about 17 MB, cached after)…';
+
+  // ---- the field ----
+  var canvas=$('field'), field=null, statsEl=$('stats');
+  $('ver').textContent='v'+AF.version;
+  var builtAs=null;
+  function build(){
+    if(field) field.destroy();
+    // a canvas keeps the first kind of context it gave out: switching renderers needs a fresh one
+    var want=state.r2d?'2d':'auto';
+    if(builtAs&&builtAs!==want){ var c2=canvas.cloneNode(false); canvas.parentNode.replaceChild(c2,canvas); canvas=c2; canvas.addEventListener('pointerdown',quiet); }
+    builtAs=want;
+    field=AF.create(canvas,{container:$('sky'),stage:$('stage'),count:state.count,cycle:state.cycle?6500:0,autonomy:state.auto,palette:state.palette,
+      initial:state.shape,light:lightOpt(),surfels:state.surfels,depth:state.depth,renderer:state.r2d?'2d':'auto'});
+    field.on('shape',function(s){ if(s!==state.shape){ state.shape=s; marks(); syncURL(); } });
+    field.on('stats',function(s){
+      var st=field.stats();
+      statsEl.innerHTML='<b>'+s.nodes.toLocaleString('en-US')+'</b> nodes · <b>'+s.fps+'</b> fps · '+st.renderer+' · '+(['high','retina-lite','balanced','eco'][s.quality])+(st.scouts?' · '+st.scouts+' scouts out':'');
+    });
+    field.on('spinout',function(){ statsEl.innerHTML='<b>1.21 GW</b>'; });
+    paused=false; $('pause').setAttribute('aria-pressed','false');
+    syncURL();
+  }
+
+  // ---- chips ----
+  function chip(label,pressed,on,extra){ var b=document.createElement('button'); b.className='chip'; b.innerHTML=(extra||'')+label; b.setAttribute('aria-pressed',String(!!pressed)); b.onclick=on; return b; }
+  function hex(c){ return 'rgb('+c.join(',')+')'; }
+  function swatch(k){ var p=PAL[k], a=hex(p.point||D0.point), b=hex(p.accent||p.point||D0.point); return '<span class="sw" style="background:linear-gradient(135deg,'+a+' 50%,'+b+' 50%)"></span>'; }
+  function marks(){
+    var sh=$('shapes'); sh.innerHTML='';
+    AF.shapes().forEach(function(s){ sh.appendChild(chip(s,s===state.shape,function(){ pick(s); })); });
+    var pl=$('palettes'); pl.innerHTML='';
+    PALS.forEach(function(k){ pl.appendChild(chip(k,k===state.palette,function(){ setPalette(k); },swatch(k))); });
+    var rig=!!RIGGED[state.shape];
+    [].forEach.call($('faces').querySelectorAll('input'),function(i){ i.disabled=!rig; });
+    $('follow').disabled=!rig; $('perform').disabled=!rig;
+  }
+  function pick(s){
+    state.shape=s;
+    if(RIGGED[s]&&(state.palette==='mark-iii'||state.palette==='ranger')) setPalette(s==='ranger'?'ranger':'mark-iii',true);
+    field.setShape(s,{pin:true}); marks(); syncURL();
+  }
+  function setPalette(k,quiet){ state.palette=k; field.set({palette:k}); if(!quiet){ marks(); syncURL(); } }
+
+  // ---- look ----
+  function setLight(){ field.set({light:lightOpt()}); $('lightv').textContent=state.light?'on':'off'; syncURL(); }
+  var pad=$('pad'), sun=$('sun');
+  function drawSun(){ sun.style.left=(50+state.lx*42)+'%'; sun.style.top=(50+state.ly*42)+'%'; pad.style.setProperty('--lx',(50+state.lx*40)+'%'); pad.style.setProperty('--ly',(50+state.ly*40)+'%'); }
+  function padAt(e){ var b=pad.getBoundingClientRect(); state.lx=Math.max(-1,Math.min(1,((e.clientX-b.left)/b.width-0.5)/0.42)); state.ly=Math.max(-1,Math.min(1,((e.clientY-b.top)/b.height-0.5)/0.42)); drawSun(); if(!state.light){ state.light=true; $('light').setAttribute('aria-pressed','true'); } setLight(); }
+  pad.addEventListener('pointerdown',function(e){ pad.setPointerCapture(e.pointerId); padAt(e); pad.onpointermove=padAt; });
+  pad.addEventListener('pointerup',function(){ pad.onpointermove=null; });
+  pad.addEventListener('keydown',function(e){ var d={ArrowLeft:[-.1,0],ArrowRight:[.1,0],ArrowUp:[0,-.1],ArrowDown:[0,.1]}[e.key]; if(!d) return; e.preventDefault(); e.stopPropagation(); state.lx=Math.max(-1,Math.min(1,state.lx+d[0])); state.ly=Math.max(-1,Math.min(1,state.ly+d[1])); drawSun(); setLight(); });
+  function toggle(id,key,after){ var b=$(id); b.setAttribute('aria-pressed',String(!!state[key])); b.onclick=function(){ state[key]=!state[key]; b.setAttribute('aria-pressed',String(state[key])); after(); }; }
+  toggle('light','light',setLight);
+  toggle('surf','surfels',function(){ field.set({surfels:state.surfels}); syncURL(); });
+  function slider(id,key,after,fmt){ var i=$(id), o=$(id+'v'); i.value=state[key]; o.textContent=fmt?fmt(state[key]):state[key]; i.oninput=function(){ state[key]=+i.value; o.textContent=fmt?fmt(state[key]):state[key]; after(); }; }
+  slider('rim','rim',setLight); slider('spec','spec',setLight); slider('amb','amb',setLight);
+  slider('depth','depth',function(){ field.set({depth:state.depth}); syncURL(); });
+
+  // ---- motion ----
+  slider('auto','auto',function(){ field.set({autonomy:state.auto}); syncURL(); });
+  var cnt=$('count'); cnt.value=state.count; $('countv').textContent=state.count;
+  cnt.oninput=function(){ $('countv').textContent=cnt.value; };
+  cnt.onchange=function(){ state.count=+cnt.value; build(); };
+  toggle('cycle','cycle',function(){ field.set({cycle:state.cycle?6500:0}); syncURL(); });
+  toggle('r2d','r2d',build);
+  var paused=false;
+  function pausePlay(){ paused=!paused; if(paused) field.pause(); else field.play(); $('pause').setAttribute('aria-pressed',String(paused)); }
+  $('pause').onclick=pausePlay;
+
+  // ---- face: sliders, a performance, the camera, or the cursor ----
+  var faceV={}, facesEl=$('faces');
+  FACE_CH.forEach(function(ch){
+    var l=document.createElement('label'); l.innerHTML=ch+'<input type="range" min="0" max="1" step="0.01" value="0" data-ch="'+ch+'" aria-label="'+ch+'">';
+    l.querySelector('input').oninput=function(e){ faceV[ch]=+e.target.value; stopPerform(); pushFace(); };
+    facesEl.appendChild(l);
+  });
+  var pose={yaw:0,pitch:0,roll:0}, poseOn=false;
+  function pushFace(){ field.setPose(poseOn||anyFace()?{yaw:pose.yaw,pitch:pose.pitch,roll:pose.roll,face:faceV}:null); }
+  function anyFace(){ for(var k in faceV) if(faceV[k]) return true; return false; }
+  function showFace(f){ [].forEach.call(facesEl.querySelectorAll('input'),function(i){ i.value=f&&f[i.dataset.ch]||0; }); }
+  // perform: a little loop of expressions, so the rig shows itself without a camera
+  var SCRIPT=[[{},600],[{eyeBlinkL:1,eyeBlinkR:1},160],[{},700],[{smileL:.9,smileR:.9,squintL:.4,squintR:.4},1200],[{},400],[{jawOpen:.9,browUp:.8},1100],[{},400],
+    [{eyeBlinkL:1,smileL:.6},500],[{},500],[{pucker:1,cheekPuff:.7},1000],[{},400],[{browDownL:1,browDownR:1,press:.8},1000],[{},500],[{mouthL:1},500],[{mouthR:1},500],[{},600]];
+  var perf=null;
+  function stopPerform(){ if(perf){ clearTimeout(perf); perf=null; $('perform').setAttribute('aria-pressed','false'); } }
+  function perform(){
+    if(perf){ stopPerform(); faceV={}; showFace(faceV); pushFace(); return; }
+    if(!RIGGED[state.shape]) pick('helm');
+    $('perform').setAttribute('aria-pressed','true'); var i=0;
+    (function step(){ var s=SCRIPT[i++%SCRIPT.length]; faceV={}; for(var k in s[0]) faceV[k]=s[0][k]; showFace(faceV); pushFace(); perf=setTimeout(step,s[1]); })();
+  }
+  $('perform').onclick=perform;
+  toggle('follow','follow',function(){ poseOn=state.follow; if(!poseOn){ pose={yaw:0,pitch:0,roll:0}; } pushFace(); syncURL(); });
+  poseOn=state.follow;
+  addEventListener('pointermove',function(e){
+    if(!state.follow||tracking()) return;
+    pose={yaw:(e.clientX/innerWidth-0.5)*1.3,pitch:(e.clientY/innerHeight-0.5)*0.8,roll:0}; pushFace();
+  });
+  var camBtn=$('cam'), camSt=$('camst'), tracker=null;
+  function tracking(){ return tracker&&tracker.running; }
+  function camera(){
+    if(tracking()){ tracker.stop(); return; }
+    stopPerform(); camBtn.disabled=true; camSt.textContent='Loading the model (about 17 MB, cached after)…';
     import('./src/face.mjs').then(function(m){
       tracker=tracker||m.createFaceTracker({
-        onPose:function(p){ if(field) field.setPose(p); },
+        onPose:function(p){ field.setPose(p); if(p&&p.face) showFace(p.face); },
         onStatus:function(s,d){
-          var on=s!=='stopped'&&s!=='error'; camBtn.setAttribute('aria-pressed',String(on)); camBtn.textContent=on?'on · '+s:'off · track my face';
-          camSt.textContent=s==='tracking'?'blink, wink, open your mouth, smile, puff your cheeks':(d||'');
+          var on=s!=='stopped'&&s!=='error'; camBtn.setAttribute('aria-pressed',String(on)); camBtn.textContent=on?'camera · '+s:'camera · track my face';
+          camSt.textContent=s==='tracking'?'Blink, wink, open your mouth, smile, puff your cheeks.':(d||(s==='stopped'?'Camera off.':''));
+          if(!on){ showFace(null); pushFace(); }
           if(window.console) console.info('[aurora-field/face]', s, d||'');
         }});
-      if(state.shape!=='helm'&&state.shape!=='ranger'){ field.setShape('ranger',{pin:600000}); mark('ranger'); }
+      if(!RIGGED[state.shape]) pick('ranger');
       return tracker.start();
-    }).catch(function(e){ camSt.textContent=e&&e.name==='NotAllowedError'?'camera permission declined':'camera unavailable: '+(e&&e.message||e); })
+    }).catch(function(e){ camSt.textContent=e&&e.name==='NotAllowedError'?'Camera permission declined.':'Camera unavailable: '+(e&&e.message||e); })
       .then(function(){ camBtn.disabled=false; });
-  };
-  setInterval(function(){ if(tracker&&tracker.running&&tracker.state==='tracking'){ var t=tracker.stats(); camSt.textContent='tracking · '+t.mode+' · '+t.delegate+' · '+t.fps+' fps · '+t.latency+' ms'; } },1000);
-  build(); chips();
-  if(/[?&]camera\b/.test(location.search)) camBtn.click();   // ?camera: a link straight to face tracking
+  }
+  camBtn.onclick=camera;
+  setInterval(function(){ if(tracking()&&tracker.state==='tracking'){ var t=tracker.stats(); camSt.textContent='Tracking · '+t.mode+' · '+t.delegate+' · '+t.fps+' fps · '+t.latency+' ms'; } },1000);
+
+  // ---- make your own: a word, an image, an SVG ----
+  function useShape(name,builder,label){
+    try{ AF.register(name,builder); }catch(err){ toast(String(err.message||err)); return; }
+    state.shape=name; if(name==='word') state.word=label; build(); marks(); toast(label+' → particles');
+  }
+  $('wordf').onsubmit=function(e){ e.preventDefault(); var w=$('word').value.trim().slice(0,24); if(w) useShape('word',AF.fromText(w,{font:'800 150px system-ui,sans-serif'}),w); };
+  function readFile(f){
+    if(!f) return;
+    if(/svg/.test(f.type)||/\.svg$/i.test(f.name)){
+      f.text().then(function(t){
+        var doc=new DOMParser().parseFromString(t,'image/svg+xml'), ds=[].map.call(doc.querySelectorAll('path'),function(p){ return p.getAttribute('d'); }).filter(Boolean);
+        if(!ds.length){ toast('No <path> in that SVG.'); return; }
+        useShape('yours',AF.fromSVG(ds),f.name);
+      });
+    } else if(/^image\//.test(f.type)){
+      var img=new Image(); img.onload=function(){ useShape('yours',AF.fromImage(img,{edges:0.35}),f.name); URL.revokeObjectURL(img.src); };
+      img.onerror=function(){ toast('Could not read that image.'); }; img.src=URL.createObjectURL(f);
+    } else toast('Drop an image or an SVG.');
+  }
+  var drop=$('drop'), veil=$('veil'), depthN=0;
+  $('file').onchange=function(e){ readFile(e.target.files[0]); e.target.value=''; };
+  drop.onkeydown=function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); $('file').click(); } };
+  addEventListener('dragenter',function(e){ e.preventDefault(); depthN++; veil.classList.add('on'); });
+  addEventListener('dragleave',function(){ if(--depthN<=0){ depthN=0; veil.classList.remove('on'); } });
+  addEventListener('dragover',function(e){ e.preventDefault(); });
+  addEventListener('drop',function(e){ e.preventDefault(); depthN=0; veil.classList.remove('on'); readFile(e.dataTransfer.files[0]); });
+
+  // ---- export: PNG and a recorded clip, composited over the night sky ----
+  var comp=document.createElement('canvas'), cg=comp.getContext('2d');
+  function paint(){
+    comp.width=canvas.width; comp.height=canvas.height;
+    var g=cg.createRadialGradient(comp.width*0.62,comp.height*0.3,0,comp.width*0.62,comp.height*0.3,comp.width*0.9);
+    g.addColorStop(0,'#111A1F'); g.addColorStop(0.64,'#080B0D'); cg.fillStyle=g; cg.fillRect(0,0,comp.width,comp.height);
+    cg.drawImage(canvas,0,0);
+    cg.font=Math.round(11*(comp.width/canvas.clientWidth))+'px Menlo,monospace'; cg.fillStyle='rgba(138,147,153,.55)';
+    cg.fillText('aurora-field · '+state.shape+' · '+state.palette,Math.round(16*comp.width/canvas.clientWidth),comp.height-Math.round(16*comp.width/canvas.clientWidth));
+  }
+  function save(blob,name){ var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function(){ URL.revokeObjectURL(a.href); },4000); }
+  function snapshot(){
+    // the WebGL buffer is only readable in the frame that drew it, so grab it from the frame event
+    var done=false, grab=function(){ if(done) return; done=true; field.off('frame',grab); paint(); comp.toBlob(function(b){ if(b){ save(b,'aurora-field-'+state.shape+'.png'); toast('Saved a PNG'); } }); };
+    field.on('frame',grab); if(paused){ field.play(); setTimeout(function(){ grab(); field.pause(); },60); }
+  }
+  $('snap').onclick=snapshot;
+  var rec=null;
+  function record(){
+    if(rec){ rec.stop(); return; }
+    if(!comp.captureStream||!window.MediaRecorder){ toast('Recording isn’t supported in this browser.'); return; }
+    var type=['video/webm;codecs=vp9','video/webm','video/mp4'].filter(function(t){ return MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t); })[0];
+    paint(); var stream=comp.captureStream(60), chunks=[];
+    rec=new MediaRecorder(stream,type?{mimeType:type,videoBitsPerSecond:12e6}:undefined);
+    var tick=function(){ paint(); }; field.on('frame',tick);
+    rec.ondataavailable=function(e){ if(e.data.size) chunks.push(e.data); };
+    rec.onstop=function(){ field.off('frame',tick); var b=new Blob(chunks,{type:rec.mimeType||'video/webm'}); save(b,'aurora-field-'+state.shape+(/mp4/.test(b.type)?'.mp4':'.webm')); rec=null; $('rec').classList.remove('on'); $('recl').textContent='record'; toast('Saved a clip'); };
+    rec.start(); $('rec').classList.add('on'); $('recl').textContent='stop · 0s';
+    var t0=Date.now(), iv=setInterval(function(){ if(!rec){ clearInterval(iv); return; } var s=Math.round((Date.now()-t0)/1000); $('recl').textContent='stop · '+s+'s'; if(s>=30) rec.stop(); },500);
+  }
+  $('rec').onclick=record;
+  $('share').onclick=function(){ syncURL(); (navigator.clipboard?navigator.clipboard.writeText(location.href):Promise.reject()).then(function(){ toast('Link copied: it opens exactly this'); },function(){ toast(location.href); }); };
+
+  // ---- code for exactly this ----
+  function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+  var plain='';
+  function code(){
+    var L=[], S=function(v){ return '<span class="s">'+esc(v)+'</span>'; };
+    L.push('<span class="c">// npm i aurora-field  ·  or one &lt;script&gt; tag</span>');
+    if(state.shape==='word') L.push('AuroraField.<span class="f">register</span>('+S("'word'")+', AuroraField.<span class="f">fromText</span>('+S(JSON.stringify(state.word))+'));');
+    L.push('<span class="f">const</span> field = AuroraField.<span class="f">create</span>(canvas, {');
+    L.push('  initial: '+S("'"+state.shape+"'")+',');
+    L.push('  palette: '+S("'"+state.palette+"'")+',');
+    if(state.count!==(innerWidth<760?2800:5600)) L.push('  count: '+S(state.count)+',');
+    if(!state.cycle) L.push('  cycle: '+S(0)+',');
+    if(state.auto!==1) L.push('  autonomy: '+S(state.auto)+',');
+    if(state.depth!==2.8) L.push('  depth: '+S(state.depth)+',');
+    if(!state.light) L.push('  light: '+S('false')+',');
+    else if(state.lx!==LR0.dir[0]||state.ly!==LR0.dir[1]||state.rim!==LR0.rim||state.spec!==LR0.spec||state.amb!==LR0.ambient)
+      L.push('  light: { dir: ['+S(state.lx.toFixed(2))+', '+S(state.ly.toFixed(2))+', '+S(-0.6)+'], rim: '+S(state.rim)+', spec: '+S(state.spec)+', ambient: '+S(state.amb)+' },');
+    if(!state.surfels) L.push('  surfels: '+S('false')+',');
+    if(state.r2d) L.push('  renderer: '+S("'2d'")+',');
+    L.push('});');
+    if(RIGGED[state.shape]) L.push('<span class="c">// drive it: field.setPose({ yaw, pitch, face: { jawOpen: 1 } })</span>');
+    $('code').innerHTML=L.join('\n');
+    var t=document.createElement('div'); t.innerHTML=$('code').innerHTML; plain=t.textContent;
+  }
+  $('copy').onclick=function(){ if(navigator.clipboard) navigator.clipboard.writeText(plain).then(function(){ toast('Code copied'); }); };
+
+  // ---- chrome: toast, help, hide, mobile sheet, keys ----
+  var tt=0; function toast(m){ var t=$('toast'); t.textContent=m; t.classList.add('on'); clearTimeout(tt); tt=setTimeout(function(){ t.classList.remove('on'); },2400); }
+  var help=$('help');
+  help.onclick=function(e){ if(e.target===help) help.classList.remove('on'); };
+  $('dockh').onclick=function(){ if(innerWidth<=860) document.body.classList.toggle('open'); };
+  function quiet(){ document.body.classList.add('quiet'); if(innerWidth<=860) document.body.classList.remove('open'); }
+  canvas.addEventListener('pointerdown',quiet);
+  addEventListener('keydown',function(e){
+    var tg=e.target; if(tg&&(tg.tagName==='INPUT'&&tg.type==='text'||tg.isContentEditable)) return;
+    if(e.metaKey||e.ctrlKey||e.altKey) return;
+    var k=e.key, list=AF.shapes(), i=list.indexOf(state.shape);
+    if(help.classList.contains('on')){ if(k==='Escape'||k==='?') help.classList.remove('on'); return; }
+    if(k==='ArrowRight'&&tg.type!=='range'){ pick(list[(i+1)%list.length]); }
+    else if(k==='ArrowLeft'&&tg.type!=='range'){ pick(list[(i-1+list.length)%list.length]); }
+    else if(k==='p'||k==='P'){ setPalette(PALS[(PALS.indexOf(state.palette)+1)%PALS.length]); toast(state.palette); }
+    else if(k==='l'||k==='L'){ $('light').click(); toast('light '+(state.light?'on':'off')); }
+    else if(k==='c'||k==='C'){ camera(); }
+    else if(k==='f'||k==='F'){ perform(); }
+    else if(k===' '&&tg.tagName!=='BUTTON'){ e.preventDefault(); pausePlay(); }
+    else if(k==='s'||k==='S'){ snapshot(); }
+    else if(k==='r'||k==='R'){ record(); }
+    else if(k==='h'||k==='H'){ document.body.classList.toggle('bare'); setTimeout(function(){ field.resize(); },400); }
+    else if(k==='?'){ help.classList.add('on'); }
+    else if(k==='Escape'){ document.body.classList.remove('bare'); }
+    else return;
+  });
+
+  build(); marks(); drawSun();
+  if(state.follow) pushFace();
+  if(q.has('camera')) camera();        // ?camera: a link straight to face tracking
+  if(q.has('perform')) perform();      // ?perform: the helmet acts out its expressions
 })();
 </script>
 </body>

@@ -1,13 +1,14 @@
 # aurora-field
 
-A WebGL particle field (with a canvas-2D fallback) that assembles into shapes and morphs between them. It ships with a neural sphere with signals travelling its synapses, a team of orbs, a stack of platforms with traffic streaming through, an armoured helm and a ranger helmet. You can also give it **text, SVG paths, images or point clouds**, or draw **your own helmet** with `armour()`. It has two-tone pop-culture palettes, and options change live. It runs in a page, as a `<aurora-field>` web component, headless on an `OffscreenCanvas`, or in a **Web Worker**, off the main thread. Drag to spin it, move through it to part it, click to send a shockwave.
+A WebGL particle field (with a canvas-2D fallback) that assembles into **lit, solid shapes** and morphs between them. It ships with a neural sphere with signals travelling its synapses, a team of orbs, a stack of platforms with traffic streaming through, an armoured helm and a ranger helmet that are lit like real objects and wear your expressions through the camera. You can also give it **text, SVG paths, images or point clouds**, or draw **your own helmet** with `armour()`. It has two-tone pop-culture palettes, and options change live. It runs in a page, as a `<aurora-field>` web component, headless on an `OffscreenCanvas`, or in a **Web Worker**, off the main thread. Drag to spin it, move through it to part it, click to send a shockwave.
 
-**[Live demo →](https://mutaaf.github.io/aurora-field/)** · seen on [mutaafaziz.com](https://mutaafaziz.com)
+**[Open the studio →](https://mutaaf.github.io/aurora-field/)** (shape it, light it, drive it with your face, export a PNG or a clip, share a link) · seen on [mutaafaziz.com](https://mutaafaziz.com)
 
-![aurora-field: a glowing neural sphere of particles on a night sky](docs/preview.jpg)
+![aurora-field: the helm in Mark III red and gold, lit from the upper left, beside the ranger in white and gold with a black visor](docs/preview.jpg)
 
 ![Two-tone palettes: the ranger in white and gold, the helm in Mark III red and gold, and Spider-Verse, Barbenheimer, Upside Down, Night City and Spice shapes](docs/palettes.jpg)
 
+- **Lit, solid shapes (2.0).** Shapes can carry surface normals, and the field lights them as they turn: a key light, ambient, a rim at the silhouette and a sheen (`light`). Helmets grow a skin that wraps the whole head, and WebGL paints each skin point as a *surfel*, a soft lit disc as wide as the gap to its neighbours, so a few thousand points read as a continuous surface (`surfels`). Seams stay crisp on top. The helm wears a gold faceplate over a red shell; the ranger is white with gold trim and a black glass visor.
 - **WebGL first.** Round, anti-aliased points at whole device pixels, with specular cores, soft halos and additive bloom, in three draw calls a frame. That's 5,600 points by default (2,800 on phones) at 60 fps. Canvas-2D is the automatic fallback, and context loss is handled.
 - **Zero dependencies.** One file, about 90 KB unminified (29 KB gzipped), and ES5, so it can be inlined into pages that support old devices. Also ships as an ES module, a web component and a worker bundle.
 - **Any shape.** Helmets drawn from line art (`helm`, `ranger`, or your own via `armour(spec)`), plus `fromText`, `fromSVG`, `fromImage` and `fromPoints` factories. Flat sources still turn in 3D.
@@ -112,6 +113,8 @@ The canvas fills its `container` (default: its parent). Pass a `stage` element t
 | `autoPause` | `true` | pause when off-screen or the tab is hidden |
 | `reducedMotion` | `'auto'` | `true` / `false` overrides `prefers-reduced-motion` |
 | `seed` | `null` | number → deterministic field |
+| `light` | `true` | shapes with normals are lit; `false` turns it off, or `{ dir:[x,y,z], ambient, key, rim, spec, shine }` (dir points toward the light: x right, y down, z away from you) |
+| `surfels` | `true` | WebGL: skins paint soft lit discs, so they read as solid surfaces |
 | `palette` | `'aurora'` | a preset name, `{ point:[r,g,b], accent:[r,g,b], hot, star, signal, head, glow, glow2, fog }`, or `{ preset, …overrides }` |
 | `width`, `height`, `dpr` | | headless canvases: size in CSS px and the pixel ratio |
 | `stageRect` | whole canvas | headless: `{ x, y, width, height }` where the shape sits |
@@ -232,6 +235,7 @@ AuroraField.register('mine', AuroraField.armour({
 - **Physics.** Each particle is a semi-implicit-Euler damped spring toward the point it holds (ζ ≈ 0.75, ω between 4.2 and 8.5 per particle), plus a small swirl around the vertical axis while it travels, so arrivals spiral in.
 - **Autonomy.** Particles hold a *point* of the shape, not a fixed slot (`TI` / `OWN` maps). Neighbours swap points a few times a second, scouts leave on short orbits, and every node a signal reaches lights up.
 - **Drawing.** Every point is projected once per frame, then sorted into eight depth buckets. Each bucket is one `rect` path at whole device pixels, so 1,600 points cost eight fills, not 1,600. Edges are one stroked path. Glows (the core light, the halos on lit nodes) are pre-rendered sprites. Additive blending (`lighter`) gives the bloom without blur filters.
+- **Light.** Normals turn with the shape every frame, and each particle gets a shade (ambient + key·N·L + rim·(1−|N·V|)³) and a sheen from a lookup table. The helmets' normals come from the shell's implicit form, F = |x/w(y)|^p + |z/d(y)|^p, whose gradient points out of the skin everywhere, so seams, fills and ears are lit with the surface under them. Skins are laid in rows round the head at equal spacing; surfels are Gaussian point sprites under additive blending, and the far side of the head is kept faint.
 - **Convergence.** The field samples 64 points each frame to measure how close it is to its shape, and edges fade with that measure. The intro and every morph stay clean at any frame rate.
 - **Governor.** One frame-rate check a second; quality steps down a rung below `fpsFloor` and back up after three good seconds.
 

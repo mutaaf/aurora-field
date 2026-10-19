@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.0.0 — 2026-10-19
+- **Lit, solid shapes.** Shapes can carry `normals`, and the field lights them as they turn: ambient, a key light, a rim at the silhouette, and a sheen (`light: true | false | { dir, ambient, key, rim, spec, shine }`, live through `set`). Shapes can also carry per-point `alpha` and `surfel` widths. On WebGL, a surfel is a soft lit disc as wide as the gap to its neighbours, so a sparse skin reads as a continuous surface (`surfels`, default on).
+- **The helmets, as objects.** `armour()` grows a `surface`: a skin laid in even rows round the whole head, with `panels` that tone front regions. Normals come from the shell's implicit form, so everything on it is lit. Fills are sampled on a jittered grid, so eyes read solid. The **helm** wears a gold faceplate over a red shell. The **ranger** is a white helmet with a gold band and crest and a black glass visor. Lit shapes drop the random sparkle points, which read as noise on a surface.
+- **The studio.** The demo is now a tool: shape, palette, a light you drag, rim, sheen, ambient, perspective, autonomy and node count (up to 40,000). It adds sixteen face sliders, a *perform* loop that acts out expressions without a camera, *follow cursor*, and camera tracking. You can type a word, or drop an image or an SVG. It exports a PNG or a recorded clip (WebM/MP4, up to 30 s), and its URL carries the whole state, so links reproduce exactly what you saw. It has keyboard shortcuts (`?`) and a bottom sheet on phones.
+- `<aurora-field light="false" surfels="false">`. Tests run the WebGL path through a recording stub.
+
 ## 1.2.0 — 2026-10-19
 - **`aurora-field/face`.** Camera face tracking that drives `setPose` and `setFace`: MediaPipe Face Landmarker in a Web Worker, One Euro smoothing, per-person calibration, an adaptive frame rate, and self-healing. The watchdog handles stalls, a crashed worker falls back to the main thread and a failing GPU to the CPU (both upgrade back when healthy), and a lost camera is re-acquired with backoff. Includes a failure drill (`simulate`). The demo has a camera button.
 - **Twice the particles by default:** WebGL 5,600 (2,800 on phones), canvas-2D 2,800 (1,400).

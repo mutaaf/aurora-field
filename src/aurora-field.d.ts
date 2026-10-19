@@ -22,6 +22,12 @@ export interface Shape {
   linkTone?: number[];
   /** Draw links brighter and keep place-trading local (line drawings). */
   lineArt?: boolean;
+  /** Unit surface normals, one per point: the field lights the shape (key, ambient, rim, sheen) as it turns. */
+  normals?: Vec3[];
+  /** Per-point brightness 0…1 (a faint skin under crisp seams). Default 1. */
+  alpha?: number[];
+  /** Per-point surfel width in shape units: WebGL paints a soft lit disc this wide, so a sparse skin reads solid. 0 = a plain point. */
+  surfel?: number[];
   /** Named points overlays can follow with field.anchors() (a HUD pointing at the helm's eyes, say). */
   anchors?: Record<string, Vec3>;
 }
@@ -38,6 +44,8 @@ export interface Palette {
   /** The second tone: shapes paint parts of themselves with it (gold seams on the ranger). Default: point. */
   accent: RGB;
 }
+
+export interface LightRig { dir: Vec3; ambient: number; key: number; rim: number; spec: number; shine: number }
 
 export interface Options {
   container?: Element;
@@ -69,6 +77,10 @@ export interface Options {
   autoPause?: boolean;
   reducedMotion?: 'auto' | boolean;
   seed?: number | null;
+  /** Light for shapes with normals: true (default), false, or a rig. dir points from the shape toward the light (x right, y down, z away from you). */
+  light?: boolean | Partial<LightRig>;
+  /** WebGL: paint surfels (soft lit discs) so skins read as solid surfaces. Default true. */
+  surfels?: boolean;
   /** A preset name, a palette, or { preset, …overrides }. */
   palette?: PaletteName | (Partial<Palette> & { preset?: PaletteName });
   /** offload() only: static shapes to register inside the worker. */
@@ -115,9 +127,11 @@ export interface ArmourSpec {
   sil: Array<[number, number]>;
   front?: Array<[number, number]>; back?: Array<[number, number]>;
   lines: Array<{ p?: Array<[number, number]>; edge?: [number, number, number]; w?: number; glow?: boolean; mirror?: boolean; tone?: number }>;
-  fills?: Array<{ p: Array<[number, number]>; share: number; mirror?: boolean; glow?: boolean; tone?: number; cut?: Array<Array<[number, number]>> }>;
+  fills?: Array<{ p: Array<[number, number]>; share: number; mirror?: boolean; glow?: boolean; tone?: number; alpha?: number; cut?: Array<Array<[number, number]>> }>;
+  /** A lit skin over the whole shell, in rows round the head; panels tone front regions (a gold faceplate). Eyes and visors stay open. */
+  surface?: { share: number; alpha?: number; tone?: number; panels?: Array<{ p: Array<[number, number]>; tone?: number; alpha?: number; mirror?: boolean }> };
   screws?: Array<[number, number]>; ears?: { y: number; z: number; r: number[]; tone?: number };
-  plate?: { top?: number; width?: number; lift?: number }; rings?: { count?: number; from?: number; to?: number; tone?: number };
+  plate?: { top?: number; width?: number; lift?: number }; rings?: { count?: number; from?: number; to?: number; tone?: number; alpha?: number };
   budget?: number; scale?: number; kick?: number;
   anchors?: Record<string, [number, number, number] | [number, number, number, 'ear', -1 | 1]>;
   /** Face rig: soft regions that move with setFace channels. */
@@ -143,7 +157,7 @@ export function fromText(text: string, options?: ImageOptions & { font?: string 
 export function parsePath(d: string): Array<{ p: Array<[number, number]>; closed: boolean }>;
 export function build(name: string, n: number, seed?: number): Shape;
 export function shapes(): string[];
-export const defaults: Required<Omit<Options, 'container' | 'stage' | 'count' | 'shapes' | 'rotation' | 'initial' | 'radius' | 'seed' | 'onShape' | 'onStats' | 'onSpinout'>>;
+export const defaults: Required<Omit<Options, 'container' | 'stage' | 'count' | 'shapes' | 'rotation' | 'initial' | 'radius' | 'seed' | 'onShape' | 'onStats' | 'onSpinout'>> & { lightRig: LightRig };
 
 declare const AuroraField: {
   version: typeof version; create: typeof create; register: typeof register;
