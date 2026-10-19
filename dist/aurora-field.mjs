@@ -1701,8 +1701,8 @@ const module = { exports: {} };
         vt = 1;
         if (trOn && tr[p] > prog) {
           // not drawn yet: wait in a small knot at the pen; only the next stretch shows, as its bright tip
-          tx = T[pen * 3] + 0.035 * BC1[n]; ty = T[pen * 3 + 1] + 0.035 * BS2[n]; tz = T[pen * 3 + 2] + 0.035 * BC3[n];
-          vt = tr[p] - prog < 0.012 && Math.abs(X[n] - tx) + Math.abs(Y[n] - ty) + Math.abs(Z[n] - tz) < 0.12 ? 1 : 0;   // the tip shows once it has caught up with the pen
+          tx = T[pen * 3] + 0.025 * BC1[n]; ty = T[pen * 3 + 1] + 0.025 * BS2[n]; tz = T[pen * 3 + 2] + 0.025 * BC3[n];
+          vt = tr[p] - prog < 0.008 && Math.abs(X[n] - tx) + Math.abs(Y[n] - ty) + Math.abs(Z[n] - tz) < 0.12 ? 1 : 0;   // the tip shows once it has caught up with the pen
         }
         var om = W[n] * (introDone ? 1 : 0.55), damp = 1.5 * om;
         var ex = tx - X[n], ey = ty - Y[n], ez = tz - Z[n];
