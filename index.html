@@ -77,8 +77,9 @@
         <div class="row" role="group" aria-label="Shape"><span class="k">shape</span><span id="shapes" class="row"></span></div>
         <div class="row" role="group" aria-label="Palette"><span class="k">palette</span><span id="palettes" class="row"></span></div>
         <form class="row" id="wordf" role="group" aria-label="Your own shape"><label class="k" for="word">your word</label><input id="word" maxlength="24" placeholder="type a word, press enter" autocomplete="off"></form>
-        <div class="row"><label class="k" for="count">nodes</label><input id="count" type="range" min="400" max="30000" step="200" value="2800"><output id="countv">2800</output></div>
+        <div class="row"><label class="k" for="count">nodes</label><input id="count" type="range" min="400" max="30000" step="200" value="5600"><output id="countv">5600</output></div>
         <div class="row"><span class="k">cycle</span><button class="chip" id="cycle" aria-pressed="true">auto · 6.5s</button></div>
+        <div class="row"><span class="k">camera</span><button class="chip" id="cam" aria-pressed="false">off · track my face</button><span id="camst" class="k" style="text-transform:none;letter-spacing:0"></span></div>
         <div class="row"><span class="k">autonomy</span><button class="chip" id="auto" aria-pressed="true">on · breathe, trade, scout</button></div>
         <pre id="code" aria-label="Code for the current settings"></pre>
       </div>
@@ -103,7 +104,7 @@
   var PALETTES=AuroraField.palettes, D=AuroraField.defaults.palette;
   function hex(c){return 'rgb('+c.join(',')+')'}
   function swatch(k){var p=PALETTES[k], a=hex(p.point||D.point), b=hex(p.accent||p.point||D.point);return 'linear-gradient(135deg,'+a+' 50%,'+b+' 50%)'}
-  var state={palette:'aurora',count:innerWidth<760?1400:2800,cycle:true,auto:true,shape:'mind',word:''}, field=null;
+  var state={palette:'aurora',count:innerWidth<760?2800:5600,cycle:true,auto:true,shape:'mind',word:''}, field=null;
   var canvas=document.getElementById('field'), sky=document.getElementById('sky'), stage=document.getElementById('stage');
   var statsEl=document.getElementById('stats'), shapesEl=document.getElementById('shapes'), palEl=document.getElementById('palettes');
   document.getElementById('ver').textContent='v'+AuroraField.version;
@@ -148,7 +149,28 @@
   cyc.onclick=function(){ state.cycle=!state.cycle; cyc.setAttribute('aria-pressed',String(state.cycle)); cyc.textContent=state.cycle?'auto · 6.5s':'off'; build(); };
   var au=document.getElementById('auto');
   au.onclick=function(){ state.auto=!state.auto; au.setAttribute('aria-pressed',String(state.auto)); au.textContent=state.auto?'on · breathe, trade, scout':'off · pure shapes'; build(); };
+  // face tracking (aurora-field/face): the helm and the ranger follow your head and mirror your face.
+  // MediaPipe runs in a worker in this page; the video never leaves the browser.
+  var camBtn=document.getElementById('cam'), camSt=document.getElementById('camst'), tracker=null;
+  camBtn.onclick=function(){
+    if(tracker&&tracker.running){ tracker.stop(); return; }
+    camBtn.disabled=true; camSt.textContent='loading the model (about 17 MB, cached after)…';
+    import('./src/face.mjs').then(function(m){
+      tracker=tracker||m.createFaceTracker({
+        onPose:function(p){ if(field) field.setPose(p); },
+        onStatus:function(s,d){
+          var on=s!=='stopped'&&s!=='error'; camBtn.setAttribute('aria-pressed',String(on)); camBtn.textContent=on?'on · '+s:'off · track my face';
+          camSt.textContent=s==='tracking'?'blink, wink, open your mouth, smile, puff your cheeks':(d||'');
+          if(window.console) console.info('[aurora-field/face]', s, d||'');
+        }});
+      if(state.shape!=='helm'&&state.shape!=='ranger'){ field.setShape('ranger',{pin:600000}); mark('ranger'); }
+      return tracker.start();
+    }).catch(function(e){ camSt.textContent=e&&e.name==='NotAllowedError'?'camera permission declined':'camera unavailable: '+(e&&e.message||e); })
+      .then(function(){ camBtn.disabled=false; });
+  };
+  setInterval(function(){ if(tracker&&tracker.running&&tracker.state==='tracking'){ var t=tracker.stats(); camSt.textContent='tracking · '+t.mode+' · '+t.delegate+' · '+t.fps+' fps · '+t.latency+' ms'; } },1000);
   build(); chips();
+  if(/[?&]camera\b/.test(location.search)) camBtn.click();   // ?camera: a link straight to face tracking
 })();
 </script>
 </body>

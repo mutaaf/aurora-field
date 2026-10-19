@@ -325,6 +325,28 @@ test('face rig: helmets move eyelids, jaw, lips, cheeks, chin and brows', () => 
   f.destroy();
 });
 
+test('face: the solver mirrors the head, learns a resting face, and smooths', async () => {
+  const { createSolver, OneEuro } = await import('../src/face-core.mjs');
+  const yawM = a => [Math.cos(a), 0, -Math.sin(a), 0, 0, 1, 0, 0, Math.sin(a), 0, Math.cos(a), 0, 0, 0, 0, 1];
+  const s = createSolver({ smoothing: false });
+  const p = s.solve(yawM(0.3), [['eyeBlinkLeft', 0.05], ['jawOpen', 0.02]], 0);
+  assert.ok(Math.abs(p.yaw + 0.3) < 1e-6, 'mirrored like a selfie');
+  for (let i = 0; i < 40; i++) s.solve(yawM(0), [['eyeBlinkLeft', 0.2], ['jawOpen', 0.04]], i * 33);
+  const rest = s.solve(yawM(0), [['eyeBlinkLeft', 0.2], ['jawOpen', 0.04]], 2000);
+  assert.ok(rest.face.eyeBlinkL < 0.05 && rest.face.jawOpen < 0.05, 'a resting face reads as zero');
+  const wink = s.solve(yawM(0), [['eyeBlinkLeft', 0.9], ['jawOpen', 0.6]], 2033);
+  assert.ok(wink.face.eyeBlinkL > 0.9 && wink.face.jawOpen > 0.9 && wink.face.eyeBlinkR === 0, 'a wink and an open mouth read as ~1');
+  assert.ok(wink.eyes < 0.6);
+  const s2 = createSolver({ smoothing: false, swap: true }); s2.solve(yawM(0), [['eyeBlinkLeft', 0.02]], 0);
+  const sw = s2.solve(yawM(0), [['eyeBlinkLeft', 0.9]], 33);
+  assert.ok(sw.face.eyeBlinkR > 0.5 && sw.face.eyeBlinkL === 0, 'swap flips sides');
+  assert.equal(s.solve(null, null), null);
+  const f = new OneEuro(1, 0); let x = 0; for (let t = 0; t < 1000; t += 16) x = f.filter(t % 32 ? 1 : -1, t);
+  assert.ok(Math.abs(x) < 0.6, 'jitter is damped');
+  const g = new OneEuro(1, 0.5); let y = 0; for (let t = 0; t < 300; t += 16) y = g.filter(5, t);
+  assert.ok(y > 4.5, 'a real move gets through quickly');
+});
+
 test('create: refuses a missing canvas', () => {
   assert.throws(() => AF.create(null), /canvas/);
 });

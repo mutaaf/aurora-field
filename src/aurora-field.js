@@ -1,4 +1,4 @@
-/*! aurora-field v1.1.0 · MIT · https://github.com/mutaaf/aurora-field
+/*! aurora-field v1.2.0 · MIT · https://github.com/mutaaf/aurora-field
  * A particle field that assembles into shapes and morphs between them: a neural sphere
  * with travelling signals, a team of orbs, a stack of platforms, an armoured helm, a ranger
  * helmet — or text, SVG paths, images and point clouds (fromText/fromSVG/fromImage/fromPoints,
@@ -17,7 +17,7 @@
   else root.AuroraField = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var VERSION = '1.1.0';
+  var VERSION = '1.2.0';
   var TAU = Math.PI * 2;
 
   var imul = Math.imul || function (a, b) {
@@ -537,7 +537,7 @@
   var DEFAULTS = {
     container: null,          // element whose box sizes the canvas (default: canvas.parentNode)
     stage: null,              // element whose box places and sizes the shape (default: container)
-    count: null,              // particle count, or function (width) → count; default 900 / 1600
+    count: null,              // particle count, or function (width) → count; default WebGL 2800 / 5600, 2D 1400 / 2800
     shapes: null,             // shapes in this field (default: every registered shape)
     rotation: null,           // which of them auto-cycle, in order (default: all of shapes)
     initial: null,            // first shape (default: shapes[0])
@@ -652,7 +652,7 @@
     var seed = o.seed == null ? SESSION_SEED : (o.seed >>> 0);
     var r = rng(seed), i;
     // the GPU path draws ~2× the particles for the same frame budget
-    var N = typeof o.count === 'function' ? o.count(VW) : (o.count || (gl ? (VW < 760 ? 1400 : 2800) : (VW < 760 ? 900 : 1600)));
+    var N = typeof o.count === 'function' ? o.count(VW) : (o.count || (gl ? (VW < 760 ? 2800 : 5600) : (VW < 760 ? 1400 : 2800)));
     var names = (o.shapes || ORDER).slice();
     for (i = 0; i < names.length; i++) if (!SHAPES[names[i]]) throw new Error('aurora-field: unknown shape "' + names[i] + '"');
     var cycleList = (o.rotation || names).slice();

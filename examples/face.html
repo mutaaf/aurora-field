@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>aurora-field · face tracking</title>
+<style>body{margin:0;background:#05070a;color:#cfd8dc;font:14px system-ui}#box{position:relative;height:80vh}canvas{position:absolute;inset:0;width:100%;height:100%}
+p{padding:0 20px;font:12px ui-monospace,Menlo,monospace}button{font:inherit;margin:12px 20px;padding:8px 14px}</style></head>
+<body>
+<div id="box"><canvas id="cv"></canvas></div>
+<button id="go">Enable camera</button><p id="st">The video never leaves this page: MediaPipe runs in your browser (loaded from jsDelivr and Google's model CDN).</p>
+<script src="../src/aurora-field.js"></script>
+<script type="module">
+  import { trackFace } from '../src/face.mjs';
+  const field = AuroraField.create(document.getElementById('cv'), { container: document.getElementById('box'), shapes: ['ranger', 'helm'], cycle: 0, palette: 'ranger' });
+  const st = document.getElementById('st');
+  let last = null;
+  const t = trackFace(field, { upgradeMs: /chaos/.test(location.search) ? 6000 : 60000, onPose: p => { last = p; }, onStatus: (s, d) => { st.textContent = s + (d ? ' · ' + d : ''); console.log('[face] status', s, d || ''); } });
+  window.tracker = t;
+  setInterval(() => { if (t.running) console.log('[face] stats', JSON.stringify(t.stats()), last ? 'yaw=' + last.yaw.toFixed(2) + ' jaw=' + last.face.jawOpen.toFixed(2) + ' blinkL=' + last.face.eyeBlinkL.toFixed(2) : 'no pose'); }, 2000);
+  // ?chaos runs the self-healing drill: crash the worker, fail the detector, stall it, lose the camera
+  if (/chaos/.test(location.search)) [['worker-crash', 9000], ['detector-fail', 17000], ['stall', 25000], ['camera-lost', 33000]].forEach(([k, ms]) => setTimeout(() => { console.log('[face] drill', k); t.simulate(k); }, ms));
+  document.getElementById('go').onclick = () => t.running ? t.stop() : t.start().catch(e => console.log('[face] start failed', e.name, e.message));
+  if (/autostart/.test(location.search)) t.start().catch(e => console.log('[face] start failed', e.name, e.message));
+</script>
+</body></html>

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0 — 2026-10-19
+- **`aurora-field/face`.** Camera face tracking that drives `setPose` and `setFace`: MediaPipe Face Landmarker in a Web Worker, One Euro smoothing, per-person calibration, an adaptive frame rate, and self-healing. The watchdog handles stalls, a crashed worker falls back to the main thread and a failing GPU to the CPU (both upgrade back when healthy), and a lost camera is re-acquired with backoff. Includes a failure drill (`simulate`). The demo has a camera button.
+- **Twice the particles by default:** WebGL 5,600 (2,800 on phones), canvas-2D 2,800 (1,400).
+
 ## 1.1.0 — 2026-10-19
 - **Face rig.** `field.setFace({...})` (and `setPose({ …, face })`) drives sixteen eased channels on rigged shapes. Eyelids close per eye and dim that eye's glow; the jaw opens; lips smile, pucker, press and shift; cheeks puff and squint; the chin raises; brows lift and furrow. Link art deforms with the particles. `armour()` takes `rig` and `dim`.
 - **The ranger, refined.** An angular visor with the crest dipping into it, a gold band with an inner edge, larger fangs, a mouthplate with seven slots, and flowing tiger stripes.

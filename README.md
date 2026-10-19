@@ -8,7 +8,7 @@ A WebGL particle field (with a canvas-2D fallback) that assembles into shapes an
 
 ![Two-tone palettes: the ranger in white and gold, the helm in Mark III red and gold, and Spider-Verse, Barbenheimer, Upside Down, Night City and Spice shapes](docs/palettes.jpg)
 
-- **WebGL first.** Round, anti-aliased points at whole device pixels, with specular cores, soft halos and additive bloom, in three draw calls a frame. That's about 2,800 points by default (1,400 on phones) at 60 fps. Canvas-2D is the automatic fallback, and context loss is handled.
+- **WebGL first.** Round, anti-aliased points at whole device pixels, with specular cores, soft halos and additive bloom, in three draw calls a frame. That's 5,600 points by default (2,800 on phones) at 60 fps. Canvas-2D is the automatic fallback, and context loss is handled.
 - **Zero dependencies.** One file, about 90 KB unminified (29 KB gzipped), and ES5, so it can be inlined into pages that support old devices. Also ships as an ES module, a web component and a worker bundle.
 - **Any shape.** Helmets drawn from line art (`helm`, `ranger`, or your own via `armour(spec)`), plus `fromText`, `fromSVG`, `fromImage` and `fromPoints` factories. Flat sources still turn in 3D.
 - **Two tones.** Palettes have an accent: the ranger's gold seams, the Mark III's gold faceplate. Eleven presets: `aurora`, `mark-iii`, `ranger`, `verse`, `barbenheimer`, `upside-down`, `night-city`, `spice`, `ember`, `ice`, `mono`. Colours morph with the shape.
@@ -94,7 +94,7 @@ The canvas fills its `container` (default: its parent). Pass a `stage` element t
 |---|---|---|
 | `container` | `canvas.parentNode` | element whose box sizes the canvas |
 | `stage` | `container` | element whose box centres and sizes the shape |
-| `count` | WebGL `1400` / `2800`, 2D `900` / `1600` | particle count (below / above 760px), or `(viewportWidth) => n` |
+| `count` | WebGL `2800` / `5600`, 2D `1400` / `2800` | particle count (below / above 760px), or `(viewportWidth) => n` |
 | `shapes` | all registered | shapes in the field |
 | `rotation` | `shapes` | which of them auto-cycle, in order; the rest are reachable with `setShape` (a hidden helm, say) |
 | `initial` | `shapes[0]` | first shape |
@@ -194,6 +194,23 @@ field.setPose({ yaw, pitch, roll, face });                                 // he
 ```
 
 The names map onto ARKit-style blendshapes (MediaPipe Face Landmarker, ARKit, Live Link) with a mirror for selfie views. Add a rig to your own helmet with `armour({ …, rig: [{ ch, box, move | squeeze | lid, mirror }] })`.
+
+### Face tracking: `aurora-field/face`
+
+An optional module that drives `setPose` and `setFace` from the camera, using MediaPipe Face Landmarker. The video never leaves the browser.
+
+```js
+import { trackFace } from 'aurora-field/face';
+const tracker = trackFace(field, { onStatus: (state, detail) => console.log(state, detail) });
+await tracker.start();   // asks for the camera
+tracker.stats();         // { state, mode: 'worker' | 'main', delegate: 'GPU' | 'CPU', fps, latency, interval, recoveries }
+tracker.stop();
+```
+
+- **Efficient.** Detection runs in a Web Worker: ImageBitmaps go in, and 16 floats and 52 scores come out. One frame is in flight at a time, at an adaptive rate that drops frames instead of falling behind on slow devices. The main thread only grabs frames.
+- **Smooth.** One Euro filters on the head and on every face channel (fast for blinks and the jaw), and a resting-face baseline per person that calibrates in about two seconds.
+- **Self-healing.** A watchdog restarts a stalled detector or camera. A crashed worker falls back to the main thread, and a failing GPU falls back to the CPU. Both climb back to the fast path after a healthy spell. A lost camera (unplugged, revoked, asleep) is re-acquired with backoff. Hidden tabs pause processing and release the camera after a minute. `tracker.simulate('worker-crash' | 'detector-fail' | 'stall' | 'camera-lost')` runs the drill; see `examples/face.html?autostart&chaos`.
+- **Configurable.** Options: `base` / `model` (defaults: jsDelivr and Google's model CDN; self-host both for zero third-party requests), `worker`, `delegate`, `maxFps`, `minFps`, `mirror`, `swap`, `smoothing`, `holdMs`, `stallMs`, `hiddenStopMs` and `upgradeMs`.
 
 ### Helmets: `armour(spec)`
 
