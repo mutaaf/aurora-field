@@ -11,6 +11,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - run: npm ci
       - run: npm test
+      - run: npm run budget
       - name: dist/ is built from src/
         run: git diff --exit-code dist/

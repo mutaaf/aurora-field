@@ -442,9 +442,9 @@ test('trace: a blank field draws a traced shape with the pen, says so once, and 
   AF.register('tfig:lit', AF.figure({ pose: 'stand' }).lit);
   for (const gl of [true, false]) {
     const env = stubEnv({ gl }), traced = [];
-    const f = AF.create(env.canvas, { seed: 3, count: 600, shapes: ['tfig:line', 'tfig:lit', 'mind'], cycle: 0, intro: 0, blank: true });
+    const f = AF.create(env.canvas, { seed: 3, count: 600, shapes: ['tfig:line', 'tfig:lit', 'mind'], cycle: 0, intro: 0, blank: true, clock: 'manual' });
     f.on('traced', s => traced.push(s));
-    const until = async (ms) => { const end = Date.now() + ms; let i = 0; while (Date.now() < end) { env.pump(1, 1000 + (i++) * 16.7); await new Promise(r => setTimeout(r, 2)); } };
+    const until = async (ms) => { f.advance(ms); };   // the manual clock: deterministic, whatever else is running
     await until(120);
     assert.deepEqual(traced, ['tfig:line'], 'traced once');
     f.signal('chest', 10, 3); f.signal([0, 0, 0]); f.setShape('tfig:lit'); await until(30); f.signal('chest', 10, 3);
@@ -458,6 +458,31 @@ test('trace: a blank field draws a traced shape with the pen, says so once, and 
   assert.ok(typeof since === 'number' && since >= 0, 'flow gets the seconds since the shape arrived'); g.destroy();
   assert.throws(() => AF.create(stubEnv().canvas, { shapes: ['mind'], initial: 'teams' }), /not in shapes/);
   const h = AF.create(stubEnv().canvas, { crew: true, count: 500, shapes: ['crew:roofer:line', 'crew:roofer:lit'], cycle: 0 }); h.destroy();
+});
+
+test('3.0: the line is an outline, and its hairline is the lit body\'s rim', () => {
+  AF.registerCrew();
+  for (const t of AF.crew) {
+    const L = AF.build('crew:' + t + ':line', 3000, 7), B = AF.build('crew:' + t + ':lit', 3000, 9), rim = Math.round(3000 * 0.24);
+    for (let i = 0; i < rim; i++) assert.deepEqual(L.points[i], B.points[i], t + ': rim point ' + i + ' shared');
+    // the silhouette starts at the crown: nothing in the figure is higher than the first point
+    assert.ok(L.points.every(p => p[1] >= L.points[0][1] - 0.012), t + ': the pen starts at the crown');
+    assert.ok(L.still && B.still && B.edges === false && B.surfelFlat, t + ': figures hold still; the lit body draws no edges');
+    for (let i = 1; i < rim; i++) assert.ok(Math.hypot(L.points[i][0] - L.points[i - 1][0], L.points[i][1] - L.points[i - 1][1]) < 0.03, t + ': the silhouette is continuous');
+  }
+});
+
+test('3.0: manual clock, lazy compile, prepare, the arrive wave', () => {
+  const env = stubEnv({ gl: true });
+  const f = AF.create(env.canvas, { clock: 'manual', crew: true, count: 900, seed: 4, shapes: ['crew:roofer:line', 'crew:roofer:lit', 'mind'], initial: 'crew:roofer:line', blank: true });
+  assert.throws(() => AF.create(stubEnv().canvas, { count: 10, shapes: ['mind'] }).advance(10), /manual/);
+  const traced = []; f.on('traced', s => traced.push(s));
+  f.advance(1000); assert.deepEqual(traced, []); f.advance(2000); assert.deepEqual(traced, ['crew:roofer:line'], 'the manual clock drives the pen');
+  f.setShape('crew:roofer:lit', { arrive: { from: 'chest', ms: 800 } }); f.advance(100);
+  assert.ok(f.stats().settle < 0.95, 'mid-wave the body is still arriving');
+  f.advance(3000); assert.ok(f.stats().settle > 0.8, 'then it has arrived (' + f.stats().settle + ')');
+  let done = false; f.prepare(['mind'], () => { done = true; });
+  return new Promise(res => setTimeout(() => { assert.ok(done, 'prepare() compiles in idle slices and calls back'); f.setShape('mind'); f.advance(50); f.destroy(); res(); }, 80));
 });
 
 test('create: refuses a missing canvas', () => {

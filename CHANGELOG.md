@@ -1,5 +1,28 @@
 # Changelog
 
+## 3.0.0-alpha.1 — 2026-10-19
+Quality and speed, ahead of the stage, plugin and React work in 3.0.
+- **Drawings that read as people.** `figure().line` is now an outline instead of stick bones.
+  - **How it's built:** the body and props are splatted into a front-view depth grid. Edges are kept where the figure meets empty space (the silhouette), and where an arm or a prop passes in front of the body. Silhouette and inner edges are chained separately, then depth-smoothed, Chaikin-smoothed and resampled.
+  - **Drawing order:** the pen draws the silhouette as one stroke, clockwise from the crown, then the inner lines.
+  - **Line weight:** a crisp hairline, plus ink that thickens on the side away from the light.
+- **A pen that draws like a hand.** It eases in and out (`trace.ease`) and slows into corners. Its head is a comet with a short tail, and the tail never bridges a pen lift. Points the pen hasn't reached ride with it exactly. A drawn point appears in place, right behind the pen, so nothing streaks.
+- **Enlightenment spreads.** `setShape(name, { arrive: { from, ms } })` switches points to the new shape in a wave from an anchor. The lit body's rim is the same points as the drawing's hairline, and the skin is ordered along the outline. So the edge of the drawing stays put while the body fills in from it.
+- **Lit bodies that read as solid, not fog:**
+  - Skin points buried inside another part are culled, and each part's share follows its visible area.
+  - Ambient occlusion is baked with deterministic probes.
+  - New flat-disc surfels (`surfelFlat`, `surfelAlpha`), which shrink edge-on so the silhouette stays clean.
+  - Figures hold still: `still` turns off place-trading and scouts, and `edges: false` keeps pairs for signals only.
+- **Faster:**
+  - Shapes compile on first use; `field.prepare(names, done)` warms them in idle slices. `create()` with all 13 crew shapes takes 2.3 ms.
+  - A cold trade outline takes about 25–37 ms.
+  - `offload()` streams anchors and view back about 30×/s, so overlays work with the worker.
+- **Minified builds:** `dist/aurora-field.min.js` (UMD, 35 KB gzipped) and `.min.mjs`. esbuild is a dev dependency only; the runtime has zero dependencies.
+- **Deterministic and measured:**
+  - `clock: 'manual'` with `field.advance(ms)`.
+  - `npm run budget` enforces 0.35 ms/frame for a lit figure at 2,800 points, 8 ms for `create()` and 40 KB gzipped, in CI.
+  - `npm run render` renders contact sheets in headless Chromium. `--check` diffs them against goldens and `--update` refreshes the goldens.
+
 ## 2.1.0 — 2026-10-19
 - **People, drawn then lit.** `figure(spec)` builds a person from an 18-joint skeleton in two forms.
   - **The line form** is a modern stick figure: bones, joint nodes and prop outlines, with pairs along every stroke for signals. A pen traces it from the chin round.

@@ -1,0 +1,60 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>aurora-field render harness</title>
+<style>html,body{margin:0;background:#0b0b0d;color:#7BE3C3;font:11px ui-monospace,monospace}#stage{position:relative;width:360px;height:460px}#stage canvas{position:absolute;inset:0;width:100%;height:100%}</style></head>
+<body><div id="stage"><canvas id="c"></canvas></div><canvas id="sheet"></canvas>
+<script src="../src/aurora-field.js"></script>
+<script>
+// Renders contact sheets deterministically: each cell is a fresh field on a manual clock,
+// advanced to a time, then copied onto the sheet. scripts/render.mjs drives this page.
+(function () {
+  'use strict';
+  var AF = window.AuroraField, W = 360, H = 460;
+  var PAL = { point: [244, 239, 230], accent: [201, 110, 44], signal: [123, 227, 195], head: [200, 255, 236], glow: [62, 143, 122], glow2: [24, 30, 32], fog: [38, 36, 34], hot: '#FFFFFF', star: '#E6E2D6' };
+  var LIGHT = { ambient: 0.18, key: 1.35, rim: 0.95, spec: 0.8, shine: 14 };
+  // a cell: { label, shapes: [...], steps: [[shape, ms]...], opts }
+  function cell(c, done) {
+    var stage = document.getElementById('stage'), old = document.getElementById('c'), cv = old.cloneNode(false);
+    old.parentNode.replaceChild(cv, old);
+    var o = { clock: 'manual', crew: true, seed: 7, cycle: 0, stars: 30, count: 5600, palette: PAL, light: LIGHT, autonomy: 0.45, interactive: false, autoPause: false, container: stage };
+    for (var k in c.opts || {}) o[k] = c.opts[k];
+    if (typeof o.radius === 'number') { var rv = o.radius; o.radius = function () { return rv; }; }
+    o.shapes = c.shapes; o.initial = c.steps[0][0];
+    var f = AF.create(cv, o);
+    for (var i = 0; i < c.steps.length; i++) {
+      var st = c.steps[i];
+      if (i > 0 && st[0]) f.setShape(st[0], st[2] || undefined);
+      f.advance(st[1]);
+    }
+    var img = cv; done(img, f);
+  }
+  window.renderSheet = function (spec) {
+    var cols = spec.cols, rows = Math.ceil(spec.cells.length / cols), sheet = document.getElementById('sheet'), g = sheet.getContext('2d'), dpr = 1;
+    sheet.width = cols * W; sheet.height = rows * H;
+    g.fillStyle = '#0b0b0d'; g.fillRect(0, 0, sheet.width, sheet.height);
+    var t0 = performance.now(), timings = [];
+    spec.cells.forEach(function (c, i) {
+      var s = performance.now();
+      cell(c, function (img, f) {
+        var x = (i % cols) * W, y = Math.floor(i / cols) * H;
+        g.drawImage(img, 0, 0, img.width, img.height, x, y, W, H);
+        g.fillStyle = '#7BE3C3'; g.fillText(c.label, x + 8, y + 14);
+        timings.push({ label: c.label, ms: Math.round(performance.now() - s), renderer: f.stats().renderer });
+        f.destroy();
+      });
+    });
+    return { dataURL: sheet.toDataURL('image/png'), ms: Math.round(performance.now() - t0), timings: timings };
+  };
+  // mean absolute difference of two PNGs (0…255) and the share of pixels that moved more than 24
+  window.diffImages = function (a, b) {
+    function load(src) { return new Promise(function (res) { var im = new Image(); im.onload = function () { res(im); }; im.src = src; }); }
+    return Promise.all([load(a), load(b)]).then(function (ims) {
+      if (ims[0].width !== ims[1].width || ims[0].height !== ims[1].height) return { size: true };
+      var w = ims[0].width, h = ims[0].height, c = document.createElement('canvas'); c.width = w; c.height = h;
+      var g = c.getContext('2d'); g.drawImage(ims[0], 0, 0); var A = g.getImageData(0, 0, w, h).data; g.clearRect(0, 0, w, h); g.drawImage(ims[1], 0, 0); var B = g.getImageData(0, 0, w, h).data;
+      var sum = 0, moved = 0;
+      for (var i = 0; i < A.length; i += 4) { var d = (Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2])) / 3; sum += d; if (d > 24) moved++; }
+      return { mean: sum / (A.length / 4), moved: moved / (A.length / 4) };
+    });
+  };
+})();
+</script></body></html>

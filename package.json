@@ -1,6 +1,6 @@
 {
   "name": "aurora-field",
-  "version": "2.1.0",
+  "version": "3.0.0-alpha.1",
   "description": "A zero-dependency WebGL particle field that assembles into lit, solid shapes and morphs between them: a neural sphere, rigged helmets you drive with your face, people drawn by a pen of light then lit, text, SVG, images. Lighting, surfels, two-tone palettes, a web component, worker mode.",
   "main": "src/aurora-field.js",
   "browser": "src/aurora-field.js",
@@ -30,6 +30,8 @@
     "build": "node scripts/build.mjs",
     "test": "node scripts/build.mjs && node test/run.mjs",
     "bench": "node bench/run.mjs",
+    "budget": "node scripts/build.mjs && node bench/run.mjs --budget",
+    "render": "node scripts/render.mjs",
     "demo": "python3 -m http.server 8080",
     "prepublishOnly": "npm test"
   },
@@ -62,5 +64,9 @@
     "./src/element.js",
     "./dist/aurora-field-element.mjs"
   ],
-  "module": "dist/aurora-field.mjs"
+  "module": "dist/aurora-field.mjs",
+  "devDependencies": {
+    "esbuild": "0.25.10",
+    "playwright": "1.60.0"
+  }
 }

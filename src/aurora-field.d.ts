@@ -31,7 +31,14 @@ export interface Shape {
   /** Named points overlays can follow with field.anchors() (a HUD pointing at the helm's eyes, say). */
   anchors?: Record<string, Vec3>;
   /** A pen draws the shape: order (0…1, one per point) is when each point is drawn, over ms. Undrawn points wait unseen at the pen; the field emits 'traced' when it's done. */
-  trace?: { order: number[]; ms?: number };
+  trace?: { order: number[]; ms?: number; ease?: 'inOut' | 'linear' };
+  /** Hold still once in place: no place-trading, no scouts (figures, logos). */
+  still?: boolean;
+  /** false: keep pairs as signal paths but don't draw them as edges. */
+  edges?: boolean;
+  /** Surfel opacity (default 0.12), and flat discs that blend into an even surface instead of a soft glow. */
+  surfelAlpha?: number;
+  surfelFlat?: boolean;
 }
 export type ShapeBuilder = (n: number, random: () => number) => Shape;
 /** A static shape: resampled to whatever count a field uses. */
@@ -81,6 +88,8 @@ export interface Options {
   seed?: number | null;
   /** Start from an empty sky: particles are born unseen at the centre and appear as they arrive (or as a pen draws them). */
   blank?: boolean;
+  /** 'manual': no animation loop; field.advance(ms) steps it deterministically (tests, golden renders, video export). */
+  clock?: 'auto' | 'manual';
   /** Register the built-in crew (crew:<trade>:line | crew:<trade>:lit, crew:all) before building; works inside offload() workers. */
   crew?: boolean;
   /** Light for shapes with normals: true (default), false, or a rig. dir points from the shape toward the light (x right, y down, z away from you). */
@@ -100,7 +109,12 @@ export interface Field {
   readonly version: string;
   readonly shape: string;
   readonly shapes: string[];
-  setShape(name: string, opts?: { pin?: boolean | number }): Field;
+  /** arrive: points switch to the new shape in a wave from an anchor or point, nearest first, over ms; the rest hold where they are. */
+  setShape(name: string, opts?: { pin?: boolean | number; arrive?: { from: string | Vec3; ms?: number } }): Field;
+  /** Manual clock only: step ms forward in fixed frames, then draw. */
+  advance(ms: number): Field;
+  /** Compile shapes ahead of use, one per idle slice (shapes otherwise compile on first setShape). */
+  prepare(names?: string[], done?: () => void): Field;
   next(): Field;
   play(): Field;
   pause(): Field;
@@ -149,7 +163,9 @@ export interface ArmourSpec {
   /** Bright points that dim with each side's blink: [leftChannel, rightChannel]. */
   dim?: [string, string];
 }
-export type OffloadedField = Pick<Field, 'setShape' | 'next' | 'play' | 'pause' | 'setPose' | 'set' | 'pointer' | 'trace' | 'signal' | 'on' | 'off' | 'destroy'> & { readonly shape: string | null; offloaded: true; worker: Worker; stats(): { fps: number; nodes: number; quality: number } | null };
+export type OffloadedField = Pick<Field, 'setShape' | 'next' | 'play' | 'pause' | 'setPose' | 'set' | 'pointer' | 'trace' | 'signal' | 'prepare' | 'on' | 'off' | 'destroy'> & { readonly shape: string | null; offloaded: true; worker: Worker; stats(): { fps: number; nodes: number; quality: number } | null;
+  /** The latest anchors and view from the worker (~30×/s), for overlays on the main thread. */
+  anchors(): Record<string, { x: number; y: number; z: number }>; view(): { yaw: number; pitch: number; roll: number; radius: number; x: number; y: number } | null };
 
 export const version: string;
 export function create(canvas: HTMLCanvasElement | OffscreenCanvas, options?: Options): Field;

@@ -286,7 +286,7 @@
     field.on('traced',function(s){
       if(!isCrew(s)) return;
       field.signal('head',40,6);
-      clearTimeout(crewT); crewT=setTimeout(function(){ field.setShape(s.replace(':line',':lit'),{pin:true}); field.signal('chest',30,8); if(crewLoop) crewT=setTimeout(nextCrew,3800); },650);
+      clearTimeout(crewT); crewT=setTimeout(function(){ field.setShape(s.replace(':line',':lit'),{pin:true,arrive:{from:'chest',ms:1100}}); field.signal('chest',30,8); if(crewLoop) crewT=setTimeout(nextCrew,3800); },650);
     });
     field.on('spinout',function(){ statsEl.innerHTML='<b>1.21 GW</b>'; });
     paused=false; $('pause').setAttribute('aria-pressed','false');

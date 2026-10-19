@@ -14,4 +14,9 @@ writeFileSync(new URL('aurora-field.mjs', dir), banner +
   'export const { ' + names.join(', ') + ' } = AuroraField;\n');
 writeFileSync(new URL('aurora-field.worker.js', dir), banner + src.replace('(typeof self !== \'undefined\' ? self : this', '(self') + '\nself.AuroraField.serve(self);\n');
 writeFileSync(new URL('aurora-field-element.mjs', dir), banner + "import AuroraField from './aurora-field.mjs';\nif (!globalThis.AuroraField) globalThis.AuroraField = AuroraField;\n" + el + '\nexport default AuroraField;\n');
-console.log('built dist/ (' + names.length + ' exports)');
+// minified: the UMD for <script> tags and CDNs, and the ES module (esbuild is a dev dependency only)
+const { transformSync } = await import('esbuild');
+const min = (code, format) => transformSync(code, { minify: true, target: 'es2015', format, legalComments: 'inline' }).code;
+writeFileSync(new URL('aurora-field.min.js', dir), min(src));
+writeFileSync(new URL('aurora-field.min.mjs', dir), min(readFileSync(new URL('aurora-field.mjs', dir), 'utf8'), 'esm'));
+console.log('built dist/ (' + names.length + ' exports, minified UMD + ESM)');
