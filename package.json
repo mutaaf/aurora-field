@@ -1,6 +1,6 @@
 {
   "name": "aurora-field",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A zero-dependency WebGL particle field that assembles into shapes and morphs between them: a neural sphere, helmets, text, SVG, images. Two-tone palettes, live options, a web component, worker mode.",
   "main": "src/aurora-field.js",
   "browser": "src/aurora-field.js",

@@ -184,6 +184,17 @@ AuroraField.register('cloud', AuroraField.fromPoints([[0, 0, 0], [1, 0.2, 0.4] /
 - `fromImage` takes `ImageData` (any `{ width, height, data }`), a canvas or an image. Bright or opaque pixels become points, with half of them on the outlines so the shape reads crisp.
 - `fromText` rasterises with the platform's canvas (DOM or `OffscreenCanvas`).
 
+### Faces: `setFace`
+
+`helm` and `ranger` are rigged. Sixteen channels move soft regions of the drawing: `eyeBlinkL`/`R` close each eye onto its lid line (and dim its glow), `jawOpen` drops the mouth and chin, `smileL`/`R`, `pucker`, `press` and `mouthL`/`R` shape the lips, `cheekPuff` and `squintL`/`R` move the cheeks, `chinRaise` lifts the chin, and `browUp` / `browDownL`/`R` move the brows. Only the face moves; the back of the head never does.
+
+```js
+field.setFace({ jawOpen: 0.6, smileL: 0.4, smileR: 0.4, eyeBlinkL: 1 });   // a wink and a grin; values ease in
+field.setPose({ yaw, pitch, roll, face });                                 // head and face together, from a tracker
+```
+
+The names map onto ARKit-style blendshapes (MediaPipe Face Landmarker, ARKit, Live Link) with a mirror for selfie views. Add a rig to your own helmet with `armour({ …, rig: [{ ch, box, move | squeeze | lid, mirror }] })`.
+
 ### Helmets: `armour(spec)`
 
 `helm` and `ranger` are both built from a front-view drawing: a 1024-wide canvas, y down, crown near 172 and chin near 1120, with one scale for both axes. `armour` lays the drawing onto a real head volume, made of rounded-box cross-sections from a front silhouette and a side profile. Fills glow, and the sides and back become a holographic scan of contour rings.

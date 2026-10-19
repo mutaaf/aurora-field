@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0 — 2026-10-19
+- **Face rig.** `field.setFace({...})` (and `setPose({ …, face })`) drives sixteen eased channels on rigged shapes. Eyelids close per eye and dim that eye's glow; the jaw opens; lips smile, pucker, press and shift; cheeks puff and squint; the chin raises; brows lift and furrow. Link art deforms with the particles. `armour()` takes `rig` and `dim`.
+- **The ranger, refined.** An angular visor with the crest dipping into it, a gold band with an inner edge, larger fangs, a mouthplate with seven slots, and flowing tiger stripes.
+
 ## 1.0.0 — 2026-10-18
 - **New shape: `ranger`.** A white-and-gold ranger helmet with a gold crest, a V visor that glows, gold fangs, a grille mouthplate and tiger stripes.
 - **`armour(spec)`.** The helmet builder behind `helm` and `ranger`, now public: draw a front view, and get a turning 3D helmet with seams, glowing fills, ear discs, scan rings and anchors.

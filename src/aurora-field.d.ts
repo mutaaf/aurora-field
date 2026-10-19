@@ -28,6 +28,7 @@ export interface Shape {
 export type ShapeBuilder = (n: number, random: () => number) => Shape;
 /** A static shape: resampled to whatever count a field uses. */
 export type ShapeData = { points: Array<[number, number] | Vec3>; tone?: number[] } | Array<[number, number] | Vec3>;
+export type FaceChannel = 'eyeBlinkL' | 'eyeBlinkR' | 'jawOpen' | 'smileL' | 'smileR' | 'pucker' | 'press' | 'mouthL' | 'mouthR' | 'chinRaise' | 'cheekPuff' | 'squintL' | 'squintR' | 'browUp' | 'browDownL' | 'browDownR';
 export type PaletteName = 'aurora' | 'mark-iii' | 'ranger' | 'verse' | 'barbenheimer' | 'upside-down' | 'night-city' | 'spice' | 'ember' | 'ice' | 'mono';
 
 export interface Palette {
@@ -94,7 +95,9 @@ export interface Field {
   /** Current orientation (radians), shape radius and centre (CSS px). */
   view(): { yaw: number; pitch: number; roll: number; radius: number; x: number; y: number };
   /** Drive facing shapes from a tracked head; null releases. */
-  setPose(p: { yaw: number; pitch: number; roll?: number; eyes?: number | null } | null): Field;
+  setPose(p: { yaw: number; pitch: number; roll?: number; eyes?: number | null; face?: Partial<Record<FaceChannel, number>> | null } | null): Field;
+  /** Drive a rigged shape's face, channels 0…1 (eased); null relaxes. setPose({ …, face }) does the same. */
+  setFace(face: Partial<Record<FaceChannel, number>> | null): Field;
   /** Change options live (palette, autonomy, cycle, pin, depth, quality, fpsFloor, maxDpr, radius, rotation, interactive, autoPause; headless sizes). */
   set(options: Partial<Options>): Field;
   /** Input without DOM events: workers, game loops, other platforms. */
@@ -117,6 +120,10 @@ export interface ArmourSpec {
   plate?: { top?: number; width?: number; lift?: number }; rings?: { count?: number; from?: number; to?: number; tone?: number };
   budget?: number; scale?: number; kick?: number;
   anchors?: Record<string, [number, number, number] | [number, number, number, 'ear', -1 | 1]>;
+  /** Face rig: soft regions that move with setFace channels. */
+  rig?: Array<{ ch: FaceChannel | string; box: [number, number, number, number]; soft?: number; ramp?: [number, number]; move?: [number, number, number]; squeeze?: [number, number]; lid?: number; mirror?: FaceChannel | string }>;
+  /** Bright points that dim with each side's blink: [leftChannel, rightChannel]. */
+  dim?: [string, string];
 }
 export type OffloadedField = Pick<Field, 'setShape' | 'next' | 'play' | 'pause' | 'setPose' | 'set' | 'pointer' | 'on' | 'off' | 'destroy'> & { readonly shape: string | null; offloaded: true; worker: Worker; stats(): { fps: number; nodes: number; quality: number } | null };
 

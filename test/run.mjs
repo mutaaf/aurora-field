@@ -303,6 +303,28 @@ test('dist: the ES module build matches the source', async () => {
   for (const k of ['create', 'register', 'fromSVG', 'fromText', 'armour', 'offload', 'palettes']) assert.ok(m[k], k);
 });
 
+test('face rig: helmets move eyelids, jaw, lips, cheeks, chin and brows', () => {
+  for (const name of ['helm', 'ranger']) {
+    const s = AF.build(name, 1600, 3), P = s.rig.P;
+    for (const ch of ['eyeBlinkL', 'eyeBlinkR', 'jawOpen', 'smileL', 'smileR', 'pucker', 'press', 'mouthL', 'mouthR', 'chinRaise', 'cheekPuff', 'squintL', 'squintR', 'browUp', 'browDownL', 'browDownR'])
+      assert.ok(P[ch] && P[ch].some(v => v !== 0), name + ' rigs ' + ch);
+    let down = 0; for (let i = 0; i < 1600; i++) if (P.jawOpen[i * 3 + 1] > 0) down++;
+    assert.ok(down > 20, name + ': the jaw drops points');
+    let lx = 0, rx = 0; for (let i = 0; i < 1600; i++) { if (P.eyeBlinkL[i * 3 + 1]) lx += s.points[i][0]; if (P.eyeBlinkR[i * 3 + 1]) rx += s.points[i][0]; }
+    assert.ok(lx < 0 && rx > 0, name + ': the left lid is on screen-left');
+    assert.ok(s.rig.dim.eyeBlinkL.length && s.rig.dim.eyeBlinkR.length);
+    for (let i = 0; i < 1600; i++) if (s.points[i][2] > 0) assert.equal(P.jawOpen[i * 3 + 1], 0, 'the back of the head never moves');
+  }
+  const env = stubEnv();
+  const f = AF.create(env.canvas, { seed: 2, count: 800, shapes: ['ranger'], cycle: 0, intro: 0 });
+  env.pump(60);
+  f.setFace({ jawOpen: 1, eyeBlinkL: 1, smileL: 0.5 }); env.pump(30);
+  f.setPose({ yaw: 0.2, pitch: 0, roll: 0, face: { pucker: 1 } }); env.pump(20);
+  f.setPose(null); env.pump(40);
+  assert.ok(f.stats().settle > 0);
+  f.destroy();
+});
+
 test('create: refuses a missing canvas', () => {
   assert.throws(() => AF.create(null), /canvas/);
 });
