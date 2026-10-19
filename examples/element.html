@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>aurora-field · web component</title>
+<style>body{margin:0;background:#05070a;color:#cfd8dc;font:14px system-ui}aurora-field{height:70vh}p{padding:0 20px}</style></head>
+<body>
+<!-- the custom element: works in plain HTML and any framework -->
+<aurora-field id="af" shapes="ranger,helm,mind" palette="ranger" rotation="ranger,helm" cycle="5000"></aurora-field>
+<p id="log">waiting…</p>
+<script type="module">
+  import '../dist/aurora-field-element.mjs';
+  const el = document.getElementById('af'), log = document.getElementById('log');
+  el.addEventListener('shape', e => { log.textContent = 'shape: ' + e.detail; el.setAttribute('palette', e.detail === 'helm' ? 'mark-iii' : 'ranger'); });
+  el.addEventListener('stats', e => { log.dataset.stats = JSON.stringify(e.detail); });
+</script>
+</body></html>

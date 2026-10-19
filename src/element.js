@@ -1,0 +1,67 @@
+/*! <aurora-field> · a custom element for aurora-field · MIT
+ * Works in plain HTML and every framework that renders custom elements (React, Vue, Svelte,
+ * Angular, Astro, Lit…). Load aurora-field first (or use dist/aurora-field-element.mjs).
+ *
+ *   <aurora-field shape="ranger" palette="ranger" count="2800" autonomy="0.8"></aurora-field>
+ *
+ * Attributes (all live): shapes ("mind,helm"), shape, rotation, palette (a preset name),
+ * count, autonomy, quality, depth, cycle, seed, stars, interactive ("false" turns it off),
+ * worker (a URL to dist/aurora-field.worker.js: renders off the main thread when supported).
+ * Events (CustomEvent, detail = data): shape, stats, settled, spinout.
+ * The element's .field is the live field (setShape, setPose, set, anchors, view…).
+ */
+(function () {
+  'use strict';
+  var root = typeof self !== 'undefined' ? self : this;
+  if (!root.customElements || !root.HTMLElement || root.customElements.get('aurora-field')) return;
+  var AF = root.AuroraField;
+  if (!AF) throw new Error('<aurora-field>: load aurora-field.js before element.js');
+  var LIVE = ['palette', 'autonomy', 'cycle', 'depth', 'quality', 'rotation', 'interactive'];
+  function list(v) { return v ? String(v).split(',').map(function (s) { return s.trim(); }).filter(Boolean) : null; }
+  function num(v) { return v == null || v === '' ? undefined : +v; }
+  // ES5-compatible custom element: Reflect.construct keeps native class semantics
+  function El() { return Reflect.construct(root.HTMLElement, [], El); }
+  El.prototype = Object.create(root.HTMLElement.prototype);
+  El.prototype.constructor = El;
+  Object.setPrototypeOf(El, root.HTMLElement);
+  El.observedAttributes = ['shapes', 'shape', 'rotation', 'palette', 'count', 'autonomy', 'quality', 'depth', 'cycle', 'seed', 'stars', 'interactive', 'worker'];
+  El.prototype.connectedCallback = function () {
+    if (this._field) return;
+    if (!this.style.display) this.style.display = 'block';
+    if (!this.style.position) this.style.position = 'relative';
+    var cv = this.querySelector('canvas[data-aurora]');
+    if (!cv) { cv = document.createElement('canvas'); cv.setAttribute('data-aurora', ''); cv.setAttribute('aria-hidden', 'true'); cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;display:block'; this.appendChild(cv); }
+    this._mount(cv);
+  };
+  El.prototype._options = function () {
+    var a = this, g = function (n) { return a.getAttribute(n); };
+    var self = this, fire = function (n) { return function (d) { self.dispatchEvent(new CustomEvent(n, { detail: d })); }; };
+    return {
+      container: this, shapes: list(g('shapes')) || undefined, initial: g('shape') || undefined, rotation: list(g('rotation')) || undefined,
+      palette: g('palette') || undefined, count: num(g('count')), autonomy: num(g('autonomy')), quality: g('quality') || undefined,
+      depth: num(g('depth')), cycle: num(g('cycle')), seed: num(g('seed')), stars: num(g('stars')), interactive: g('interactive') !== 'false',
+      onShape: fire('shape'), onStats: fire('stats'), onSpinout: fire('spinout')
+    };
+  };
+  El.prototype._mount = function (cv) {
+    var o = this._options(), url = this.getAttribute('worker'), self = this;
+    var f = url ? AF.offload(cv, o, url) : null;
+    if (!f) { if (url) { var fresh = cv.cloneNode(false); cv.parentNode.replaceChild(fresh, cv); cv = fresh; } f = AF.create(cv, o); }
+    f.on('settled', function (d) { self.dispatchEvent(new CustomEvent('settled', { detail: d })); });
+    this._field = f; this._canvas = cv;
+  };
+  El.prototype.disconnectedCallback = function () { if (this._field) { this._field.destroy(); this._field = null; } };
+  El.prototype.attributeChangedCallback = function (name, was, now) {
+    var f = this._field; if (!f || was === now) return;
+    if (name === 'shape') { if (now) f.setShape(now, { pin: true }); return; }
+    if (LIVE.indexOf(name) >= 0) {
+      var o = this._options(), patch = {}; patch[name] = name === 'interactive' ? now !== 'false' : o[name];
+      if (patch[name] !== undefined || name === 'rotation') { f.set(patch); return; }
+    }
+    // the rest (shapes, count, seed, stars, worker) rebuild the field
+    f.destroy(); this._field = null;
+    var cv = this._canvas, fresh = cv.cloneNode(false); cv.parentNode.replaceChild(fresh, cv); this._mount(fresh);
+  };
+  Object.defineProperty(El.prototype, 'field', { get: function () { return this._field; } });
+  root.customElements.define('aurora-field', El);
+})();

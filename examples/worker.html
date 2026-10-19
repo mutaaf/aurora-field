@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>aurora-field · off the main thread</title>
+<style>body{margin:0;background:#05070a;color:#cfd8dc;font:14px system-ui}#box{position:relative;height:70vh}canvas{position:absolute;inset:0;width:100%;height:100%}p{padding:0 20px}</style></head>
+<body>
+<div id="box"><canvas id="cv"></canvas></div>
+<p id="log">waiting…</p>
+<script src="../src/aurora-field.js"></script>
+<script>
+  // physics and WebGL run in a worker; the main thread only forwards input. Falls back to create().
+  var cv = document.getElementById('cv'), log = document.getElementById('log');
+  var opts = { container: document.getElementById('box'), shapes: ['ranger', 'logo'], palette: 'verse', cycle: 4000,
+    shapeData: { logo: { points: [[0, 0, 0], [1, 0, 0], [0.5, 0.9, 0], [0.5, 0.3, 0.6]] } } };
+  var f = AuroraField.offload(cv, opts, '../dist/aurora-field.worker.js');
+  if (!f) { AuroraField.register('logo', opts.shapeData.logo); f = AuroraField.create(cv, opts); }
+  f.on('ready', function (d) { log.dataset.ready = JSON.stringify(d); });
+  f.on('stats', function (s) { log.textContent = (f.offloaded ? 'worker' : 'main thread') + ' · ' + s.nodes + ' nodes · ' + s.fps + ' fps'; });
+</script>
+</body></html>

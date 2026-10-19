@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.0 — 2026-10-18
+- **New shape: `ranger`.** A white-and-gold ranger helmet with a gold crest, a V visor that glows, gold fangs, a grille mouthplate and tiger stripes.
+- **`armour(spec)`.** The helmet builder behind `helm` and `ranger`, now public: draw a front view, and get a turning 3D helmet with seams, glowing fills, ear discs, scan rings and anchors.
+- **Shape factories.** `fromText`, `fromSVG` (its own path parser, with no DOM), `fromImage` (`ImageData`, canvas or image; edge-weighted) and `fromPoints`. `register()` also accepts static data.
+- **Two-tone palettes.** `palette.accent` plus a per-point `tone`, and per-link tone for line art. Colours morph with the shape. Presets by name: `aurora`, `mark-iii`, `ranger`, `verse`, `barbenheimer`, `upside-down`, `night-city`, `spice`, `ember`, `ice`, `mono`. `palette` also takes `{ preset, …overrides }`.
+- **Live configuration.** `field.set()` covers palette, autonomy, cycle, pin, depth, quality, fpsFloor, maxDpr, radius, rotation, interactive, autoPause and headless size. `field.on/off` handles the `shape`, `settled`, `stats`, `spinout` and `frame` events.
+- **Platform-agnostic.** Headless canvases (`width`/`height`/`dpr`, `stageRect`), `field.pointer()` for input without DOM events, and `AuroraField.offload()` to run in a Web Worker on an `OffscreenCanvas` (`dist/aurora-field.worker.js`). Also new: a `<aurora-field>` web component (`src/element.js`, `dist/aurora-field-element.mjs`), an ES module build, and package `exports` for import, require, element and worker.
+- **Faster.** The WebGL path spends 1.5–2.2× less CPU per frame and canvas-2D 1.15–1.3× less (`npm run bench`). Breathing uses angle-addition tables instead of per-particle trig, and depth curves are lookup tables.
+- **Fix.** The WebGL renderer's hot-colour constant shadowed the per-particle hot flags, so sparkle points drew as ordinary points. They now sparkle, as they do in 2D.
+
 ## 0.6.0 — 2026-10-18
 - **Overlays that follow the field.** `field.project([x, y, z])` gives a shape-space point's position on screen. `field.anchors()` projects the current shape's named `anchors`, and `field.view()` returns the live yaw, pitch, roll, radius and centre. Together they let a HUD point leaders at features that turn.
 - **The helm declares anchors**: `tab`, `eyeL`, `eyeR`, `mouth`, `chin`, `earL` and `earR`.

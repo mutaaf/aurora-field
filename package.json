@@ -1,33 +1,50 @@
 {
   "name": "aurora-field",
-  "version": "0.6.0",
-  "description": "A zero-dependency canvas particle field that assembles into shapes and morphs between them: a neural sphere with travelling signals, a team of orbs, a stack of platforms, a helm. Drag, part, shockwave.",
+  "version": "1.0.0",
+  "description": "A zero-dependency WebGL particle field that assembles into shapes and morphs between them: a neural sphere, helmets, text, SVG, images. Two-tone palettes, live options, a web component, worker mode.",
   "main": "src/aurora-field.js",
   "browser": "src/aurora-field.js",
   "types": "src/aurora-field.d.ts",
   "exports": {
     ".": {
       "types": "./src/aurora-field.d.ts",
+      "import": "./dist/aurora-field.mjs",
+      "require": "./src/aurora-field.js",
       "default": "./src/aurora-field.js"
     },
+    "./element": {
+      "import": "./dist/aurora-field-element.mjs",
+      "default": "./src/element.js"
+    },
+    "./worker": "./dist/aurora-field.worker.js",
     "./package.json": "./package.json"
   },
   "files": [
     "src",
+    "dist",
     "README.md",
     "LICENSE"
   ],
   "scripts": {
-    "test": "node test/run.mjs",
-    "demo": "python3 -m http.server 8080"
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/build.mjs && node test/run.mjs",
+    "bench": "node bench/run.mjs",
+    "demo": "python3 -m http.server 8080",
+    "prepublishOnly": "npm test"
   },
   "keywords": [
     "canvas",
+    "webgl",
     "particles",
-    "neural network",
+    "web component",
+    "custom element",
+    "offscreencanvas",
+    "web worker",
+    "svg",
+    "text",
+    "generative",
     "hero",
     "animation",
-    "generative",
     "landing page",
     "zero-dependency"
   ],
@@ -38,5 +55,9 @@
     "url": "git+https://github.com/mutaaf/aurora-field.git"
   },
   "homepage": "https://mutaaf.github.io/aurora-field/",
-  "sideEffects": false
+  "sideEffects": [
+    "./src/element.js",
+    "./dist/aurora-field-element.mjs"
+  ],
+  "module": "dist/aurora-field.mjs"
 }

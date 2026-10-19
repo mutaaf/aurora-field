@@ -11,4 +11,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: node test/run.mjs
+      - run: npm test
+      - name: dist/ is built from src/
+        run: git diff --exit-code dist/

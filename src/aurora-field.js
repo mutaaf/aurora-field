@@ -1,6 +1,9 @@
-/*! aurora-field v0.6.0 · MIT · https://github.com/mutaaf/aurora-field
- * A canvas-2D particle field that assembles into shapes and morphs between them:
- * a neural sphere with travelling signals, a team of orbs, a stack of platforms, a helm.
+/*! aurora-field v1.0.0 · MIT · https://github.com/mutaaf/aurora-field
+ * A particle field that assembles into shapes and morphs between them: a neural sphere
+ * with travelling signals, a team of orbs, a stack of platforms, an armoured helm, a ranger
+ * helmet — or text, SVG paths, images and point clouds (fromText/fromSVG/fromImage/fromPoints,
+ * armour() for your own helmets). Two-tone palettes and presets; options change live (set).
+ * Runs on any canvas: in a page, headless (OffscreenCanvas, servers) or in a worker (offload).
  * Drag spins it, the cursor parts it, a click sends a shockwave. Particles are damped
  * springs that swirl into place, breathe, trade places and send out scouts; a governor
  * holds the frame rate; points are snapped to device pixels so they stay crisp. WebGL when
@@ -13,7 +16,7 @@
   else root.AuroraField = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var VERSION = '0.6.0';
+  var VERSION = '1.0.0';
   var TAU = Math.PI * 2;
 
   var imul = Math.imul || function (a, b) {
@@ -49,7 +52,10 @@
   //   anchors?: { name: [x,y,z] } points overlays can follow via field.anchors() }
   var SHAPES = {};
   var ORDER = [];
+  // register(name, build(n, random) → shape) — or a static shape ({ points, tone? … } or a
+  // point list), which is resampled to whatever count a field uses
   function register(name, build) {
+    if (build && typeof build === 'object') build = fromPoints(build.points || build, build.points ? build : null);
     if (typeof build !== 'function') throw new Error('aurora-field: shape "' + name + '" needs a build function');
     if (!SHAPES[name]) ORDER.push(name);
     SHAPES[name] = build;
@@ -117,140 +123,340 @@
     };
   });
 
-  // helm: an armoured helmet traced from line art — forehead tab, temple screws, a V brow,
-  // angular eye slits, cheek slashes, a mouth block with stacked chin plates, ear discs —
-  // laid onto a real head volume (rounded-box cross-sections, deeper than it is wide) so it
-  // turns in space. The twist: the shell is a holographic scan, contour rings that carry signals.
-  // Authored in a 1024×1536 drawing (y down, like the screen) at one scale for both axes.
-  register('helm', function (n, r) {
-    var CX = 512, CY = 645, S = 470, k;
-    function M(P) { var o = []; for (var i = 0; i < P.length; i++) o.push([2 * CX - P[i][0], P[i][1]]); return o; }
-    function lerpT(T, y) {
-      if (y <= T[0][0]) return T[0][1];
-      for (var i = 0; i < T.length - 1; i++) if (y <= T[i + 1][0]) return T[i][1] + (T[i + 1][1] - T[i][1]) * (y - T[i][0]) / (T[i + 1][0] - T[i][0]);
-      return T[T.length - 1][1];
-    }
-    // front silhouette (drawing y → half-width px) and side profile (drawing y → depth px, front and back)
-    var SIL = [[172, 40], [182, 122], [220, 227], [295, 297], [410, 330], [500, 334], [620, 316], [740, 294], [860, 266], [960, 226], [1040, 178], [1100, 124], [1126, 96]];
-    var DF = [[172, 60], [190, 170], [240, 270], [330, 340], [450, 372], [600, 388], [760, 396], [900, 384], [1000, 360], [1080, 318], [1126, 296]];
-    var DB = [[172, 60], [190, 200], [250, 330], [360, 410], [520, 432], [680, 418], [820, 370], [940, 300], [1040, 250], [1116, 236]];
-    function half(y) { return (lerpT(SIL, y - 24) + 2 * lerpT(SIL, y) + lerpT(SIL, y + 24)) / 4; }   // eased through the knots
-    var PF = 2.6, PB = 2.2;
-    // a point on the shell: drawing (x, y) on the front, z toward the viewer is negative
-    function frontZ(x, y) {
-      var w = half(y), a = Math.min(1, Math.abs(x - CX) / Math.max(1, w));
-      return -lerpT(DF, y) * Math.pow(1 - Math.pow(a, PF), 1 / PF);
-    }
-    var PLATE_TOP = 590, PLATE_BOT = 1120;
-    function at(x, y, lift) {
-      var z = frontZ(x, y), ax = Math.abs(x - CX);
-      if (y > PLATE_TOP && ax < half(y) * 0.72) z -= 14;                                  // the faceplate stands proud
-      return [(x - CX) / S, (y - CY) / S, (z - (lift || 0)) / S];
-    }
-    // the line art
-    var LINES = [], L = function (P, w, glow) { LINES.push({ p: P, w: w || 1, glow: !!glow }); };
-    var tabOuter = [[398, 182], [403, 255], [425, 375], [458, 412], [566, 412], [599, 375], [621, 255], [626, 182]];
-    var tabInner = [[420, 252], [447, 352], [463, 372], [561, 372], [577, 352], [604, 252], [420, 252]];
-    var brow = [[205, 598], [258, 560], [430, 583], [462, 612], [562, 612], [594, 583], [766, 560], [819, 598]];
-    var eyeL = [[252, 582], [437, 603], [445, 628], [418, 642], [300, 636], [250, 603], [252, 582]];
-    var plateL = [[212, 640], [225, 740], [262, 840], [320, 920], [372, 972], [415, 958]];
-    var slashL = [[250, 700], [300, 800], [345, 900], [385, 962]];
-    var cheekL = [[318, 660], [368, 820], [415, 915]];
-    var mouth = [[413, 912], [612, 912], [606, 968], [590, 1002], [434, 1002], [418, 968], [413, 912]];
-    var mouthLine = [[420, 965], [604, 965]];
-    var chin1 = [[424, 1010], [600, 1010], [592, 1062], [432, 1062], [424, 1010]];
-    var chin2 = [[436, 1075], [588, 1075], [578, 1112], [446, 1112], [436, 1075]];
-    // the jaw: the lower silhouette, from the cheek to the chin
-    var jaw = []; for (k = 0; k <= 12; k++) { var yj = 640 + k / 12 * 470; jaw.push([CX - half(yj) * 0.93, yj]); }
-    L(tabOuter, 1.1); L(tabInner, 0.8); L(brow, 1.4);
-    L(eyeL, 1.3, true); L(M(eyeL), 1.3, true);
-    L(plateL, 1.1); L(M(plateL), 1.1); L(slashL, 0.9); L(M(slashL), 0.9); L(cheekL, 0.7); L(M(cheekL), 0.7);
-    L(mouth, 1.1); L(mouthLine, 0.6); L(chin1, 0.9); L(chin2, 0.8); L(jaw, 0.9); L(M(jaw), 0.9);
-    var pts = [], pairs = [], bright = [], links = [], i, j;
-    function seg(P) { var s = [], t = 0; for (var q = 0; q < P.length - 1; q++) { var l = Math.sqrt(Math.pow(P[q + 1][0] - P[q][0], 2) + Math.pow(P[q + 1][1] - P[q][1], 2)); s.push(l); t += l; } return { s: s, t: t }; }
-    function along(P, sg, d) { var s = 0; while (s < sg.s.length - 1 && d > sg.s[s]) { d -= sg.s[s]; s++; } var f = sg.s[s] ? d / sg.s[s] : 0; return [P[s][0] + (P[s + 1][0] - P[s][0]) * f, P[s][1] + (P[s + 1][1] - P[s][1]) * f]; }
-    // a 3D polyline as particles, evenly spaced, joined so signals can run along it
-    function run3(Q, cnt, glow) {
-      var sg = seg3(Q);
-      for (var q = 0; q < cnt && pts.length < n; q++) {
-        if (glow) bright.push(pts.length);
-        pts.push(along3(Q, sg, (q + 0.5) / cnt * sg.t));
-        if (q) pairs.push([pts.length - 2, pts.length - 1]);
+  // ---- armour: helmets from line art ----
+  // armour(spec) turns a front-view drawing (1024 wide, y down, crown near 172, chin near 1120,
+  // one scale for both axes) into a shape: the lines are laid onto a real head volume (rounded-box
+  // cross-sections from a front silhouette and a side profile, deeper than it is wide), filled
+  // regions glow, and the sides and back are a holographic scan of contour rings that carry
+  // signals. helm and ranger are built with it; so can you (AuroraField.armour).
+  //   spec: { sil: [[y, halfWidth]…], front: [[y, depth]…], back: [[y, depth]…],
+  //     lines: [{ p: [[x, y]…] | edge: [fromY, toY, fraction of the half-width], w?, glow?, mirror?, tone? }…], fills: [{ p, share, mirror?, glow?, cut?: [poly…] }…],
+  //     screws?: [[x, y]…], ears?: { y, z, r: [outer, inner] }, plate?: { top, width, lift },
+  //     rings?: { count, from, to }, budget?: lineShare, anchors?: { name: [x, y, lift] | [x, y, lift, 'ear', side] },
+  //     scale?, kick? }   tone (0…1) picks between a palette's point and accent colours
+  var ARMOUR_DEFAULTS = {
+    front: [[172, 60], [190, 170], [240, 270], [330, 340], [450, 372], [600, 388], [760, 396], [900, 384], [1000, 360], [1080, 318], [1126, 296]],
+    back: [[172, 60], [190, 200], [250, 330], [360, 410], [520, 432], [680, 418], [820, 370], [940, 300], [1040, 250], [1116, 236]],
+    plate: { top: 590, width: 0.72, lift: 14 }, rings: { count: 13, from: 210, to: 970 }, budget: 0.54, scale: 0.9, kick: 0.2
+  };
+  function lerpT(T, y) {
+    if (y <= T[0][0]) return T[0][1];
+    for (var i = 0; i < T.length - 1; i++) if (y <= T[i + 1][0]) return T[i][1] + (T[i + 1][1] - T[i][1]) * (y - T[i][0]) / (T[i + 1][0] - T[i][0]);
+    return T[T.length - 1][1];
+  }
+  function inPoly(P, x, y) {
+    var c = false;
+    for (var a = 0, b = P.length - 1; a < P.length; b = a++)
+      if ((P[a][1] > y) !== (P[b][1] > y) && x < (P[b][0] - P[a][0]) * (y - P[a][1]) / (P[b][1] - P[a][1]) + P[a][0]) c = !c;
+    return c;
+  }
+  function seg3(Q) { var s = [], t = 0; for (var q = 0; q < Q.length - 1; q++) { var dx = Q[q + 1][0] - Q[q][0], dy = Q[q + 1][1] - Q[q][1], dz = (Q[q + 1][2] || 0) - (Q[q][2] || 0), l = Math.sqrt(dx * dx + dy * dy + dz * dz); s.push(l); t += l; } return { s: s, t: t }; }
+  function along3(Q, sg, d) {
+    var s = 0; while (s < sg.s.length - 1 && d > sg.s[s]) { d -= sg.s[s]; s++; }
+    var f = sg.s[s] ? d / sg.s[s] : 0, A = Q[s], B = Q[s + 1];
+    return [A[0] + (B[0] - A[0]) * f, A[1] + (B[1] - A[1]) * f, (A[2] || 0) + ((B[2] || 0) - (A[2] || 0)) * f];
+  }
+  function armour(spec) {
+    var o = merge(ARMOUR_DEFAULTS, spec);
+    o.plate = merge(ARMOUR_DEFAULTS.plate, spec.plate); o.rings = merge(ARMOUR_DEFAULTS.rings, spec.rings);
+    return function (n, r) {
+      var CX = 512, CY = 645, S = 470, PF = 2.6, PB = 2.2, SIL = o.sil, DF = o.front, DB = o.back, k, i, j;
+      function M(P) { var m = []; for (var q = 0; q < P.length; q++) m.push([2 * CX - P[q][0], P[q][1]]); return m; }
+      function half(y) { return (lerpT(SIL, y - 24) + 2 * lerpT(SIL, y) + lerpT(SIL, y + 24)) / 4; }   // eased through the knots
+      function at(x, y, lift) {
+        var w = half(y), a = Math.min(1, Math.abs(x - CX) / Math.max(1, w)), z = -lerpT(DF, y) * Math.pow(1 - Math.pow(a, PF), 1 / PF);
+        if (y > o.plate.top && a < o.plate.width) z -= o.plate.lift;                       // the faceplate stands proud
+        return [(x - CX) / S, (y - CY) / S, (z - (lift || 0)) / S];
       }
-    }
-    function seg3(Q) { var s = [], t = 0; for (var q = 0; q < Q.length - 1; q++) { var l = Math.sqrt(Math.pow(Q[q + 1][0] - Q[q][0], 2) + Math.pow(Q[q + 1][1] - Q[q][1], 2) + Math.pow(Q[q + 1][2] - Q[q][2], 2)); s.push(l); t += l; } return { s: s, t: t }; }
-    function along3(Q, sg, d) { var s = 0; while (s < sg.s.length - 1 && d > sg.s[s]) { d -= sg.s[s]; s++; } var f = sg.s[s] ? d / sg.s[s] : 0; return [Q[s][0] + (Q[s + 1][0] - Q[s][0]) * f, Q[s][1] + (Q[s + 1][1] - Q[s][1]) * f, Q[s][2] + (Q[s + 1][2] - Q[s][2]) * f]; }
-    // drawn lines go onto the shell: subdivide so they hug the curve
-    function lift3(P, lift) { var sg = seg(P), m = Math.max(2, Math.ceil(sg.t / 12)), Q = []; for (var q = 0; q <= m; q++) { var p = along(P, sg, q / m * sg.t); Q.push(at(p[0], p[1], lift)); } return Q; }
-    // a cross-section of the shell at drawing height y: a rounded box, deeper behind than in front
-    function ring(y, m) {
-      var w = half(y), df = lerpT(DF, y), db = lerpT(DB, y), Q = [];
-      for (var q = 0; q <= m; q++) {
-        var a = q / m * Math.PI * 2, c = Math.cos(a), s = Math.sin(a), p = s < 0 ? PF : PB;
-        var ex = Math.pow(Math.abs(c), 2 / p) * (c < 0 ? -1 : 1), ez = Math.pow(Math.abs(s), 2 / p) * (s < 0 ? -1 : 1);
-        Q.push([ex * w / S, (y - CY) / S, (ez < 0 ? ez * df : ez * db) / S]);
+      // drawn lines go onto the shell, subdivided so they hug the curve
+      function lift3(P, lift) {
+        var Q2 = []; for (var q = 0; q < P.length; q++) Q2.push([P[q][0], P[q][1], 0]);
+        var sg = seg3(Q2), m = Math.max(2, Math.ceil(sg.t / 12)), Q = [];
+        for (q = 0; q <= m; q++) { var p = along3(Q2, sg, q / m * sg.t); Q.push(at(p[0], p[1], lift)); }
+        return Q;
       }
-      return Q;
-    }
-    // ear discs on the sides
-    function ear(side, rad) {
-      var Q = [], y0 = 560, z0 = 40;
-      for (var q = 0; q <= 28; q++) { var a = q / 28 * Math.PI * 2, y = y0 + Math.sin(a) * rad; Q.push([side * (half(y) + 10) / S, (y - CY) / S, (z0 + Math.cos(a) * rad) / S]); }
-      return Q;
-    }
-    // budget: seams 54%, eye glow 6%, screws 1.5%, scan rings the rest
-    var art = LINES.map(function (l) { return { Q: lift3(l.p, 4), w: l.w, glow: l.glow }; });
-    art.push({ Q: ear(-1, 64), w: 0.7 }, { Q: ear(1, 64), w: 0.7 }, { Q: ear(-1, 30), w: 0.5 }, { Q: ear(1, 30), w: 0.5 });
-    var tot = 0; for (i = 0; i < art.length; i++) { art[i].len = seg3(art[i].Q).t; tot += art[i].len * art[i].w; }
-    var lineBudget = Math.floor(n * 0.54);
-    for (i = 0; i < art.length; i++) {
-      run3(art[i].Q, Math.max(4, Math.round(lineBudget * art[i].len * art[i].w / tot)), art[i].glow);
-      for (k = 0; k < art[i].Q.length - 1; k += 1) links.push([art[i].Q[k], art[i].Q[k + 1]]);
-    }
-    function inPoly(P, x, y) {
-      var c = false;
-      for (var a = 0, b = P.length - 1; a < P.length; b = a++)
-        if ((P[a][1] > y) !== (P[b][1] > y) && x < (P[b][0] - P[a][0]) * (y - P[a][1]) / (P[b][1] - P[a][1]) + P[a][0]) c = !c;
-      return c;
-    }
-    // eyes: fill the slits so they glow as shapes, not outlines
-    var eyes = [eyeL, M(eyeL)], eyeFill = Math.floor(n * 0.06);
-    for (i = 0, k = 0; i < eyeFill && k < eyeFill * 60 && pts.length < n; k++) {
-      var ex = 250 + r() * 200, ey = 580 + r() * 64; if (k % 2) ex = 2 * CX - ex;
-      if (!inPoly(eyes[k % 2], ex, ey)) continue;
-      bright.push(pts.length); pts.push(at(ex, ey, 8)); i++;
-    }
-    // temple screws: two small rings
-    var screws = [[270, 255], [754, 255]], sc = Math.floor(n * 0.015);
-    for (i = 0; i < sc && pts.length < n; i++) { var S0 = screws[i % 2], a2 = (i / sc) * Math.PI * 12, rr = i % 3 ? 11 : 4; pts.push(at(S0[0] + Math.cos(a2) * rr, S0[1] + Math.sin(a2) * rr, 4)); }
-    // the scan: contour rings round the shell, skipping the face so the seams read clean
-    var RINGS = 13, left = n - pts.length, per = [], rt = 0, levels = [];
-    for (k = 0; k < RINGS; k++) {
-      var yl = 210 + k / (RINGS - 1) * 760, Q = ring(yl, 96), keep = [];
-      for (j = 0; j < Q.length; j++) { var p0 = Q[j], face = p0[2] < -0.22 && yl > 250 && Math.abs(p0[0]) < half(yl) / S * 0.82; keep.push(!face); }
-      levels.push({ Q: Q, keep: keep }); var sl = seg3(Q).t; per.push(sl); rt += sl;
-    }
-    for (k = 0; k < RINGS && pts.length < n; k++) {
-      var lv = levels[k], sgr = seg3(lv.Q), cnt = Math.round(left * per[k] / rt), prev = -1;
-      for (j = 0; j < cnt && pts.length < n; j++) {
-        var d = (j + 0.5) / cnt * sgr.t, s = 0; while (s < sgr.s.length - 1 && d > sgr.s[s]) { d -= sgr.s[s]; s++; }
-        if (!lv.keep[s]) { prev = -1; continue; }
-        pts.push(along3(lv.Q, sgr, (j + 0.5) / cnt * sgr.t));
-        if (prev >= 0) pairs.push([prev, pts.length - 1]); prev = pts.length - 1;
+      function ring(y, m) {
+        var w = half(y), df = lerpT(DF, y), db = lerpT(DB, y), Q = [];
+        for (var q = 0; q <= m; q++) {
+          var a = q / m * TAU, c = Math.cos(a), s = Math.sin(a), p = s < 0 ? PF : PB;
+          var ex = Math.pow(Math.abs(c), 2 / p) * (c < 0 ? -1 : 1), ez = Math.pow(Math.abs(s), 2 / p) * (s < 0 ? -1 : 1);
+          Q.push([ex * w / S, (y - CY) / S, (ez < 0 ? ez * df : ez * db) / S]);
+        }
+        return Q;
       }
-    }
-    while (pts.length < n) pts.push(pts[Math.floor(r() * pts.length)].slice());
-    // named anchors, for overlays that point at the helm's features (see field.anchors())
-    var eyeC = at(346, 612, 8), anchors = {
-      tab: at(512, 300, 4), eyeL: eyeC, eyeR: [-eyeC[0], eyeC[1], eyeC[2]], mouth: at(512, 960, 4), chin: at(512, 1094, 4),
-      earL: [-(half(560) + 10) / S, (560 - CY) / S, 40 / S], earR: [(half(560) + 10) / S, (560 - CY) / S, 40 / S]
+      function ear(side, rad) {
+        var Q = [], y0 = o.ears.y, z0 = o.ears.z;
+        for (var q = 0; q <= 28; q++) { var a = q / 28 * TAU, y = y0 + Math.sin(a) * rad; Q.push([side * (half(y) + 10) / S, (y - CY) / S, (z0 + Math.cos(a) * rad) / S]); }
+        return Q;
+      }
+      var pts = [], pairs = [], bright = [], links = [], art = [], tone = [], linkTone = [];
+      function run3(Q, cnt, glow, tn) {
+        var sg = seg3(Q);
+        for (var q = 0; q < cnt && pts.length < n; q++) {
+          if (glow) bright.push(pts.length);
+          pts.push(along3(Q, sg, (q + 0.5) / cnt * sg.t)); tone.push(tn || 0);
+          if (q) pairs.push([pts.length - 2, pts.length - 1]);
+        }
+      }
+      for (i = 0; i < o.lines.length; i++) {
+        var ln = o.lines[i];
+        if (ln.edge) { ln = merge(ln, { p: [] }); for (k = 0; k <= 12; k++) { var ye = ln.edge[0] + k / 12 * (ln.edge[1] - ln.edge[0]); ln.p.push([CX - half(ye) * ln.edge[2], ye]); } }
+        art.push({ Q: lift3(ln.p, 4), w: ln.w || 1, glow: !!ln.glow, tone: ln.tone || 0 });
+        if (ln.mirror) art.push({ Q: lift3(M(ln.p), 4), w: ln.w || 1, glow: !!ln.glow, tone: ln.tone || 0 });
+      }
+      if (o.ears) for (k = 0; k < o.ears.r.length; k++) art.push({ Q: ear(-1, o.ears.r[k]), w: 0.7 - k * 0.2, tone: o.ears.tone || 0 }, { Q: ear(1, o.ears.r[k]), w: 0.7 - k * 0.2, tone: o.ears.tone || 0 });
+      var tot = 0; for (i = 0; i < art.length; i++) { art[i].len = seg3(art[i].Q).t; tot += art[i].len * art[i].w; }
+      var lineBudget = Math.floor(n * o.budget);
+      for (i = 0; i < art.length; i++) {
+        run3(art[i].Q, Math.max(4, Math.round(lineBudget * art[i].len * art[i].w / tot)), art[i].glow, art[i].tone);
+        for (k = 0; k < art[i].Q.length - 1; k++) { links.push([art[i].Q[k], art[i].Q[k + 1]]); linkTone.push(art[i].tone); }
+      }
+      // filled regions (eyes, a visor): sampled inside the outline, minus any cut-outs
+      var holes = [];
+      for (i = 0; i < (o.fills || []).length; i++) {
+        var F = o.fills[i], polys = F.mirror ? [F.p, M(F.p)] : [F.p], cuts = [], cnt = Math.floor(n * F.share), bx = [1e9, 1e9, -1e9, -1e9];
+        for (k = 0; k < (F.cut || []).length; k++) { cuts.push(F.cut[k]); if (F.mirror) cuts.push(M(F.cut[k])); }
+        for (k = 0; k < polys.length; k++) { holes.push(polys[k]); for (j = 0; j < polys[k].length; j++) { var v = polys[k][j]; bx[0] = Math.min(bx[0], v[0]); bx[1] = Math.min(bx[1], v[1]); bx[2] = Math.max(bx[2], v[0]); bx[3] = Math.max(bx[3], v[1]); } }
+        for (j = 0, k = 0; j < cnt && k < cnt * 80 && pts.length < n; k++) {
+          var fx = bx[0] + r() * (bx[2] - bx[0]), fy = bx[1] + r() * (bx[3] - bx[1]), inside = false, q;
+          for (q = 0; q < polys.length && !inside; q++) inside = inPoly(polys[q], fx, fy);
+          for (q = 0; q < cuts.length && inside; q++) if (inPoly(cuts[q], fx, fy)) inside = false;
+          if (!inside) continue;
+          if (F.glow !== false) bright.push(pts.length);
+          pts.push(at(fx, fy, 8)); tone.push(F.tone || 0); j++;
+        }
+      }
+      // screws: small rings
+      var screws = o.screws || [], sc = screws.length ? Math.floor(n * 0.015) : 0;
+      for (i = 0; i < sc && pts.length < n; i++) { var S0 = screws[i % screws.length], a2 = (i / sc) * Math.PI * 12, rr = i % 3 ? 11 : 4; pts.push(at(S0[0] + Math.cos(a2) * rr, S0[1] + Math.sin(a2) * rr, 4)); tone.push(o.screwTone || 0); }
+      // the scan: contour rings round the shell, skipping the face so the seams read clean
+      var RN = o.rings.count, left = n - pts.length, per = [], rt = 0, levels = [];
+      for (k = 0; k < RN; k++) {
+        var yl = o.rings.from + k / Math.max(1, RN - 1) * (o.rings.to - o.rings.from), Q = ring(yl, 96), keep = [];
+        for (j = 0; j < Q.length; j++) { var p0 = Q[j]; keep.push(!(p0[2] < -0.22 && yl > 250 && Math.abs(p0[0]) < half(yl) / S * 0.82)); }
+        levels.push({ Q: Q, keep: keep }); var sl = seg3(Q).t; per.push(sl); rt += sl;
+      }
+      for (k = 0; k < RN && pts.length < n; k++) {
+        var lv = levels[k], sgr = seg3(lv.Q), rc = Math.round(left * per[k] / rt), prev = -1;
+        for (j = 0; j < rc && pts.length < n; j++) {
+          var d = (j + 0.5) / rc * sgr.t, s = 0; while (s < sgr.s.length - 1 && d > sgr.s[s]) { d -= sgr.s[s]; s++; }
+          if (!lv.keep[s]) { prev = -1; continue; }
+          pts.push(along3(lv.Q, sgr, (j + 0.5) / rc * sgr.t)); tone.push(o.rings.tone || 0);
+          if (prev >= 0) pairs.push([prev, pts.length - 1]); prev = pts.length - 1;
+        }
+      }
+      while (pts.length < n) { var dup = Math.floor(r() * pts.length); pts.push(pts[dup].slice()); tone.push(tone[dup]); }
+      // named anchors, for overlays that point at the features (field.anchors())
+      var anchors = {};
+      for (var an in o.anchors || {}) {
+        var A = o.anchors[an];
+        anchors[an] = A[3] === 'ear' ? [A[4] * (half(A[1]) + 10) / S, (A[1] - CY) / S, A[2] / S] : at(A[0], A[1], A[2]);
+      }
+      var K = o.scale, out = pts.slice(0, n);
+      function sc3(p) { return [p[0] * K, p[1] * K, p[2] * K]; }
+      for (k = 0; k < out.length; k++) out[k] = sc3(out[k]);
+      for (k = 0; k < links.length; k++) links[k] = [sc3(links[k][0]), sc3(links[k][1])];
+      for (an in anchors) anchors[an] = sc3(anchors[an]);
+      return { points: out, pairs: pairs, links: links, bright: bright, anchors: anchors, tone: tone.slice(0, n), linkTone: linkTone, facing: true, kick: o.kick, lineArt: true };
     };
-    var K = 0.9, out = pts.slice(0, n);
-    for (var an in anchors) anchors[an] = [anchors[an][0] * K, anchors[an][1] * K, anchors[an][2] * K];
-    for (k = 0; k < out.length; k++) out[k] = [out[k][0] * K, out[k][1] * K, out[k][2] * K];
-    for (k = 0; k < links.length; k++) links[k] = [[links[k][0][0] * K, links[k][0][1] * K, links[k][0][2] * K], [links[k][1][0] * K, links[k][1][1] * K, links[k][1][2] * K]];
-    return { points: out, pairs: pairs, links: links, bright: bright, anchors: anchors, facing: true, kick: 0.2, lineArt: true };
-  });
+  }
+
+  // helm: an armoured helmet traced from line art — forehead tab, temple screws, a V brow,
+  // angular eye slits, cheek slashes, a mouth block with stacked chin plates, ear discs.
+  var HELM_EYE = [[252, 582], [437, 603], [445, 628], [418, 642], [300, 636], [250, 603], [252, 582]];
+  register('helm', armour({
+    sil: [[172, 40], [182, 122], [220, 227], [295, 297], [410, 330], [500, 334], [620, 316], [740, 294], [860, 266], [960, 226], [1040, 178], [1100, 124], [1126, 96]],
+    lines: [
+      { p: [[398, 182], [403, 255], [425, 375], [458, 412], [566, 412], [599, 375], [621, 255], [626, 182]], w: 1.1 },          // forehead tab
+      { p: [[420, 252], [447, 352], [463, 372], [561, 372], [577, 352], [604, 252], [420, 252]], w: 0.8 },
+      { p: [[205, 598], [258, 560], [430, 583], [462, 612], [562, 612], [594, 583], [766, 560], [819, 598]], tone: 1, w: 1.4 },          // V brow
+      { p: HELM_EYE, tone: 1, w: 1.3, glow: true, mirror: true },
+      { p: [[212, 640], [225, 740], [262, 840], [320, 920], [372, 972], [415, 958]], tone: 1, w: 1.1, mirror: true },                     // plate edge
+      { p: [[250, 700], [300, 800], [345, 900], [385, 962]], tone: 1, w: 0.9, mirror: true },                                          // cheek slash
+      { p: [[318, 660], [368, 820], [415, 915]], tone: 1, w: 0.7, mirror: true },
+      { p: [[413, 912], [612, 912], [606, 968], [590, 1002], [434, 1002], [418, 968], [413, 912]], tone: 1, w: 1.1 },                  // mouth
+      { p: [[420, 965], [604, 965]], tone: 1, w: 0.6 },
+      { p: [[424, 1010], [600, 1010], [592, 1062], [432, 1062], [424, 1010]], tone: 1, w: 0.9 },                                       // chin plates
+      { p: [[436, 1075], [588, 1075], [578, 1112], [446, 1112], [436, 1075]], tone: 1, w: 0.8 },
+      { edge: [640, 1110, 0.93], w: 0.9, mirror: true }                                                                       // jaw: along the silhouette
+    ],
+    fills: [{ p: HELM_EYE, share: 0.06, mirror: true, tone: 1 }],
+    screws: [[270, 255], [754, 255]],
+    ears: { y: 560, z: 40, r: [64, 30] },
+    rings: { count: 13, from: 210, to: 970 },
+    anchors: { tab: [512, 300, 4], eyeL: [346, 612, 8], eyeR: [678, 612, 8], mouth: [512, 960, 4], chin: [512, 1094, 4], earL: [0, 560, 40, 'ear', -1], earR: [0, 560, 40, 'ear', 1] }
+  }));
+
+  // ranger: a white-and-gold ranger helmet — a gold crest peaking onto the forehead, a wide
+  // visor that dips to a point, gold fangs under it, a flared mouthplate with a grille, and
+  // tiger stripes over the crown. Gold is the accent tone, the shell the point tone.
+  var RANGER_VISOR = [[236, 604], [330, 572], [440, 556], [512, 562], [584, 556], [694, 572], [788, 604], [770, 664], [672, 702], [586, 752], [540, 794], [512, 806], [484, 794], [438, 752], [352, 702], [254, 664]];
+  var RANGER_FANG = [[282, 668], [446, 708], [392, 740], [318, 702]];
+  register('ranger', armour({
+    sil: [[172, 44], [180, 140], [216, 252], [292, 326], [404, 352], [520, 356], [650, 342], [780, 314], [890, 274], [980, 222], [1048, 168], [1100, 116], [1126, 86]],
+    plate: { top: 520, width: 0.74, lift: 12 },
+    lines: [
+      { p: [[214, 616], [262, 566], [340, 524], [430, 494], [482, 458], [512, 404]], w: 1.3, tone: 1, mirror: true },             // the crest
+      { p: [[214, 616], [220, 720], [248, 830], [298, 922], [360, 992], [432, 1050], [512, 1078]], w: 1.2, tone: 1, mirror: true },  // faceplate edge
+      { p: RANGER_VISOR.concat([RANGER_VISOR[0]]), w: 1.4, glow: true },                                                            // visor
+      { p: RANGER_FANG.concat([RANGER_FANG[0]]), w: 0.9, tone: 1, mirror: true },                                                  // fangs
+      { p: [[478, 830], [546, 830], [604, 980], [512, 998], [420, 980], [478, 830]], w: 1.2, tone: 1 },                              // mouthplate
+      { p: [[490, 840], [452, 976]], w: 0.5, tone: 1 }, { p: [[501, 840], [482, 986]], w: 0.5, tone: 1 }, { p: [[512, 840], [512, 990]], w: 0.5, tone: 1 },
+      { p: [[523, 840], [542, 986]], w: 0.5, tone: 1 }, { p: [[534, 840], [572, 976]], w: 0.5, tone: 1 },                            // grille
+      { p: [[420, 980], [462, 1036], [512, 1062]], w: 0.8, tone: 1, mirror: true },                                                 // chin
+      { p: [[512, 196], [512, 392]], w: 0.9 },                                                                                      // tiger stripes
+      { p: [[506, 246], [452, 274], [418, 322]], w: 0.8, mirror: true }, { p: [[506, 314], [462, 338], [438, 382]], w: 0.8, mirror: true },
+      { p: [[352, 236], [392, 290], [404, 352]], w: 0.7, mirror: true },
+      { edge: [620, 1100, 0.95], w: 0.8, mirror: true }
+    ],
+    fills: [{ p: RANGER_VISOR, share: 0.075, cut: [RANGER_FANG], tone: 0 }],
+    ears: { y: 600, z: 30, r: [56], tone: 1 },
+    rings: { count: 12, from: 210, to: 960 },
+    kick: 0.25,
+    anchors: { tab: [512, 300, 4], eyeL: [372, 640, 8], eyeR: [652, 640, 8], mouth: [512, 900, 4], chin: [512, 1060, 4], earL: [0, 600, 30, 'ear', -1], earR: [0, 600, 30, 'ear', 1] }
+  }));
+
+  // ---- shape factories: point lists, SVG paths, text and images become shapes ----
+  // Each returns a build function for register(). Flat sources sit in the x-y plane (y down,
+  // like the screen), fitted to the unit box, with a little depth so they still turn in space.
+  function fitBox(P, scale) {
+    var x0 = 1e9, y0 = 1e9, z0 = 1e9, x1 = -1e9, y1 = -1e9, z1 = -1e9, i;
+    for (i = 0; i < P.length; i++) { var p = P[i]; x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); z0 = Math.min(z0, p[2] || 0); z1 = Math.max(z1, p[2] || 0); }
+    var mx = (x0 + x1) / 2, my = (y0 + y1) / 2, mz = (z0 + z1) / 2, k = (scale || 0.9) * 2 / Math.max(1e-9, x1 - x0, y1 - y0, z1 - z0);
+    return function (p) { return [(p[0] - mx) * k, (p[1] - my) * k, ((p[2] || 0) - mz) * k]; };
+  }
+  // fromPoints([[x, y, z?]…], { scale, depth, tone: [0…1 per point], facing }) — any count resamples to n
+  function fromPoints(P, opt) {
+    opt = opt || {};
+    if (!P || !P.length) throw new Error('aurora-field: fromPoints needs points');
+    var fit = fitBox(P, opt.scale), base = [], tones = opt.tone, i;
+    for (i = 0; i < P.length; i++) base.push(fit(P[i]));
+    return function (n, r) {
+      var pts = [], tone = [], depth = opt.depth == null ? 0.08 : opt.depth;
+      for (i = 0; i < n; i++) {
+        var j = n <= base.length ? Math.floor(i * base.length / n) : (i < base.length ? i : Math.floor(r() * base.length)), b = base[j];
+        var jit = i >= base.length ? 0.012 : 0;
+        pts.push([b[0] + (r() - 0.5) * jit, b[1] + (r() - 0.5) * jit, b[2] + (P[j].length < 3 ? (r() - 0.5) * depth : 0)]);
+        tone.push(tones ? +tones[j] || 0 : 0);
+      }
+      return { points: pts, tone: tones ? tone : null, facing: opt.facing !== false, kick: opt.kick == null ? 0.4 : opt.kick };
+    };
+  }
+  // a small SVG path parser: M L H V C S Q T Z (absolute and relative); arcs become lines
+  function parsePath(d) {
+    var tok = String(d).match(/[MmLlHhVvCcSsQqTtAaZz]|[-+]?(?:\d*\.\d+|\d+\.?)(?:[eE][-+]?\d+)?/g) || [], i = 0, cmd = '', x = 0, y = 0, sx = 0, sy = 0, cx = 0, cy = 0, subs = [], cur = null;
+    function num() { return parseFloat(tok[i++]); }
+    function pt(px, py) { if (!cur) { cur = { p: [[x, y]], closed: false }; subs.push(cur); } cur.p.push([px, py]); x = px; y = py; }
+    function curve(p0, p1, p2, p3) {
+      for (var s = 1; s <= 16; s++) {
+        var t = s / 16, u = 1 - t, px, py;
+        if (p3) { px = u * u * u * p0[0] + 3 * u * u * t * p1[0] + 3 * u * t * t * p2[0] + t * t * t * p3[0]; py = u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1] + t * t * t * p3[1]; }
+        else { px = u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0]; py = u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1]; }
+        pt(px, py);
+      }
+    }
+    while (i < tok.length) {
+      if (/[A-Za-z]/.test(tok[i])) cmd = tok[i++];
+      var rel = cmd === cmd.toLowerCase(), C = cmd.toUpperCase(), ox = rel ? x : 0, oy = rel ? y : 0, a, b, c, e;
+      if (C === 'Z') { if (cur) { cur.closed = true; x = sx; y = sy; cur = null; } continue; }
+      if (i >= tok.length || /[A-Za-z]/.test(tok[i])) { i++; continue; }
+      if (C === 'M') { x = num() + ox; y = num() + oy; sx = x; sy = y; cur = { p: [[x, y]], closed: false }; subs.push(cur); cmd = rel ? 'l' : 'L'; cx = x; cy = y; continue; }
+      if (C === 'L') { a = num() + ox; b = num() + oy; pt(a, b); cx = x; cy = y; }
+      else if (C === 'H') { pt(num() + ox, y); cx = x; cy = y; }
+      else if (C === 'V') { pt(x, num() + oy); cx = x; cy = y; }
+      else if (C === 'C') { a = [num() + ox, num() + oy]; b = [num() + ox, num() + oy]; c = [num() + ox, num() + oy]; curve([x, y], a, b, c); cx = b[0]; cy = b[1]; }
+      else if (C === 'S') { a = [2 * x - cx, 2 * y - cy]; b = [num() + ox, num() + oy]; c = [num() + ox, num() + oy]; curve([x, y], a, b, c); cx = b[0]; cy = b[1]; }
+      else if (C === 'Q') { a = [num() + ox, num() + oy]; b = [num() + ox, num() + oy]; curve([x, y], a, b); cx = a[0]; cy = a[1]; }
+      else if (C === 'T') { a = [2 * x - cx, 2 * y - cy]; b = [num() + ox, num() + oy]; curve([x, y], a, b); cx = a[0]; cy = a[1]; }
+      else if (C === 'A') { num(); num(); num(); num(); num(); e = [num() + ox, num() + oy]; pt(e[0], e[1]); cx = x; cy = y; }
+      else i++;
+    }
+    return subs;
+  }
+  // fromSVG(d | [d…], { stroke: share on the outlines (0.6), depth, scale, tone: [per path] })
+  // Outlines become joined particle lines that carry signals; closed paths are also filled.
+  function fromSVG(paths, opt) {
+    opt = opt || {};
+    var list = typeof paths === 'string' ? [paths] : paths, subs = [], i, k;
+    for (i = 0; i < list.length; i++) { var sp = parsePath(list[i]); for (k = 0; k < sp.length; k++) if (sp[k].p.length > 1) { sp[k].tone = opt.tone ? +opt.tone[i] || 0 : 0; subs.push(sp[k]); } }
+    if (!subs.length) throw new Error('aurora-field: fromSVG found no path data');
+    var all = []; for (i = 0; i < subs.length; i++) all = all.concat(subs[i].p);
+    var fit = fitBox(all, opt.scale);
+    for (i = 0; i < subs.length; i++) { var Q = []; for (k = 0; k < subs[i].p.length; k++) Q.push(fit(subs[i].p[k])); if (subs[i].closed) Q.push(Q[0]); subs[i].q = Q; subs[i].sg = seg3(Q); }
+    return function (n, r) {
+      var pts = [], pairs = [], tone = [], depth = opt.depth == null ? 0.1 : opt.depth, strokeN = Math.floor(n * (opt.stroke == null ? 0.6 : opt.stroke)), tot = 0, j;
+      for (i = 0; i < subs.length; i++) tot += subs[i].sg.t;
+      for (i = 0; i < subs.length && pts.length < strokeN; i++) {
+        var c = Math.max(2, Math.round(strokeN * subs[i].sg.t / tot));
+        for (j = 0; j < c && pts.length < strokeN; j++) {
+          var p = along3(subs[i].q, subs[i].sg, (j + 0.5) / c * subs[i].sg.t);
+          pts.push([p[0], p[1], (j % 2 ? 0.5 : -0.5) * depth]); tone.push(subs[i].tone);
+          if (j > 1) pairs.push([pts.length - 3, pts.length - 1]);                       // front layer to front, back to back
+        }
+      }
+      // fill the closed shapes (even-odd), or scatter along the outlines if none are closed
+      var closed = []; for (i = 0; i < subs.length; i++) if (subs[i].closed) closed.push(subs[i]);
+      for (k = 0; pts.length < n && k < n * 60; k++) {
+        if (!closed.length) { var s0 = subs[Math.floor(r() * subs.length)], q0 = along3(s0.q, s0.sg, r() * s0.sg.t); pts.push([q0[0], q0[1], (r() - 0.5) * depth]); tone.push(s0.tone); continue; }
+        var fx = (r() * 2 - 1), fy = (r() * 2 - 1), ins = 0, tn = 0;
+        for (i = 0; i < closed.length; i++) if (inPoly(closed[i].q, fx, fy)) { ins++; tn = closed[i].tone; }
+        if (ins % 2) { pts.push([fx, fy, (r() - 0.5) * depth]); tone.push(tn); }
+      }
+      while (pts.length < n) { var dup = Math.floor(r() * pts.length); pts.push(pts[dup].slice()); tone.push(tone[dup]); }
+      return { points: pts, pairs: pairs, tone: opt.tone ? tone : null, facing: opt.facing !== false, lineArt: true, kick: 0.3 };
+    };
+  }
+  function rasterCanvas(w, h) {
+    if (typeof document !== 'undefined' && document.createElement) { var c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
+    if (typeof OffscreenCanvas !== 'undefined') return new OffscreenCanvas(w, h);
+    throw new Error('aurora-field: no canvas here; pass ImageData ({ width, height, data }) instead');
+  }
+  // fromImage(ImageData | canvas | image, { threshold 0.5, invert, alpha, edges 0.5, depth, tone: 'luma' })
+  // Bright (or opaque) pixels become points; `edges` of them go to outlines so the shape reads crisp.
+  function fromImage(src, opt) {
+    opt = opt || {};
+    var img = src;
+    if (!src || !src.data) {
+      var w0 = src.naturalWidth || src.videoWidth || src.width, h0 = src.naturalHeight || src.videoHeight || src.height, sc = Math.min(1, 320 / Math.max(w0, h0));
+      var cv = rasterCanvas(Math.max(1, Math.round(w0 * sc)), Math.max(1, Math.round(h0 * sc))), g = cv.getContext('2d');
+      g.drawImage(src, 0, 0, cv.width, cv.height); img = g.getImageData(0, 0, cv.width, cv.height);
+    }
+    var W = img.width, H = img.height, D = img.data, th = opt.threshold == null ? 0.5 : opt.threshold, on = new Uint8Array(W * H), lum = new Float32Array(W * H), x, y;
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) {
+      var q = (y * W + x) * 4, L = (0.2126 * D[q] + 0.7152 * D[q + 1] + 0.0722 * D[q + 2]) / 255, A = D[q + 3] / 255;
+      var v = opt.alpha ? A : (opt.invert ? 1 - L : L) * A;
+      lum[y * W + x] = L; on[y * W + x] = v > th ? 1 : 0;
+    }
+    var fill = [], edge = [];
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) {
+      if (!on[y * W + x]) continue;
+      var isEdge = x === 0 || y === 0 || x === W - 1 || y === H - 1 || !on[y * W + x - 1] || !on[y * W + x + 1] || !on[(y - 1) * W + x] || !on[(y + 1) * W + x];
+      (isEdge ? edge : fill).push(y * W + x);
+    }
+    if (!fill.length && !edge.length) throw new Error('aurora-field: fromImage found no pixels over the threshold');
+    var fit = fitBox([[0, 0, 0], [W, H, 0]], opt.scale);
+    return function (n, r) {
+      var pts = [], tone = [], ne = edge.length ? Math.floor(n * (opt.edges == null ? 0.5 : opt.edges)) : 0, depth = opt.depth == null ? 0.08 : opt.depth;
+      for (var i = 0; i < n; i++) {
+        var pool = (i < ne || !fill.length) ? edge : fill, id = pool[Math.floor(r() * pool.length)];
+        var p = fit([id % W + r() - 0.5, Math.floor(id / W) + r() - 0.5, 0]);
+        pts.push([p[0], p[1], (r() - 0.5) * depth]); tone.push(opt.tone === 'luma' ? lum[id] : 0);
+      }
+      return { points: pts, tone: opt.tone === 'luma' ? tone : null, facing: opt.facing !== false, kick: 0.3 };
+    };
+  }
+  // fromText('Hello', { font: '800 160px sans-serif', ... fromImage options }) — needs a canvas (DOM or OffscreenCanvas)
+  function fromText(text, opt) {
+    opt = opt || {};
+    var font = opt.font || '800 160px sans-serif', probe = rasterCanvas(8, 8).getContext('2d');
+    probe.font = font;
+    var lines = String(text).split('\n'), size = parseFloat((font.match(/(\d+(?:\.\d+)?)px/) || [0, 160])[1]), w = 8, i;
+    for (i = 0; i < lines.length; i++) w = Math.max(w, Math.ceil(probe.measureText(lines[i]).width));
+    var cv = rasterCanvas(w + 16, Math.ceil(size * 1.25 * lines.length) + 16), g = cv.getContext('2d');
+    g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height); g.fillStyle = '#fff'; g.font = font; g.textBaseline = 'top';
+    for (i = 0; i < lines.length; i++) g.fillText(lines[i], 8, 8 + i * size * 1.25);
+    return fromImage(g.getImageData(0, 0, cv.width, cv.height), merge({ edges: 0.55 }, opt));
+  }
 
   var DEFAULTS = {
     container: null,          // element whose box sizes the canvas (default: canvas.parentNode)
@@ -283,6 +489,29 @@
     onStats: null,            // ({fps, nodes, quality}) once a second while running
     onSpinout: null           // () when someone spins it really hard (|ω| > 7 rad/s)
   };
+  // ---- palettes: presets by name; two-tone ones have an accent that shapes paint with `tone` ----
+  // (armour lines carry tone: 1 for their accent parts; other shapes shade top → bottom)
+  var PALETTES = {
+    aurora: {},
+    'mark-iii': { point: [214, 46, 52], accent: [255, 196, 92], hot: '#FFF4DC', star: '#F0D8C0', signal: [255, 214, 140], head: [255, 236, 200], glow: [214, 46, 52], glow2: [120, 30, 30], fog: [80, 30, 36] },
+    ranger: { point: [236, 242, 250], accent: [232, 182, 72], hot: '#FFFFFF', star: '#E6E2D6', signal: [255, 222, 140], head: [255, 240, 205], glow: [210, 200, 170], glow2: [120, 100, 60], fog: [70, 72, 84] },
+    verse: { point: [255, 52, 160], accent: [48, 226, 255], hot: '#FFF0FA', star: '#D8E8FF', signal: [140, 245, 255], head: [255, 210, 240], glow: [255, 52, 160], glow2: [40, 120, 200], fog: [70, 40, 110] },
+    barbenheimer: { point: [255, 118, 196], accent: [255, 140, 48], hot: '#FFF3E8', star: '#FFE0D0', signal: [255, 200, 120], head: [255, 230, 210], glow: [255, 118, 196], glow2: [150, 60, 30], fog: [90, 44, 60] },
+    'upside-down': { point: [255, 54, 64], accent: [84, 124, 255], hot: '#FFE8E8', star: '#C8D0FF', signal: [150, 180, 255], head: [255, 210, 210], glow: [220, 40, 50], glow2: [40, 60, 160], fog: [60, 30, 70] },
+    'night-city': { point: [252, 236, 12], accent: [0, 238, 255], hot: '#FFFFF0', star: '#D0FBFF', signal: [140, 255, 255], head: [255, 252, 200], glow: [252, 236, 12], glow2: [0, 120, 140], fog: [60, 70, 40] },
+    spice: { point: [242, 148, 58], accent: [70, 150, 255], hot: '#FFF2E2', star: '#F2DCC0', signal: [150, 200, 255], head: [255, 228, 196], glow: [242, 148, 58], glow2: [120, 70, 30], fog: [84, 58, 44] },
+    ember: { point: [255, 158, 94], hot: '#FFF4E8', star: '#FFE2C9', signal: [255, 214, 170], head: [255, 236, 214], glow: [255, 140, 80], glow2: [160, 60, 30], fog: [90, 50, 40] },
+    ice: { point: [140, 190, 255], hot: '#F2F7FF', star: '#D6E6FF', signal: [200, 225, 255], head: [230, 240, 255], glow: [120, 170, 255], glow2: [50, 80, 160], fog: [40, 60, 100] },
+    mono: { point: [220, 224, 228], hot: '#FFFFFF', star: '#DDE3E6', signal: [245, 247, 248], head: [255, 255, 255], glow: [200, 205, 210], glow2: [90, 95, 100], fog: [70, 74, 80] }
+  };
+  function palette(p) {
+    var base = DEFAULTS.palette;
+    if (typeof p === 'string') { if (!PALETTES[p]) throw new Error('aurora-field: unknown palette "' + p + '"'); p = PALETTES[p]; }
+    else if (p && typeof p.preset === 'string') p = merge(PALETTES[p.preset] || {}, p);
+    var out = merge(base, p);
+    if (!out.accent) out.accent = out.point;
+    return out;
+  }
   function merge(base, over) {
     var out = {}, k;
     for (k in base) if (Object.prototype.hasOwnProperty.call(base, k)) out[k] = base[k];
@@ -310,7 +539,11 @@
       adj = []; for (i = 0; i < n; i++) adj.push([]);
       for (i = 0; i < s.pairs.length; i++) { adj[s.pairs[i][0]].push(s.pairs[i][1]); adj[s.pairs[i][1]].push(s.pairs[i][0]); }
     }
-    var c = { def: s, T: T, adj: adj };
+    // tone (0 = point colour, 1 = accent): from the shape, or shaded top → bottom
+    var TN = f32(n), lo = 1e9, hi = -1e9;
+    if (s.tone && s.tone.length === n) for (i = 0; i < n; i++) TN[i] = +s.tone[i] || 0;
+    else { for (i = 0; i < n; i++) { lo = Math.min(lo, T[i * 3 + 1]); hi = Math.max(hi, T[i * 3 + 1]); } for (i = 0; i < n; i++) TN[i] = hi > lo ? (T[i * 3 + 1] - lo) / (hi - lo) : 0; }
+    var c = { def: s, T: T, adj: adj, tone: TN };
     CACHE[key] = c; CACHE_KEYS.push(key);
     if (CACHE_KEYS.length > 24) delete CACHE[CACHE_KEYS.shift()];
     return c;
@@ -321,7 +554,7 @@
 
   function create(canvas, options) {
     var o = merge(DEFAULTS, options);
-    o.palette = merge(DEFAULTS.palette, options && options.palette);
+    o.palette = palette(options && options.palette);
     if (!canvas || !canvas.getContext) throw new Error('aurora-field: needs a <canvas>');
     var gl = null, ctx = null;
     if (o.renderer !== '2d') {
@@ -330,14 +563,20 @@
     }
     if (!gl) ctx = canvas.getContext('2d');
     if (!gl && !ctx) throw new Error('aurora-field: needs a <canvas> with a WebGL or 2D context');
-    var win = canvas.ownerDocument.defaultView || window, doc = canvas.ownerDocument;
-    var container = o.container || canvas.parentNode, stage = o.stage || container;
+    // a canvas in a document, or a headless one (OffscreenCanvas in a worker, a server-side
+    // canvas): headless fields are sized by width/height/dpr and driven through field.pointer()
+    var doc = canvas.ownerDocument || null, headless = !doc || !canvas.getBoundingClientRect;
+    var win = (doc && doc.defaultView) || (typeof self !== 'undefined' ? self : {});
+    var container = headless ? null : (o.container || canvas.parentNode), stage = headless ? null : (o.stage || container);
+    var VW = headless ? (+o.width || canvas.width || 300) : (win.innerWidth || 1024);
+    var raf0 = win.requestAnimationFrame ? function (f) { return win.requestAnimationFrame(f); } : function (f) { return setTimeout(function () { f(now()); }, 16); };
+    var caf0 = win.cancelAnimationFrame ? function (h) { win.cancelAnimationFrame(h); } : function (h) { clearTimeout(h); };
     var reduced = o.reducedMotion === 'auto' ? !!(win.matchMedia && win.matchMedia('(prefers-reduced-motion: reduce)').matches) : !!o.reducedMotion;
     var AUTO = reduced ? 0 : Math.max(0, Math.min(1, +o.autonomy || 0));
     var seed = o.seed == null ? SESSION_SEED : (o.seed >>> 0);
     var r = rng(seed), i;
     // the GPU path draws ~2× the particles for the same frame budget
-    var N = typeof o.count === 'function' ? o.count(win.innerWidth) : (o.count || (gl ? (win.innerWidth < 760 ? 1400 : 2800) : (win.innerWidth < 760 ? 900 : 1600)));
+    var N = typeof o.count === 'function' ? o.count(VW) : (o.count || (gl ? (VW < 760 ? 1400 : 2800) : (VW < 760 ? 900 : 1600)));
     var names = (o.shapes || ORDER).slice();
     for (i = 0; i < names.length; i++) if (!SHAPES[names[i]]) throw new Error('aurora-field: unknown shape "' + names[i] + '"');
     var cycleList = (o.rotation || names).slice();
@@ -347,40 +586,60 @@
     var X = f32(N), Y = f32(N), Z = f32(N), VX = f32(N), VY = f32(N), VZ = f32(N);
     var OX = f32(N), OY = f32(N), SX = f32(N), SY = f32(N), ZZ = f32(N);
     var W = f32(N), PH = f32(N), GLOW = f32(N), SC = f32(N);
-    var HOT = i32(N), TI = i32(N), OWN = i32(N);
+    var HOT = i32(N), TI = i32(N), OWN = i32(N), TONE = f32(N);
+    // breathing without per-particle trig: sin(a + q) = sin a cos q + cos a sin q, tables built once
+    var BC1 = f32(N), BS1 = f32(N), BC2 = f32(N), BS2 = f32(N), BC3 = f32(N), BS3 = f32(N);
     for (i = 0; i < N; i++) {
       var r0 = between(r, 2.5, 6), th = between(r, 0, TAU), ph = Math.acos(between(r, -1, 1));
       X[i] = r0 * Math.sin(ph) * Math.cos(th); Y[i] = r0 * Math.cos(ph); Z[i] = r0 * Math.sin(ph) * Math.sin(th);
       W[i] = between(r, 4.2, 8.5);          // each particle's own spring: some eager, some lazy
       PH[i] = between(r, 0, TAU);
+      BC1[i] = Math.cos(PH[i]); BS1[i] = Math.sin(PH[i]); BC2[i] = Math.cos(PH[i] * 1.7); BS2[i] = Math.sin(PH[i] * 1.7); BC3[i] = Math.cos(PH[i] * 0.6); BS3[i] = Math.sin(PH[i] * 0.6);
       HOT[i] = r() < 0.07 ? 1 : 0;
       TI[i] = i; OWN[i] = i;                // particle i currently holds point i (they trade later)
     }
     var S = {};
-    for (i = 0; i < names.length; i++) { var c0 = compile(names[i], N, seed); S[names[i]] = { def: c0.def, T: c0.T, adj: c0.adj, w: 0 }; }
+    for (i = 0; i < names.length; i++) { var c0 = compile(names[i], N, seed); S[names[i]] = { def: c0.def, T: c0.T, adj: c0.adj, tone: c0.tone, w: 0 }; }
     var stars = [];
     for (i = 0; i < o.stars; i++) stars.push([r(), r() * 0.8, between(r, 0.4, 1.3), between(r, 0, TAU)]);
 
     var shape = o.initial || names[0], autoAt = 0, pinnedUntil = 0, born = 0, introDone = false;
     S[shape].w = 1;
+    for (i = 0; i < N; i++) TONE[i] = S[shape].tone[TI[i]];
     var CW = 0, CH = 0, DPR = 1, cx = 0, cy = 0, R = 1, D = Math.max(1.6, +o.depth || 2.8);
     var rotY = 0, rotX = -0.32, rotZ = 0, pose = null, vy = 0.9, kick = 0, mx = -1e4, my = -1e4, pointerIn = false, par = 0, down = null, waves = [], sig = [];
-    var BUCKETS = 11, bCount = i32(BUCKETS + 1), bIdx = i32((BUCKETS + 1) * N), hotIdx = i32(N), litIdx = i32(N);
+    var BUCKETS = 11, bCount = i32((BUCKETS + 1) * 2), bIdx = i32((BUCKETS + 1) * 2 * N), hotIdx = i32(N), litIdx = i32(N);
     var fps = 60, fAcc = 0, fN = 0, level = o.quality === 'low' ? 3 : 0, good = 0, spunAt = 0;
     var raf = 0, last = 0, running = false, wanted = true, inView = true, destroyed = false, listeners = [], settle = 0, clock = 0, GLR = null, lost = false;
     var glowCache = null, glowKey = '', haloCache = null, haloKey = '';
     // scouts: a few particles leave the shape, orbit with a trail, and come home
-    var SCOUTS = [], MAXSCOUTS = Math.round(N * 0.008 * AUTO), TRAIL = 10;
+    var SCOUTS = [], MAXSCOUTS = Math.round(N * 0.008), TRAIL = 10, arrived = false;
 
+    // events: field.on('shape' | 'stats' | 'spinout' | 'settled' | 'frame', fn); the on* options still work
+    var EV = {};
+    function emit(name, a) {
+      var cb = { shape: o.onShape, stats: o.onStats, spinout: o.onSpinout }[name];
+      if (cb) cb(a);
+      var l = EV[name]; if (l) for (var q = 0; q < l.length; q++) l[q](a);
+    }
     function on(el, ev, fn, opt) { el.addEventListener(ev, fn, opt || false); listeners.push([el, ev, fn, opt || false]); }
     function now() { return Date.now(); }
+    function mkCanvas(w, h) {
+      if (doc && doc.createElement) { var c = doc.createElement('canvas'); c.width = w; c.height = h; return c; }
+      return typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : null;
+    }
     function step() { return LADDER[level][0]; }
 
     function layout() {
-      var cr = container.getBoundingClientRect(); CW = cr.width; CH = cr.height; if (!CW || !CH) return;
-      DPR = Math.min(win.devicePixelRatio || 1, o.maxDpr, LADDER[level][1]);
+      var cr, g;
+      if (headless) {
+        // sized by options (field.resize(w, h, dpr) updates them); the stage is a rect or the whole canvas
+        cr = { left: 0, top: 0, width: +o.width || 300, height: +o.height || 150 };
+        g = o.stageRect ? { left: o.stageRect.x || 0, top: o.stageRect.y || 0, width: o.stageRect.width, height: o.stageRect.height } : cr;
+      } else { cr = container.getBoundingClientRect(); g = stage.getBoundingClientRect(); }
+      CW = cr.width; CH = cr.height; if (!CW || !CH) return;
+      DPR = Math.min((headless ? +o.dpr : win.devicePixelRatio) || 1, o.maxDpr, LADDER[level][1]);
       canvas.width = Math.round(CW * DPR); canvas.height = Math.round(CH * DPR);
-      var g = stage.getBoundingClientRect();
       cx = g.left - cr.left + g.width / 2; cy = g.top - cr.top + g.height / 2;
       R = o.radius ? o.radius(g.width, g.height) : Math.max(90, Math.min(g.width * 0.42, g.height * 0.36, 330));
       glowKey = '';
@@ -391,8 +650,7 @@
       var key = Math.round(R * DPR) + '|' + o.palette.glow + '|' + o.palette.glow2;
       if (key === glowKey) return glowCache;
       glowKey = key; glowCache = null;
-      if (!doc.createElement) return null;
-      var sz = Math.max(2, Math.ceil(R * 3 * DPR)), c = doc.createElement('canvas'), g = c.getContext && c.getContext('2d');
+      var sz = Math.max(2, Math.ceil(R * 3 * DPR)), c = mkCanvas(sz, sz), g = c && c.getContext && c.getContext('2d');
       if (!g) return null;
       c.width = sz; c.height = sz;
       var gr = g.createRadialGradient(sz / 2, sz / 2, 0, sz / 2, sz / 2, sz / 2);
@@ -405,8 +663,7 @@
       var key = String(o.palette.point);
       if (key === haloKey) return haloCache;
       haloKey = key; haloCache = null;
-      if (!doc.createElement) return null;
-      var c = doc.createElement('canvas'), g = c.getContext && c.getContext('2d'); if (!g) return null;
+      var c = mkCanvas(64, 64), g = c && c.getContext && c.getContext('2d'); if (!g) return null;
       c.width = c.height = 64;
       var gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
       gr.addColorStop(0, rgba(o.palette.point, 0.55)); gr.addColorStop(0.35, rgba(o.palette.point, 0.18)); gr.addColorStop(1, rgba(o.palette.point, 0));
@@ -466,12 +723,16 @@
           ctx.stroke();
         }
         if (links) {
-          ctx.strokeStyle = rgba(pal.point, (sh.def.lineArt ? 0.4 : 0.18) * w); ctx.lineWidth = 1; ctx.beginPath();
-          for (i = 0; i < links.length; i++) {
-            proj3(links[i][0], P1); ctx.moveTo(P1[0], P1[1]);
-            proj3(links[i][1], P1); ctx.lineTo(P1[0], P1[1]);
+          var lt = sh.def.linkTone;
+          for (var pass = 0; pass < (lt ? 2 : 1); pass++) {
+            ctx.strokeStyle = rgba(pass ? pal.accent : pal.point, (sh.def.lineArt ? 0.4 : 0.18) * w); ctx.lineWidth = 1; ctx.beginPath();
+            for (i = 0; i < links.length; i++) {
+              if (lt && (lt[i] > 0.5 ? 1 : 0) !== pass) continue;
+              proj3(links[i][0], P1); ctx.moveTo(P1[0], P1[1]);
+              proj3(links[i][1], P1); ctx.lineTo(P1[0], P1[1]);
+            }
+            ctx.stroke();
           }
-          ctx.stroke();
         }
       }
       if (sig.length) {
@@ -498,21 +759,22 @@
       }
       // points, crisp: identity transform, snapped to whole device pixels, batched by depth
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      for (k = 0; k <= BUCKETS; k++) bCount[k] = 0;
+      var NB = (BUCKETS + 1) * 2;
+      for (k = 0; k < NB; k++) bCount[k] = 0;
       var nh = 0, nl = 0;
       for (n = 0; n < N; n += stp) {
         if (GLOW[n] > 0.25 || SC[n] > 0) { litIdx[nl++] = n; continue; }
         if (HOT[n]) { hotIdx[nh++] = n; continue; }
-        k = Math.max(0, Math.min(BUCKETS, Math.round((1 - ZZ[n]) / 2 * BUCKETS)));
+        k = Math.max(0, Math.min(BUCKETS, Math.round((1 - ZZ[n]) / 2 * BUCKETS))) + (TONE[n] > 0.5 ? BUCKETS + 1 : 0);
         bIdx[k * N + bCount[k]++] = n;
       }
       // depth: far layers are small, dim and fogged; near layers are larger, saturated,
       // and get a one-pixel specular core, so the front reads sharp and the back recedes
       var fog = pal.fog || pal.point;
-      for (k = 0; k <= BUCKETS; k++) {
+      for (k = 0; k < NB; k++) {
         var cnt = bCount[k]; if (!cnt) continue;
-        var f = k / BUCKETS, m = Math.pow(f, 0.85);
-        var col = [Math.round(fog[0] + (pal.point[0] - fog[0]) * m), Math.round(fog[1] + (pal.point[1] - fog[1]) * m), Math.round(fog[2] + (pal.point[2] - fog[2]) * m)];
+        var f = (k % (BUCKETS + 1)) / BUCKETS, m = Math.pow(f, 0.85), pc = k > BUCKETS ? pal.accent : pal.point;
+        var col = [Math.round(fog[0] + (pc[0] - fog[0]) * m), Math.round(fog[1] + (pc[1] - fog[1]) * m), Math.round(fog[2] + (pc[2] - fog[2]) * m)];
         ctx.fillStyle = rgba(col, 0.1 + 0.9 * Math.pow(f, 1.5)); ctx.beginPath();
         var sz = Math.max(1, Math.round((0.6 + 2.9 * Math.pow(f, 1.25)) * DPR)), half = sz / 2;
         for (j = 0; j < cnt; j++) {
@@ -615,7 +877,7 @@
       gl.bindBuffer(gl.ARRAY_BUFFER, lbuf); gl.bufferData(gl.ARRAY_BUFFER, LB.byteLength, gl.DYNAMIC_DRAW);
       gl.bindBuffer(gl.ARRAY_BUFFER, qbuf); gl.bufferData(gl.ARRAY_BUFFER, new F32([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]), gl.STATIC_DRAW);
       var maxPt = (gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE) || [1, 64])[1];
-      var HOT = hexRGB(o.palette.hot), STAR = hexRGB(o.palette.star);
+      var HOTC = null, STARC = null, palKey = '';
       function pt(x, y, size, c, a, k) {
         if (np >= PMAX) return; var b = np * 8;
         PB[b] = x; PB[b + 1] = y; PB[b + 2] = Math.min(maxPt, size); PB[b + 3] = c[0] / 255; PB[b + 4] = c[1] / 255; PB[b + 5] = c[2] / 255; PB[b + 6] = a; PB[b + 7] = k; np++;
@@ -625,14 +887,18 @@
         LB[b] = x0; LB[b + 1] = y0; LB[b + 2] = r; LB[b + 3] = g; LB[b + 4] = bl; LB[b + 5] = a;
         LB[b + 6] = x1; LB[b + 7] = y1; LB[b + 8] = r; LB[b + 9] = g; LB[b + 10] = bl; LB[b + 11] = a; nl++;
       }
-      var COL = [0, 0, 0], P2 = [0, 0, 0];
+      var COL = [0, 0, 0], P2 = [0, 0, 0], BASE = [0, 0, 0];
+      // depth curves as lookup tables: three Math.pow per particle per frame become three reads
+      var LUT_M = new F32(257), LUT_S = new F32(257), LUT_A = new F32(257);
+      for (var li = 0; li <= 256; li++) { var lf = li / 256; LUT_M[li] = Math.pow(lf, 0.85); LUT_S[li] = 0.7 + 3.1 * Math.pow(lf, 1.25); LUT_A[li] = 0.12 + 0.88 * Math.pow(lf, 1.5); }
       function drawGL(t) {
         var pal = o.palette, fog = pal.fog || pal.point, stp = step(), n, i, j, k;
+        if (palKey !== pal.hot + pal.star) { palKey = pal.hot + pal.star; HOTC = hexRGB(pal.hot); STARC = hexRGB(pal.star); }
         np = 0; nl = 0;
         // stars
         for (i = 0; i < stars.length; i++) {
           var st = stars[i];
-          pt(st[0] * CW - par * 8 * st[2], st[1] * CH, Math.max(1, st[2] * DPR), STAR, 0.12 + 0.28 * (0.5 + 0.5 * Math.sin(t * 0.0011 * st[2] + st[3])) * st[2] / 1.3, 0);
+          pt(st[0] * CW - par * 8 * st[2], st[1] * CH, Math.max(1, st[2] * DPR), STARC, 0.12 + 0.28 * (0.5 + 0.5 * Math.sin(t * 0.0011 * st[2] + st[3])) * st[2] / 1.3, 0);
         }
         // edges, links, signals: one line batch (1 device px, so a touch brighter than 2D)
         for (var name in S) {
@@ -642,11 +908,12 @@
             var A = OWN[pairs[i][0]], B = OWN[pairs[i][1]]; if ((ZZ[A] > 0.35 && ZZ[B] > 0.35) || SC[A] > 0 || SC[B] > 0) continue;
             var gx = SX[A] - SX[B], gy = SY[A] - SY[B]; if (gx * gx + gy * gy > maxEdge2) continue;
             var fa = Math.max(0, Math.min(1, (1 - (ZZ[A] + ZZ[B]) / 2) / 2));
-            ln(cx + SX[A] + OX[A], cy + SY[A] + OY[A], cx + SX[B] + OX[B], cy + SY[B] + OY[B], pal.point, 0.2 * w * (0.4 + 0.6 * fa));
+            ln(cx + SX[A] + OX[A], cy + SY[A] + OY[A], cx + SX[B] + OX[B], cy + SY[B] + OY[B], TONE[A] > 0.5 ? pal.accent : pal.point, 0.2 * w * (0.4 + 0.6 * fa));
           }
+          var lt2 = sh.def.linkTone;
           if (links) for (i = 0; i < links.length; i++) {
             proj3(links[i][0], P1); proj3(links[i][1], P2);
-            ln(P1[0], P1[1], P2[0], P2[1], pal.point, (sh.def.lineArt ? 0.55 : 0.3) * w * (P1[2] < 0.2 || P2[2] < 0.2 ? 1 : 0.3));
+            ln(P1[0], P1[1], P2[0], P2[1], lt2 && lt2[i] > 0.5 ? pal.accent : pal.point, (sh.def.lineArt ? 0.55 : 0.3) * w * (P1[2] < 0.2 || P2[2] < 0.2 ? 1 : 0.3));
           }
         }
         for (i = 0; i < sig.length; i++) {
@@ -666,18 +933,21 @@
           for (k = 0; k < 48; k++) { var a0 = k / 48 * TAU, a1 = (k + 1) / 48 * TAU; ln(wv.x + Math.cos(a0) * wv.t, wv.y + Math.sin(a0) * wv.t, wv.x + Math.cos(a1) * wv.t, wv.y + Math.sin(a1) * wv.t, pal.point, wa); }
         }
         // particles: continuous depth (no buckets on the GPU) — size, fog and alpha by z
+        var pp0 = pal.point, pa0 = pal.accent, two = pp0 !== pa0;
         for (n = 0; n < N; n += stp) {
-          var x = cx + SX[n] + OX[n], y = cy + SY[n] + OY[n];
+          var x = cx + SX[n] + OX[n], y = cy + SY[n] + OY[n], tn = two ? TONE[n] : 0;
+          BASE[0] = pp0[0] + (pa0[0] - pp0[0]) * tn; BASE[1] = pp0[1] + (pa0[1] - pp0[1]) * tn; BASE[2] = pp0[2] + (pa0[2] - pp0[2]) * tn;
           if (GLOW[n] > 0.25 || SC[n] > 0) {
             var gl2 = Math.max(GLOW[n], SC[n] > 0 ? 0.8 : 0);
-            pt(x, y, (5 + 8 * gl2) * DPR, pal.point, 0.42, 2);
-            pt(x, y, Math.max(2, 2.4 * DPR), HOT, 1, 0);
+            pt(x, y, (5 + 8 * gl2) * DPR, BASE, 0.42, 2);
+            pt(x, y, Math.max(2, 2.4 * DPR), HOTC, 1, 0);
             continue;
           }
-          if (HOT[n]) { pt(x, y, Math.max(1.5, (ZZ[n] < 0 ? 2.8 : 1.5) * DPR), HOT, 1, ZZ[n] < 0 ? 1 : 0); continue; }
-          var f = Math.max(0, Math.min(1, (1 - ZZ[n]) / 2)), m = Math.pow(f, 0.85), size = Math.max(1.2, (0.7 + 3.1 * Math.pow(f, 1.25)) * DPR);
-          COL[0] = fog[0] + (pal.point[0] - fog[0]) * m; COL[1] = fog[1] + (pal.point[1] - fog[1]) * m; COL[2] = fog[2] + (pal.point[2] - fog[2]) * m;
-          pt(x, y, size, COL, 0.12 + 0.88 * Math.pow(f, 1.5), f > 0.55 && size >= 3 ? 1 : 0);
+          if (HOT[n]) { pt(x, y, Math.max(1.5, (ZZ[n] < 0 ? 2.8 : 1.5) * DPR), HOTC, 1, ZZ[n] < 0 ? 1 : 0); continue; }
+          var f = (1 - ZZ[n]) / 2; f = f < 0 ? 0 : f > 1 ? 1 : f;
+          var li2 = (f * 256 + 0.5) | 0, m = LUT_M[li2], size = Math.max(1.2, LUT_S[li2] * DPR);
+          COL[0] = fog[0] + (BASE[0] - fog[0]) * m; COL[1] = fog[1] + (BASE[1] - fog[1]) * m; COL[2] = fog[2] + (BASE[2] - fog[2]) * m;
+          pt(x, y, size, COL, LUT_A[li2], f > 0.55 && size >= 3 ? 1 : 0);
         }
         for (i = 0; i < sig.length; i++) {
           var g2 = sig[i], a2 = OWN[g2.a], b2 = OWN[g2.b];
@@ -753,7 +1023,7 @@
         rotZ += (0 - rotZ) * Math.min(1, dt * 3);
       }
       rotY += (vy + kick) * dt; kick *= Math.pow(0.12, dt);
-      if (Math.abs(vy) > 7 && tn > spunAt) { spunAt = tn + 4000; if (o.onSpinout) o.onSpinout(); }
+      if (Math.abs(vy) > 7 && tn > spunAt) { spunAt = tn + 4000; emit('spinout'); }
 
       // ---- autonomy: particles manage themselves ----
       if (AUTO > 0 && introDone) {
@@ -789,7 +1059,8 @@
         for (k = 0; k < br.length; k++) { var bn = OWN[br[k]]; if (!SC[bn] && GLOW[bn] < lit) GLOW[bn] = lit; }
       }
       // ---- physics: each particle is a damped spring toward its point, swirling in ----
-      var breathe = 0.014 * AUTO, swirlK = 1.6;
+      var breathe = 0.014 * AUTO, swirlK = 1.6, TN0 = cur.tone, tk = Math.min(1, dt * 3);
+      var bs1 = Math.sin(clock * 1.3), bc1 = Math.cos(clock * 1.3), bs2 = Math.sin(clock * 1.1), bc2 = Math.cos(clock * 1.1), bs3 = Math.sin(clock * 0.9), bc3 = Math.cos(clock * 0.9);
       var near = o.interactive && pointerIn, waveOn = waves.length > 0;
       for (n = 0; n < N; n++) {
         var p = TI[n], tx, ty, tz;
@@ -800,8 +1071,7 @@
           var fl = def.flow ? def.flow(p, flowT) : null;
           if (fl) { tx = fl[0]; ty = fl[1]; tz = fl[2]; } else { tx = T[p * 3]; ty = T[p * 3 + 1]; tz = T[p * 3 + 2]; }
           if (breathe) {
-            var q = PH[n];
-            tx += breathe * Math.sin(clock * 1.3 + q); ty += breathe * Math.sin(clock * 1.1 + q * 1.7); tz += breathe * Math.cos(clock * 0.9 + q * 0.6);
+            tx += breathe * (bs1 * BC1[n] + bc1 * BS1[n]); ty += breathe * (bs2 * BC2[n] + bc2 * BS2[n]); tz += breathe * (bc3 * BC3[n] - bs3 * BS3[n]);
           }
         }
         var om = W[n] * (introDone ? 1 : 0.55), damp = 1.5 * om;
@@ -822,6 +1092,7 @@
           }
         }
         OX[n] *= 0.9; OY[n] *= 0.9;
+        TONE[n] += (TN0[p] - TONE[n]) * tk;              // colours morph with the shape
         if (GLOW[n] > 0) GLOW[n] = Math.max(0, GLOW[n] - dt * 1.6);
       }
       for (var w = waves.length - 1; w >= 0; w--) { waves[w].t += dt * 620; if (waves[w].t > 700) waves.splice(w, 1); }
@@ -835,6 +1106,7 @@
       // breathing is part of being in shape, so it doesn't count as error
       var target = cnt ? Math.max(0, Math.min(1, 1 - Math.max(0, err / cnt - breathe * 2.2) * 4)) : 1;
       settle += (target - settle) * Math.min(1, dt * 6);
+      if (!arrived && settle > 0.9) { arrived = true; emit('settled', shape); }
       // signals: fire on their own; each node they reach lights up
       if (cur.adj && settle > 0.6 && Math.random() < dt * (6 + 8 * AUTO)) fire(shape, Math.floor(Math.random() * N));
       for (var s = sig.length - 1; s >= 0; s--) {
@@ -864,18 +1136,19 @@
       if (fAcc >= 1) {
         fps = Math.round(fN / fAcc); fAcc = 0; fN = 0;
         govern();
-        if (o.onStats) o.onStats({ fps: fps, nodes: Math.ceil(N / step()), quality: level });
+        emit('stats', { fps: fps, nodes: Math.ceil(N / step()), quality: level });
       }
-      raf = win.requestAnimationFrame(frame);
+      if (EV.frame) emit('frame', t);
+      raf = raf0(frame);
     }
     function sync() {
-      var want = wanted && !destroyed && !lost && !reduced && (!o.autoPause || (!doc.hidden && inView));
-      if (want && !running) { running = true; last = 0; if (!raf) raf = win.requestAnimationFrame(frame); }
-      else if (!want && running) { running = false; if (raf) { win.cancelAnimationFrame(raf); raf = 0; } }
+      var want = wanted && !destroyed && !lost && !reduced && (!o.autoPause || (!(doc && doc.hidden) && inView));
+      if (want && !running) { running = true; last = 0; if (!raf) raf = raf0(frame); }
+      else if (!want && running) { running = false; if (raf) { caf0(raf); raf = 0; } }
     }
     function snap(name) {
       var T = S[name].T;
-      for (var n = 0; n < N; n++) { var p = TI[n]; X[n] = T[p * 3]; Y[n] = T[p * 3 + 1]; Z[n] = T[p * 3 + 2]; VX[n] = VY[n] = VZ[n] = 0; }
+      for (var n = 0; n < N; n++) { var p = TI[n]; X[n] = T[p * 3]; Y[n] = T[p * 3 + 1]; Z[n] = T[p * 3 + 2]; VX[n] = VY[n] = VZ[n] = 0; TONE[n] = S[name].tone[p]; }
       settle = 1;
     }
     function setShape(name, opt) {
@@ -884,44 +1157,49 @@
       if (pin) pinnedUntil = now() + (pin === true ? o.pin : pin);
       autoAt = now() + o.cycle;
       if (name === shape) return api;
-      shape = name; kick += S[name].def.kick || 0.6; sig.length = 0;
+      shape = name; kick += S[name].def.kick || 0.6; sig.length = 0; arrived = false;
       if (reduced) { for (var nm in S) S[nm].w = nm === name ? 1 : 0; snap(name); draw(0); }
-      if (o.onShape) o.onShape(name);
+      emit('shape', name);
       return api;
     }
 
-    // ---- input ----
+    // ---- input: DOM pointer events and field.pointer() share one path ----
+    function pMove(x, y) {
+      mx = x; my = y; par = mx / (CW || 1) - 0.5;
+      pointerIn = Math.abs(mx - cx) < R * 1.8 + 90 && Math.abs(my - cy) < R * 1.8 + 90;
+      if (down) {
+        var dx = x - down[0];
+        vy = dx * 0.06 * 60 / Math.max(16, now() - down[2] + 16);
+        rotY += dx * 0.006; rotX = Math.max(-1.1, Math.min(0.6, rotX + (y - down[1]) * 0.004));
+        down = [x, y, now(), down[3] + Math.abs(dx) + Math.abs(y - down[1])];
+        if (!running) draw(0);
+      }
+    }
+    function pLeave() { mx = my = -1e4; pointerIn = false; }
+    function pDown(x, y) { down = [x, y, now(), 0]; }
+    function pUp(x, y, touch) {
+      if (!down) return; var moved = down[3]; down = null;
+      if (moved < 6) pulse(x, y);
+      if (touch) pLeave();
+    }
+    function pulse(x, y) { waves.push({ x: x, y: y, t: 0 }); if (waves.length > 4) waves.shift(); kick += 0.8; burst(); }
     function pos(e) { var b = canvas.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; }
-    if (o.interactive) {
-      on(canvas, 'pointermove', function (e) {
-        var p = pos(e); mx = p[0]; my = p[1]; par = mx / (CW || 1) - 0.5;
-        pointerIn = Math.abs(mx - cx) < R * 1.8 + 90 && Math.abs(my - cy) < R * 1.8 + 90;
-        if (down) {
-          var dx = p[0] - down[0];
-          vy = dx * 0.06 * 60 / Math.max(16, now() - down[2] + 16);
-          rotY += dx * 0.006; rotX = Math.max(-1.1, Math.min(0.6, rotX + (p[1] - down[1]) * 0.004));
-          down = [p[0], p[1], now(), down[3] + Math.abs(dx) + Math.abs(p[1] - down[1])];
-          if (!running) draw(0);
-        }
-      });
-      on(canvas, 'pointerleave', function () { mx = my = -1e4; pointerIn = false; });
+    if (o.interactive && !headless) {
+      on(canvas, 'pointermove', function (e) { var p = pos(e); pMove(p[0], p[1]); });
+      on(canvas, 'pointerleave', pLeave);
       on(canvas, 'pointerdown', function (e) {
-        var p = pos(e); down = [p[0], p[1], now(), 0]; canvas.setAttribute('data-dragging', '');
+        var p = pos(e); pDown(p[0], p[1]); canvas.setAttribute('data-dragging', '');
         if (e.pointerType !== 'touch' && canvas.setPointerCapture) try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
       });
-      on(canvas, 'pointerup', function (e) {
-        if (!down) return; var moved = down[3]; down = null; canvas.removeAttribute('data-dragging');
-        if (moved < 6) { var p = pos(e); waves.push({ x: p[0], y: p[1], t: 0 }); if (waves.length > 4) waves.shift(); kick += 0.8; burst(); }
-        if (e.pointerType === 'touch') { mx = my = -1e4; pointerIn = false; }
-      });
+      on(canvas, 'pointerup', function (e) { var p = pos(e); canvas.removeAttribute('data-dragging'); pUp(p[0], p[1], e.pointerType === 'touch'); });
       on(canvas, 'pointercancel', function () { down = null; canvas.removeAttribute('data-dragging'); });
     }
     var io = null;
-    if (o.autoPause) {
-      if (win.IntersectionObserver) { io = new win.IntersectionObserver(function (es) { inView = es[0].isIntersecting; sync(); }); io.observe(container); }
+    if (o.autoPause && doc) {
+      if (win.IntersectionObserver && container) { io = new win.IntersectionObserver(function (es) { inView = es[0].isIntersecting; sync(); }); io.observe(container); }
       on(doc, 'visibilitychange', sync);
     }
-    on(win, 'resize', function () { layout(); });
+    if (!headless && win.addEventListener) on(win, 'resize', function () { layout(); });
 
     var api = {
       version: VERSION,
@@ -940,11 +1218,45 @@
       anchors: function () { var a = S[shape].def.anchors, res = {}; if (a) for (var k in a) res[k] = api.project(a[k]); return res; },
       // the field's current orientation in radians, and the shape radius in CSS px
       view: function () { var y = rotY % TAU; if (y > Math.PI) y -= TAU; if (y < -Math.PI) y += TAU; return { yaw: y, pitch: rotX, roll: rotZ, radius: R, x: cx, y: cy }; },
+      // drive input without DOM events (workers, game loops, other platforms): type is
+      // 'move' | 'down' | 'up' | 'leave' | 'pulse'; x, y in CSS px within the field
+      pointer: function (type, x, y) {
+        if (type === 'move') pMove(x, y); else if (type === 'down') { pMove(x, y); pDown(x, y); }
+        else if (type === 'up') pUp(x, y, false); else if (type === 'leave') pLeave(); else if (type === 'pulse') pulse(x, y);
+        return api;
+      },
+      on: function (name, fn) { (EV[name] || (EV[name] = [])).push(fn); return api; },
+      off: function (name, fn) { var l = EV[name]; if (l) for (var q = l.length - 1; q >= 0; q--) if (!fn || l[q] === fn) l.splice(q, 1); return api; },
+      // change options live: palette (name or object), autonomy, cycle, pin, depth, quality,
+      // fpsFloor, maxDpr, radius, rotation, interactive, autoPause; headless: width, height, dpr, stageRect
+      set: function (opts) {
+        if (!opts) return api;
+        var relayout = false;
+        if (opts.palette !== undefined) { o.palette = palette(opts.palette); glowKey = ''; haloKey = ''; }
+        if (opts.autonomy !== undefined) AUTO = reduced ? 0 : Math.max(0, Math.min(1, +opts.autonomy || 0));
+        if (opts.cycle !== undefined) { o.cycle = +opts.cycle || 0; autoAt = now() + o.cycle; }
+        if (opts.pin !== undefined) o.pin = +opts.pin;
+        if (opts.depth !== undefined) D = Math.max(1.6, +opts.depth || 2.8);
+        if (opts.fpsFloor !== undefined) o.fpsFloor = +opts.fpsFloor;
+        if (opts.quality !== undefined) { o.quality = opts.quality; level = o.quality === 'low' ? 3 : 0; good = 0; relayout = true; }
+        if (opts.rotation !== undefined) {
+          var rl = (opts.rotation || names).slice();
+          for (var q = 0; q < rl.length; q++) if (names.indexOf(rl[q]) < 0) throw new Error('aurora-field: rotation shape "' + rl[q] + '" is not in shapes');
+          cycleList = rl;
+        }
+        if (opts.interactive !== undefined) { o.interactive = !!opts.interactive; if (!o.interactive) pLeave(); }
+        if (opts.autoPause !== undefined) { o.autoPause = !!opts.autoPause; sync(); }
+        var lk = ['maxDpr', 'radius', 'width', 'height', 'dpr', 'stageRect'];
+        for (q = 0; q < lk.length; q++) if (opts[lk[q]] !== undefined) { o[lk[q]] = opts[lk[q]]; relayout = true; }
+        if (relayout) layout();
+        if (!running) draw(0);
+        return api;
+      },
       next: function () { var ci = cycleList.indexOf(shape); return setShape(cycleList[(ci + 1) % cycleList.length], { pin: true }); },
       play: function () { wanted = true; layout(); sync(); return api; },
       pause: function () { wanted = false; sync(); return api; },
-      resize: function () { layout(); return api; },
-      stats: function () { return { fps: fps, nodes: Math.ceil(N / step()), running: running, reduced: reduced, shape: shape, quality: level, scouts: SCOUTS.length, settle: Math.round(settle * 100) / 100, renderer: GLR ? 'webgl' : '2d' }; },
+      resize: function (w, h, dpr) { if (w != null) { o.width = w; o.height = h; if (dpr != null) o.dpr = dpr; } layout(); return api; },
+      stats: function () { return { fps: fps, nodes: Math.ceil(N / step()), running: running, reduced: reduced, shape: shape, quality: level, scouts: SCOUTS.length, settle: Math.round(settle * 100) / 100, renderer: GLR ? 'webgl' : '2d', headless: headless }; },
       destroy: function () {
         destroyed = true; sync();
         for (var l = 0; l < listeners.length; l++) listeners[l][0].removeEventListener(listeners[l][1], listeners[l][2], listeners[l][3]);
@@ -957,13 +1269,79 @@
     if (gl) {
       GLR = makeGL();
       // the GPU can take the context away (driver reset, too many tabs): pause, then rebuild
-      on(canvas, 'webglcontextlost', function (e) { e.preventDefault(); lost = true; sync(); });
-      on(canvas, 'webglcontextrestored', function () { GLR = makeGL(); lost = false; layout(); sync(); });
+      if (canvas.addEventListener) on(canvas, 'webglcontextlost', function (e) { e.preventDefault(); lost = true; sync(); });
+      if (canvas.addEventListener) on(canvas, 'webglcontextrestored', function () { GLR = makeGL(); lost = false; layout(); sync(); });
     }
     if (reduced) snap(shape);
     layout();
     sync();
     return api;
+  }
+
+  // ---- offload: run the field in a Web Worker on an OffscreenCanvas ----
+  // offload(canvas, options, workerUrl) moves rendering and physics off the main thread
+  // (workerUrl: dist/aurora-field.worker.js). Returns a field-like handle, or null where
+  // OffscreenCanvas isn't supported (call create() instead). Options must be clonable:
+  // functions don't cross; pass static shapes as options.shapeData { name: { points } }.
+  function offload(canvas, options, url) {
+    if (!canvas || !canvas.transferControlToOffscreen || typeof Worker === 'undefined' || !url) return null;
+    var win = canvas.ownerDocument.defaultView, doc = canvas.ownerDocument, o = options || {}, clean = {}, k;
+    for (k in o) if (Object.prototype.hasOwnProperty.call(o, k) && typeof o[k] !== 'function' && k !== 'container' && k !== 'stage') clean[k] = o[k];
+    var container = o.container || canvas.parentNode, stage = o.stage || null, worker = new Worker(url), EV = {}, last = { shape: o.initial || (o.shapes && o.shapes[0]) || null, stats: null };
+    function rect() {
+      var b = container.getBoundingClientRect(), g = stage ? stage.getBoundingClientRect() : null;
+      return { width: b.width, height: b.height, dpr: win.devicePixelRatio || 1, stageRect: g ? { x: g.left - b.left, y: g.top - b.top, width: g.width, height: g.height } : null };
+    }
+    var r0 = rect(), off = canvas.transferControlToOffscreen();
+    clean.width = r0.width; clean.height = r0.height; clean.dpr = r0.dpr; if (r0.stageRect) clean.stageRect = r0.stageRect;
+    if (clean.reducedMotion == null || clean.reducedMotion === 'auto') clean.reducedMotion = !!(win.matchMedia && win.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    worker.postMessage({ type: 'init', canvas: off, options: clean }, [off]);
+    worker.onmessage = function (e) {
+      var m = e.data; if (!m || m.type !== 'event') return;
+      if (m.name === 'shape') last.shape = m.data; if (m.name === 'stats') last.stats = m.data;
+      var cb = { shape: o.onShape, stats: o.onStats, spinout: o.onSpinout }[m.name]; if (cb) cb(m.data);
+      var l = EV[m.name]; if (l) for (var q = 0; q < l.length; q++) l[q](m.data);
+    };
+    function call(method, args) { worker.postMessage({ type: 'call', method: method, args: args }); }
+    var listeners = [];
+    function on(el, ev, fn) { el.addEventListener(ev, fn); listeners.push([el, ev, fn]); }
+    function pos(e) { var b = canvas.getBoundingClientRect(); return [e.clientX - b.left, e.clientY - b.top]; }
+    if (o.interactive !== false) {
+      on(canvas, 'pointermove', function (e) { var p = pos(e); call('pointer', ['move', p[0], p[1]]); });
+      on(canvas, 'pointerdown', function (e) { var p = pos(e); call('pointer', ['down', p[0], p[1]]); });
+      on(canvas, 'pointerup', function (e) { var p = pos(e); call('pointer', ['up', p[0], p[1]]); if (e.pointerType === 'touch') call('pointer', ['leave']); });
+      on(canvas, 'pointerleave', function () { call('pointer', ['leave']); });
+    }
+    function resize() { var q = rect(); call('set', [{ width: q.width, height: q.height, dpr: q.dpr, stageRect: q.stageRect }]); }
+    var ro = win.ResizeObserver ? new win.ResizeObserver(resize) : null;
+    if (ro) ro.observe(container); else on(win, 'resize', resize);
+    if (o.autoPause !== false) on(doc, 'visibilitychange', function () { call(doc.hidden ? 'pause' : 'play', []); });
+    var api = {
+      version: VERSION, offloaded: true, worker: worker,
+      get shape() { return last.shape; },
+      stats: function () { return last.stats; },
+      on: function (n, fn) { (EV[n] || (EV[n] = [])).push(fn); return api; },
+      off: function (n, fn) { var l = EV[n]; if (l) for (var q = l.length - 1; q >= 0; q--) if (!fn || l[q] === fn) l.splice(q, 1); return api; },
+      destroy: function () { call('destroy', []); for (var q = 0; q < listeners.length; q++) listeners[q][0].removeEventListener(listeners[q][1], listeners[q][2]); if (ro) ro.disconnect(); setTimeout(function () { worker.terminate(); }, 50); }
+    };
+    var M = ['setShape', 'next', 'play', 'pause', 'setPose', 'set', 'pointer'];
+    for (k = 0; k < M.length; k++) (function (m) { api[m] = function () { call(m, Array.prototype.slice.call(arguments)); return api; }; })(M[k]);
+    return api;
+  }
+  // inside a worker: wire messages to a field (dist/aurora-field.worker.js calls this)
+  function serve(scope) {
+    var field = null;
+    scope.onmessage = function (e) {
+      var m = e.data; if (!m) return;
+      if (m.type === 'init') {
+        var opt = m.options || {}, data = opt.shapeData || {};
+        for (var nm in data) register(nm, data[nm]);
+        delete opt.shapeData;
+        field = create(m.canvas, opt);
+        ['shape', 'stats', 'spinout', 'settled'].forEach(function (ev) { field.on(ev, function (d) { scope.postMessage({ type: 'event', name: ev, data: d }); }); });
+        scope.postMessage({ type: 'event', name: 'ready', data: { shape: field.shape, renderer: field.stats().renderer } });
+      } else if (m.type === 'call' && field && typeof field[m.method] === 'function') field[m.method].apply(field, m.args || []);
+    };
   }
 
   // pure: build a shape without a canvas (tests, previews, custom renderers)
@@ -972,5 +1350,8 @@
     return SHAPES[name](n, rng(seed == null ? 1 : seed));
   }
 
-  return { version: VERSION, create: create, register: register, build: build, shapes: function () { return ORDER.slice(); }, defaults: DEFAULTS };
+  return {
+    version: VERSION, create: create, register: register, build: build, shapes: function () { return ORDER.slice(); }, defaults: DEFAULTS,
+    palettes: PALETTES, armour: armour, offload: offload, serve: serve, fromPoints: fromPoints, fromSVG: fromSVG, fromImage: fromImage, fromText: fromText, parsePath: parsePath
+  };
 });

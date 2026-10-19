@@ -7,9 +7,10 @@ const require = createRequire(import.meta.url);
 const AF = require('../src/aurora-field.js');
 const src = readFileSync(new URL('../src/aurora-field.js', import.meta.url), 'utf8');
 let passed = 0;
+const pending = [];
 function test(name, fn) {
-  try { fn(); passed++; console.log('  ✓ ' + name); }
-  catch (e) { console.error('  ✗ ' + name + '\n    ' + (e && e.stack || e)); process.exitCode = 1; }
+  const ok = () => { passed++; console.log('  ✓ ' + name); }, bad = e => { console.error('  ✗ ' + name + '\n    ' + (e && e.stack || e)); process.exitCode = 1; };
+  try { const r = fn(); if (r && r.then) pending.push(r.then(ok, bad)); else ok(); } catch (e) { bad(e); }
 }
 
 console.log('aurora-field ' + AF.version);
@@ -20,11 +21,11 @@ test('version matches package.json', () => {
   assert.ok(src.startsWith('/*! aurora-field v' + pkg.version + ' '), 'banner carries the version');
 });
 
-test('ships the four built-in shapes, in order', () => {
-  assert.deepEqual(AF.shapes(), ['mind', 'teams', 'platforms', 'helm']);
+test('ships the five built-in shapes, in order', () => {
+  assert.deepEqual(AF.shapes(), ['mind', 'teams', 'platforms', 'helm', 'ranger']);
 });
 
-for (const name of ['mind', 'teams', 'platforms', 'helm']) {
+for (const name of ['mind', 'teams', 'platforms', 'helm', 'ranger']) {
   test(name + ': n finite points inside a 1.3 box', () => {
     for (const n of [64, 900, 1600]) {
       const s = AF.build(name, n, 7);
@@ -208,8 +209,103 @@ test('overlays: the helm declares anchors that follow its turn', () => {
   f.destroy();
 });
 
+test('ranger: a two-tone helmet — gold accent seams, a glowing visor, anchors', () => {
+  const s = AF.build('ranger', 1600, 3);
+  assert.equal(s.tone.length, 1600);
+  const gold = s.tone.filter(t => t === 1).length;
+  assert.ok(gold > 200 && gold < 1200, 'gold seams are a part, not all: ' + gold);
+  assert.ok(s.bright.length > 100, 'the visor glows');
+  assert.ok(s.linkTone.length === s.links.length);
+  assert.ok(s.anchors.eyeL[0] < 0 && s.anchors.eyeR[0] > 0);
+});
+
+test('armour: build your own helmet from a spec', () => {
+  const b = AF.armour({ sil: [[172, 40], [400, 330], [800, 300], [1126, 90]], lines: [{ p: [[300, 600], [724, 600]], tone: 1 }], fills: [{ p: [[300, 580], [500, 580], [500, 640], [300, 640]], share: 0.05, mirror: true }] });
+  const s = b(800, () => 0.5);
+  assert.equal(s.points.length, 800);
+  assert.ok(s.points.every(p => p.every(Number.isFinite)));
+});
+
+test('palettes: presets by name, two-tone accents, unknown names throw', () => {
+  for (const name of ['aurora', 'mark-iii', 'ranger', 'verse', 'barbenheimer', 'upside-down', 'night-city', 'spice']) assert.ok(AF.palettes[name], name);
+  for (const [name, p] of Object.entries(AF.palettes)) if (name !== 'aurora') assert.ok(p.point && p.hot && p.glow && p.fog, name + ' is complete');
+  for (const name of ['mark-iii', 'ranger', 'verse', 'barbenheimer', 'upside-down', 'night-city', 'spice']) assert.ok(AF.palettes[name].accent, name + ' is two-tone');
+  const env = stubEnv();
+  assert.throws(() => AF.create(env.canvas, { palette: 'nope', count: 50 }), /unknown palette/);
+  const f = AF.create(env.canvas, { palette: 'verse', count: 300, shapes: ['ranger'], cycle: 0 });
+  env.pump(10); f.set({ palette: 'ranger' }); env.pump(5); f.set({ palette: { point: [1, 2, 3] } }); env.pump(5);
+  f.destroy();
+});
+
+test('set(): live options; on/off events; settled fires once a shape arrives', () => {
+  const env = stubEnv();
+  const seen = { shape: [], settled: 0, stats: 0 };
+  const f = AF.create(env.canvas, { seed: 2, count: 400, shapes: ['mind', 'teams'], cycle: 0, intro: 0 });
+  f.on('shape', s => seen.shape.push(s)).on('settled', () => seen.settled++).on('stats', () => seen.stats++);
+  env.pump(240);
+  assert.ok(seen.settled >= 1, 'settled');
+  assert.ok(seen.stats >= 1, 'stats');
+  f.set({ autonomy: 0, depth: 2, cycle: 1000, quality: 'low', rotation: ['teams'] });
+  assert.throws(() => f.set({ rotation: ['nope'] }), /not in shapes/);
+  f.setShape('teams'); assert.deepEqual(seen.shape, ['teams']);
+  const n = seen.shape.length; f.off('shape'); f.setShape('mind'); assert.equal(seen.shape.length, n);
+  f.destroy();
+});
+
+test('pointer(): input without DOM events drags, pulses and parts', () => {
+  const env = stubEnv();
+  const f = AF.create(env.canvas, { seed: 2, count: 300, shapes: ['mind'], cycle: 0, intro: 0 });
+  env.pump(20);
+  const y0 = f.view().yaw;
+  f.pointer('down', 600, 400).pointer('move', 700, 400).pointer('up', 700, 400);
+  assert.notEqual(f.view().yaw, y0, 'a drag turns it');
+  f.pointer('pulse', 600, 400).pointer('leave'); env.pump(10);
+  assert.ok(f.stats().settle >= 0);
+  f.destroy();
+});
+
+test('headless: a canvas with no document (OffscreenCanvas, servers) runs from width/height', () => {
+  const ctx = new Proxy({}, { get: (t, k) => (k in t ? t[k] : (k === 'createRadialGradient' ? () => ({ addColorStop() {} }) : () => {})), set: (t, k, v) => (t[k] = v, true) });
+  const canvas = { width: 0, height: 0, getContext: t => (t === '2d' ? ctx : null) };
+  const g = globalThis; const had = g.requestAnimationFrame; const q = [];
+  g.requestAnimationFrame = f => (q.push(f), q.length); g.cancelAnimationFrame = () => {};
+  try {
+    const f = AF.create(canvas, { width: 640, height: 480, dpr: 2, count: 300, shapes: ['ranger'], palette: 'ranger', cycle: 0 });
+    assert.equal(f.stats().headless, true);
+    assert.equal(canvas.width, 1280); assert.equal(canvas.height, 960);
+    for (let i = 0; i < 30; i++) q.splice(0).forEach(fn => fn(1000 + i * 16));
+    f.resize(320, 240, 1); assert.equal(canvas.width, 320);
+    const a = f.anchors(); assert.ok(a.eyeL.x > 0 && a.eyeL.x < 320);
+    f.destroy();
+  } finally { g.requestAnimationFrame = had; delete g.cancelAnimationFrame; }
+});
+
+test('factories: points, SVG paths (curves, relative commands), images', () => {
+  const pts = AF.fromPoints([[0, 0], [10, 0], [5, 8]])(90, Math.random);
+  assert.equal(pts.points.length, 90);
+  const sub = AF.parsePath('M10 10 h20 v20 h-20 Z m40 0 c10 0 10 20 0 20 q-10 -10 0 -20 z');
+  assert.equal(sub.length, 2); assert.ok(sub[0].closed && sub[1].closed && sub[1].p.length > 20);
+  const star = AF.fromSVG('M50 0 L61 35 L98 35 L68 57 L79 91 L50 70 L21 91 L32 57 L2 35 L39 35 Z', { tone: [1] })(700, Math.random);
+  assert.equal(star.points.length, 700); assert.ok(star.pairs.length > 100);
+  for (const p of star.points) for (const c of p) assert.ok(Math.abs(c) <= 1.05);
+  const W = 40, H = 20, data = new Uint8ClampedArray(W * H * 4);
+  for (let i = 0; i < W * H; i++) { const v = (i % W) > 10 && (i % W) < 30 ? 255 : 0; data[i * 4] = data[i * 4 + 1] = data[i * 4 + 2] = v; data[i * 4 + 3] = 255; }
+  const img = AF.fromImage({ width: W, height: H, data }, { tone: 'luma' })(500, Math.random);
+  assert.equal(img.points.length, 500);
+  assert.throws(() => AF.fromImage({ width: 2, height: 2, data: new Uint8ClampedArray(16) }), /no pixels/);
+  AF.register('tri', [[0, 0, 0], [1, 0, 0], [0, 1, 0]]);
+  assert.equal(AF.build('tri', 33, 1).points.length, 33);
+});
+
+test('dist: the ES module build matches the source', async () => {
+  const m = await import('../dist/aurora-field.mjs');
+  assert.equal(m.default.version, AF.version);
+  for (const k of ['create', 'register', 'fromSVG', 'fromText', 'armour', 'offload', 'palettes']) assert.ok(m[k], k);
+});
+
 test('create: refuses a missing canvas', () => {
   assert.throws(() => AF.create(null), /canvas/);
 });
 
+await Promise.all(pending);
 console.log(`${passed} passed${process.exitCode ? ', with failures' : ''}`);

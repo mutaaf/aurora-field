@@ -45,6 +45,8 @@
   .chip:focus-visible{outline:2px solid var(--aurora);outline-offset:2px}
   .sw{width:16px;height:16px;border-radius:50%;margin-right:8px}
   input[type=range]{width:180px;accent-color:var(--aurora)}
+  #word{all:unset;box-sizing:border-box;min-height:36px;padding:0 14px;border-radius:999px;font:500 13px var(--sans);color:var(--ink);box-shadow:inset 0 0 0 1px #2A3237;width:240px}
+  #word:focus-visible{box-shadow:inset 0 0 0 1px var(--aurora)}
   output{font:12px var(--mono);color:var(--dim);min-width:5ch}
   pre{margin:0;padding:16px 18px;border-radius:4px;background:rgba(11,15,18,.72);box-shadow:inset 0 0 0 1px var(--line);font:12.5px/1.65 var(--mono);color:#C9D2D6;overflow:auto;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
   pre .c{color:var(--faint)} pre .s{color:var(--aurora)} pre .f{color:#E6ECEF}
@@ -70,11 +72,12 @@
     <div class="stage" id="stage" aria-hidden="true"></div>
     <div class="copy">
       <h1>Points that <em>assemble</em>.</h1>
-      <p class="lede">A WebGL particle field (with a canvas-2D fallback) that becomes a neural sphere, a team, a stack of platforms, a helm that turns to face you, or any shape you register. Drag to spin it, move through it to part it, click to send a shockwave. One file, zero dependencies, ES5.</p>
+      <p class="lede">A WebGL particle field (with a canvas-2D fallback) that becomes a neural sphere, a team, a stack of platforms, an armoured helm or a ranger helmet that turns to face you, or anything you give it: text, SVG paths, images, point clouds. Two-tone palettes, live options, a web component, and an off-main-thread worker mode. Drag to spin it, move through it to part it, click to send a shockwave. One file, zero dependencies, ES5.</p>
       <div class="panel">
         <div class="row" role="group" aria-label="Shape"><span class="k">shape</span><span id="shapes" class="row"></span></div>
         <div class="row" role="group" aria-label="Palette"><span class="k">palette</span><span id="palettes" class="row"></span></div>
-        <div class="row"><label class="k" for="count">nodes</label><input id="count" type="range" min="400" max="8000" step="200" value="2800"><output id="countv">2800</output></div>
+        <form class="row" id="wordf" role="group" aria-label="Your own shape"><label class="k" for="word">your word</label><input id="word" maxlength="24" placeholder="type a word, press enter" autocomplete="off"></form>
+        <div class="row"><label class="k" for="count">nodes</label><input id="count" type="range" min="400" max="30000" step="200" value="2800"><output id="countv">2800</output></div>
         <div class="row"><span class="k">cycle</span><button class="chip" id="cycle" aria-pressed="true">auto · 6.5s</button></div>
         <div class="row"><span class="k">autonomy</span><button class="chip" id="auto" aria-pressed="true">on · breathe, trade, scout</button></div>
         <pre id="code" aria-label="Code for the current settings"></pre>
@@ -97,14 +100,10 @@
     for(var k=0;k<24;k++){ var tt=k/24*1.9-0.95, aa=tt*9; links.push([[Math.cos(aa)*0.42,tt,Math.sin(aa)*0.42],[Math.cos(aa+Math.PI)*0.42,tt,Math.sin(aa+Math.PI)*0.42]]); }
     return {points:pts, links:links, kick:1};
   });
-  var PALETTES={
-    aurora:{point:[123,227,195],hot:'#F4FFFB',star:'#CFE9E0',signal:[200,255,236],head:[220,255,244],glow:[123,227,195],glow2:[62,143,122]},
-    ember:{point:[255,158,94],hot:'#FFF4E8',star:'#FFE2C9',signal:[255,214,170],head:[255,236,214],glow:[255,140,80],glow2:[160,60,30]},
-    ice:{point:[140,190,255],hot:'#F2F7FF',star:'#D6E6FF',signal:[200,225,255],head:[230,240,255],glow:[120,170,255],glow2:[50,80,160]},
-    mono:{point:[220,224,228],hot:'#FFFFFF',star:'#DDE3E6',signal:[245,247,248],head:[255,255,255],glow:[200,205,210],glow2:[90,95,100]}
-  };
-  var SW={aurora:'#7BE3C3',ember:'#FF9E5E',ice:'#8CBEFF',mono:'#DCE0E4'};
-  var state={palette:'aurora',count:innerWidth<760?1400:2800,cycle:true,auto:true,shape:'mind'}, field=null;
+  var PALETTES=AuroraField.palettes, D=AuroraField.defaults.palette;
+  function hex(c){return 'rgb('+c.join(',')+')'}
+  function swatch(k){var p=PALETTES[k], a=hex(p.point||D.point), b=hex(p.accent||p.point||D.point);return 'linear-gradient(135deg,'+a+' 50%,'+b+' 50%)'}
+  var state={palette:'aurora',count:innerWidth<760?1400:2800,cycle:true,auto:true,shape:'mind',word:''}, field=null;
   var canvas=document.getElementById('field'), sky=document.getElementById('sky'), stage=document.getElementById('stage');
   var statsEl=document.getElementById('stats'), shapesEl=document.getElementById('shapes'), palEl=document.getElementById('palettes');
   document.getElementById('ver').textContent='v'+AuroraField.version;
@@ -112,14 +111,15 @@
   count.value=state.count; countv.textContent=state.count;
   function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')}
   function code(){
-    var p=state.palette==='aurora'?'':"\n  palette: AuroraField.palettes."+state.palette+",";
+    var p=state.palette==='aurora'?'':"\n  palette: '"+state.palette+"',";
     document.getElementById('code').innerHTML=
       '<span class="c">// npm i aurora-field   ·   or one &lt;script&gt; tag</span>\n'+
       '<span class="f">const</span> field = AuroraField.<span class="f">create</span>(canvas, {\n'+
       '  shapes: [<span class="s">'+esc(AuroraField.shapes().map(function(s){return "'"+s+"'"}).join(', '))+'</span>],\n'+
       '  count: <span class="s">'+state.count+'</span>,'+(state.cycle?'':'\n  cycle: <span class="s">0</span>,')+(state.auto?'':'\n  autonomy: <span class="s">0</span>,')+esc(p)+'\n'+
       '  onShape: name =&gt; caption(name),\n});\n'+
-      'field.<span class="f">setShape</span>(<span class="s">\''+state.shape+'\'</span>, { pin: <span class="s">true</span> });';
+      'field.<span class="f">setShape</span>(<span class="s">\''+state.shape+'\'</span>, { pin: <span class="s">true</span> });'+
+      (state.word?'\n<span class="c">// a shape from text (or fromSVG, fromImage, armour)</span>\nAuroraField.<span class="f">register</span>(<span class="s">\'word\'</span>, AuroraField.<span class="f">fromText</span>(<span class="s">'+esc(JSON.stringify(state.word))+'</span>));':'');
   }
   function chips(){
     shapesEl.innerHTML=''; AuroraField.shapes().forEach(function(s){
@@ -127,19 +127,21 @@
       b.onclick=function(){ field.setShape(s,{pin:true}); mark(s); }; shapesEl.appendChild(b);
     });
     palEl.innerHTML=''; Object.keys(PALETTES).forEach(function(k){
-      var b=document.createElement('button'); b.className='chip'; b.innerHTML='<span class="sw" style="background:'+SW[k]+'"></span>'+k; b.setAttribute('aria-pressed',String(k===state.palette));
-      b.onclick=function(){ state.palette=k; build(); chips(); }; palEl.appendChild(b);
+      var b=document.createElement('button'); b.className='chip'; b.innerHTML='<span class="sw" style="background:'+swatch(k)+'"></span>'+k; b.setAttribute('aria-pressed',String(k===state.palette));
+      b.onclick=function(){ state.palette=k; field.set({palette:k}); chips(); code(); }; palEl.appendChild(b);   // live: no rebuild
     });
   }
   function mark(s){ state.shape=s; [].forEach.call(shapesEl.children,function(b){b.setAttribute('aria-pressed',String(b.textContent===s))}); code(); }
   function build(){
     if(field) field.destroy();
-    field=AuroraField.create(canvas,{container:sky,stage:stage,count:state.count,cycle:state.cycle?6500:0,autonomy:state.auto?1:0,palette:PALETTES[state.palette],initial:state.shape,
+    field=AuroraField.create(canvas,{container:sky,stage:stage,count:state.count,cycle:state.cycle?6500:0,autonomy:state.auto?1:0,palette:state.palette,initial:state.shape,
       onShape:mark, onStats:function(s){var st=field.stats();statsEl.innerHTML='<b>'+s.nodes.toLocaleString('en-US')+'</b> nodes · <b>'+s.fps+'</b> fps · '+st.renderer+' · quality '+(['high','retina-lite','balanced','eco'][s.quality])+' · '+st.scouts+' scouts out'},
       onSpinout:function(){statsEl.innerHTML='<b>1.21 GW</b>'}});
     code();
   }
-  AuroraField.palettes=PALETTES;
+  var wf=document.getElementById('wordf'), wi=document.getElementById('word');
+  wf.onsubmit=function(e){ e.preventDefault(); var w=wi.value.trim().slice(0,24); if(!w) return;
+    try{ AuroraField.register('word',AuroraField.fromText(w,{font:'800 150px system-ui,sans-serif'})); state.word=w; state.shape='word'; build(); chips(); }catch(err){ wi.value=''; wi.placeholder=String(err.message||err) } };
   count.oninput=function(){countv.textContent=count.value};
   count.onchange=function(){state.count=+count.value; build()};
   var cyc=document.getElementById('cycle');
