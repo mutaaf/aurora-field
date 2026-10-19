@@ -1,4 +1,4 @@
-/*! aurora-field v0.5.0 · MIT · https://github.com/mutaaf/aurora-field
+/*! aurora-field v0.6.0 · MIT · https://github.com/mutaaf/aurora-field
  * A canvas-2D particle field that assembles into shapes and morphs between them:
  * a neural sphere with travelling signals, a team of orbs, a stack of platforms, a helm.
  * Drag spins it, the cursor parts it, a click sends a shockwave. Particles are damped
@@ -13,7 +13,7 @@
   else root.AuroraField = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var VERSION = '0.5.0';
+  var VERSION = '0.6.0';
   var TAU = Math.PI * 2;
 
   var imul = Math.imul || function (a, b) {
@@ -45,7 +45,8 @@
   //   flow?:  function (i, t) → [x,y,z] | null  per-frame target for animated points,
   //   kick?:  extra spin when the shape arrives,
   //   bright?: [i…] points that glow while the shape is up (eyes, beacons),
-  //   facing?: true to turn and hold the shape toward the viewer (with a slow sway) }
+  //   facing?: true to turn and hold the shape toward the viewer (with a slow sway),
+  //   anchors?: { name: [x,y,z] } points overlays can follow via field.anchors() }
   var SHAPES = {};
   var ORDER = [];
   function register(name, build) {
@@ -239,10 +240,16 @@
       }
     }
     while (pts.length < n) pts.push(pts[Math.floor(r() * pts.length)].slice());
+    // named anchors, for overlays that point at the helm's features (see field.anchors())
+    var eyeC = at(346, 612, 8), anchors = {
+      tab: at(512, 300, 4), eyeL: eyeC, eyeR: [-eyeC[0], eyeC[1], eyeC[2]], mouth: at(512, 960, 4), chin: at(512, 1094, 4),
+      earL: [-(half(560) + 10) / S, (560 - CY) / S, 40 / S], earR: [(half(560) + 10) / S, (560 - CY) / S, 40 / S]
+    };
     var K = 0.9, out = pts.slice(0, n);
+    for (var an in anchors) anchors[an] = [anchors[an][0] * K, anchors[an][1] * K, anchors[an][2] * K];
     for (k = 0; k < out.length; k++) out[k] = [out[k][0] * K, out[k][1] * K, out[k][2] * K];
     for (k = 0; k < links.length; k++) links[k] = [[links[k][0][0] * K, links[k][0][1] * K, links[k][0][2] * K], [links[k][1][0] * K, links[k][1][1] * K, links[k][1][2] * K]];
-    return { points: out, pairs: pairs, links: links, bright: bright, facing: true, kick: 0.2, lineArt: true };
+    return { points: out, pairs: pairs, links: links, bright: bright, anchors: anchors, facing: true, kick: 0.2, lineArt: true };
   });
 
   var DEFAULTS = {
@@ -927,6 +934,12 @@
         if (!running && !reduced) return api;
         return api;
       },
+      // where a shape-space point is on screen right now, in CSS px within the container (z > 0 is behind)
+      project: function (p) { var q = proj3(p, [0, 0, 0]); return { x: q[0], y: q[1], z: q[2] }; },
+      // the current shape's named anchors (a shape may declare anchors: { name: [x, y, z] }), projected
+      anchors: function () { var a = S[shape].def.anchors, res = {}; if (a) for (var k in a) res[k] = api.project(a[k]); return res; },
+      // the field's current orientation in radians, and the shape radius in CSS px
+      view: function () { var y = rotY % TAU; if (y > Math.PI) y -= TAU; if (y < -Math.PI) y += TAU; return { yaw: y, pitch: rotX, roll: rotZ, radius: R, x: cx, y: cy }; },
       next: function () { var ci = cycleList.indexOf(shape); return setShape(cycleList[(ci + 1) % cycleList.length], { pin: true }); },
       play: function () { wanted = true; layout(); sync(); return api; },
       pause: function () { wanted = false; sync(); return api; },

@@ -16,6 +16,8 @@ export interface Shape {
   bright?: number[];
   /** Turn toward the viewer and hold, with a slow sway, while this shape is up. */
   facing?: boolean;
+  /** Named points overlays can follow with field.anchors() (a HUD pointing at the helm's eyes, say). */
+  anchors?: Record<string, Vec3>;
 }
 export type ShapeBuilder = (n: number, random: () => number) => Shape;
 
@@ -64,6 +66,14 @@ export interface Field {
   play(): Field;
   pause(): Field;
   resize(): Field;
+  /** Where a shape-space point is on screen now, in CSS px within the container; z > 0 is behind the centre. */
+  project(p: Vec3): { x: number; y: number; z: number };
+  /** The current shape's anchors, projected. */
+  anchors(): Record<string, { x: number; y: number; z: number }>;
+  /** Current orientation (radians), shape radius and centre (CSS px). */
+  view(): { yaw: number; pitch: number; roll: number; radius: number; x: number; y: number };
+  /** Drive facing shapes from a tracked head; null releases. */
+  setPose(p: { yaw: number; pitch: number; roll?: number; eyes?: number | null } | null): Field;
   stats(): { fps: number; nodes: number; running: boolean; reduced: boolean; shape: string; quality: number; scouts: number; settle: number };
   destroy(): void;
 }

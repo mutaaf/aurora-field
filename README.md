@@ -81,6 +81,9 @@ The canvas fills its `container` (default: its parent). Pass a `stage` element t
 field.setShape('platforms', { pin: true })  // or { pin: 5000 }
 field.next()
 field.setPose({ yaw, pitch, roll, eyes })  // steer facing shapes (the helm) from a tracked head; null releases
+field.anchors()        // the current shape's named anchors on screen: { eyeL: { x, y, z }, … } (z > 0 is turned away)
+field.project([x,y,z]) // any shape-space point on screen, in CSS px within the container
+field.view()           // { yaw, pitch, roll, radius, x, y }: the live orientation, for HUD readouts
 field.pause(); field.play()
 field.resize()      // after a layout change the window didn't announce
 field.stats()       // { fps, nodes, running, reduced, shape, quality, scouts, settle }

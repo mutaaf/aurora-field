@@ -190,6 +190,24 @@ test('renderer: falls back to canvas-2D without WebGL; pose drives a facing shap
   f.destroy();
 });
 
+test('overlays: the helm declares anchors that follow its turn', () => {
+  const sh = AF.build('helm', 900, 1);
+  for (const k of ['tab', 'eyeL', 'eyeR', 'mouth', 'chin', 'earL', 'earR']) assert.ok(sh.anchors[k] && sh.anchors[k].every(Number.isFinite), k);
+  assert.ok(sh.anchors.eyeL[0] < 0 && sh.anchors.eyeR[0] > 0, 'eyeL is on screen-left');
+  assert.ok(sh.anchors.eyeL[2] < 0, 'eyes face the viewer');
+  const env = stubEnv();
+  const f = AF.create(env.canvas, { seed: 3, count: 600, shapes: ['helm'], cycle: 0, intro: 0 });
+  env.pump(40);
+  const a = f.anchors(), v = f.view();
+  assert.ok(a.eyeL.x < a.eyeR.x, 'left eye projects left of the right eye');
+  assert.ok(a.tab.y < a.mouth.y, 'forehead above the mouth');
+  assert.ok(v.radius > 0 && Number.isFinite(v.yaw));
+  f.setPose({ yaw: 0.9, pitch: 0, roll: 0 }); env.pump(80);
+  const b = f.anchors();
+  assert.ok(b.earL.z < b.earR.z, 'turning right brings the left ear forward');
+  f.destroy();
+});
+
 test('create: refuses a missing canvas', () => {
   assert.throws(() => AF.create(null), /canvas/);
 });

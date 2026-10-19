@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0 — 2026-10-18
+- **Overlays that follow the field.** `field.project([x, y, z])` gives a shape-space point's position on screen. `field.anchors()` projects the current shape's named `anchors`, and `field.view()` returns the live yaw, pitch, roll, radius and centre. Together they let a HUD point leaders at features that turn.
+- **The helm declares anchors**: `tab`, `eyeL`, `eyeR`, `mouth`, `chin`, `earL` and `earR`.
+
 ## 0.5.0 — 2026-10-18
 - **The helm, rebuilt as a true helmet.** One scale for both axes, so it is no longer stretched 1.4× wide. It's now a real head volume: rounded-box cross-sections, deeper front to back than side to side, with a proud faceplate. Turned to the side, it reads as a helmet instead of a slab.
 - **Crisper.** No jitter on the seams, which now hug the curved shell. The random surface fill is gone: the face is clean line art, and the sides and back are a holographic scan of contour rings that carry signals. Ear discs sit on the sides of the shell.
