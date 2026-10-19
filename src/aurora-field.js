@@ -1,4 +1,4 @@
-/*! aurora-field v3.0.0-alpha.1 · MIT · https://github.com/mutaaf/aurora-field
+/*! aurora-field v3.0.0 · MIT · https://github.com/mutaaf/aurora-field
  * A particle field that assembles into shapes and morphs between them: a neural sphere
  * with travelling signals, a team of orbs, a stack of platforms, an armoured helm, a ranger
  * helmet, a crew of people a pen draws and light fills (figure(), registerCrew()) — or text,
@@ -17,7 +17,7 @@
   else root.AuroraField = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var VERSION = '3.0.0-alpha.1';
+  var VERSION = '3.0.0';
   var TAU = Math.PI * 2;
 
   var imul = Math.imul || function (a, b) {
@@ -477,21 +477,58 @@
     hammer: { elL: [-0.2, -0.35, -0.09], haL: [-0.11, -0.25, -0.23], elR: [0.26, -0.6, -0.05], haR: [0.22, -0.84, -0.1] },
     phone: { elL: [-0.25, -0.47, -0.05], haL: [-0.105, -0.76, -0.035], elR: [0.21, -0.32, -0.05], haR: [0.12, -0.17, -0.16], head: [-0.015, -0.8, 0] },
     keys: { elL: [-0.25, -0.44, -0.1], haL: [-0.21, -0.66, -0.2] },
-    inspect: { elL: [-0.27, -0.33, 0.01], haL: [-0.14, -0.12, -0.05], elR: [0.22, -0.4, -0.11], haR: [0.1, -0.61, -0.2], head: [0, -0.8, -0.02] }
+    inspect: { elL: [-0.27, -0.33, 0.01], haL: [-0.14, -0.12, -0.05], elR: [0.22, -0.4, -0.11], haR: [0.1, -0.61, -0.2], head: [0, -0.8, -0.02] },
+    // both hands on a long pole running from upper left to lower right (roller, rake, skimmer, mop)
+    pole: { elL: [-0.19, -0.44, -0.1], haL: [-0.04, -0.46, -0.22], elR: [0.24, -0.35, -0.06], haR: [0.2, -0.2, -0.2] },
+    // both hands low in front, carrying (a box, a pane of glass)
+    carry: { elL: [-0.2, -0.32, -0.06], haL: [-0.14, -0.12, -0.2], elR: [0.2, -0.32, -0.06], haR: [0.14, -0.12, -0.2] },
+    // both arms overhead, holding something up (a solar panel)
+    reach: { elL: [-0.24, -0.79, -0.04], haL: [-0.17, -1.0, -0.06], elR: [0.24, -0.79, -0.04], haR: [0.17, -1.0, -0.06], head: [0, -0.8, 0.02] },
+    // both hands together at the waist, pushing or gripping (a dolly, a chainsaw)
+    push: { elL: [-0.18, -0.34, -0.1], haL: [-0.07, -0.2, -0.25], elR: [0.18, -0.34, -0.1], haR: [0.07, -0.2, -0.25] },
+    // one arm out front with a wand, the other on a hip
+    spray: { elL: [-0.27, -0.33, 0.01], haL: [-0.14, -0.12, -0.05], elR: [0.27, -0.36, -0.07], haR: [0.37, -0.16, -0.16] },
+    // a tray held up at the shoulder
+    tray: { elL: [-0.27, -0.43, -0.07], haL: [-0.21, -0.61, -0.19], head: [0.01, -0.8, 0] }
   };
   // actions: the trade's own motion, as rotations of a joint's subtree about another joint
   function smooth01(a) { a = a < 0 ? 0 : a > 1 ? 1 : a; return a * a * (3 - 2 * a); }
-  var FIG_ACTIONS = {
-    tablet: function (t, rot) { rot('elR', 'haR', [1, 0, 0], 0.07 * Math.pow(Math.max(0, Math.sin(t * 2.4)), 6)); rot('neck', 'head', [1, 0, 0], 0.05 * Math.sin(t * 0.8)); },
-    wrench: function (t, rot) { rot('elR', 'haR', [0, 0, 1], 0.36 * Math.sin(t * 2.1)); rot('neck', 'head', [1, 0, 0], 0.08); },
-    hammer: function (t, rot) { var ph = (t * 0.85) % 1, a = ph < 0.16 ? smooth01(ph / 0.16) : 1 - smooth01((ph - 0.16) / 0.84); rot('shR', 'elR', [1, 0, 0], 0.95 * a); rot('elR', 'haR', [1, 0, 0], 0.45 * a); },
-    phone: function (t, rot) { rot('neck', 'head', [1, 0, 0], 0.05 * Math.sin(t * 1.9)); rot('elR', 'haR', [0, 1, 0], 0.22 * Math.sin(t * 0.9)); },
-    keys: function (t, rot) { rot('elL', 'haL', [0, 0, 1], 0.12 * Math.sin(t * 7) * Math.max(0, Math.sin(t * 0.9))); rot('neck', 'head', [0, 1, 0], 0.14 * Math.sin(t * 0.5)); },
-    inspect: function (t, rot) { rot('neck', 'head', [0, 1, 0], 0.12 * Math.sin(t * 0.6)); rot('shR', 'elR', [1, 0, 0], 0.08 * Math.sin(t * 0.7)); }
+  // actions as data, so they travel as JSON: each term turns a joint's subtree about another joint,
+  //   { pivot, joint, axis: [x, y, z], amp (radians), rate (rad/s; cycles/s for swing), wave: 'sin' | 'pulse' | 'swing' | 'burst' | 'hold', gate?, phase? }
+  var ACTIONS = {
+    tablet: [{ pivot: 'elR', joint: 'haR', axis: [1, 0, 0], amp: 0.07, rate: 2.4, wave: 'pulse' }, { pivot: 'neck', joint: 'head', axis: [1, 0, 0], amp: 0.05, rate: 0.8 }],
+    wrench: [{ pivot: 'elR', joint: 'haR', axis: [0, 0, 1], amp: 0.36, rate: 2.1 }, { pivot: 'neck', joint: 'head', axis: [1, 0, 0], amp: 0.08, wave: 'hold' }],
+    hammer: [{ pivot: 'shR', joint: 'elR', axis: [1, 0, 0], amp: 0.95, rate: 0.85, wave: 'swing' }, { pivot: 'elR', joint: 'haR', axis: [1, 0, 0], amp: 0.45, rate: 0.85, wave: 'swing' }],
+    phone: [{ pivot: 'neck', joint: 'head', axis: [1, 0, 0], amp: 0.05, rate: 1.9 }, { pivot: 'elR', joint: 'haR', axis: [0, 1, 0], amp: 0.22, rate: 0.9 }],
+    keys: [{ pivot: 'elL', joint: 'haL', axis: [0, 0, 1], amp: 0.12, rate: 7, wave: 'burst', gate: 0.9 }, { pivot: 'neck', joint: 'head', axis: [0, 1, 0], amp: 0.14, rate: 0.5 }],
+    inspect: [{ pivot: 'neck', joint: 'head', axis: [0, 1, 0], amp: 0.12, rate: 0.6 }, { pivot: 'shR', joint: 'elR', axis: [1, 0, 0], amp: 0.08, rate: 0.7 }],
+    pole: [{ pivot: 'chest', joint: 'shR', axis: [0, 0, 1], amp: 0.07, rate: 1.6 }, { pivot: 'chest', joint: 'shL', axis: [0, 0, 1], amp: 0.07, rate: 1.6 }],
+    carry: [{ pivot: 'neck', joint: 'head', axis: [0, 1, 0], amp: 0.12, rate: 0.5 }],
+    reach: [{ pivot: 'chest', joint: 'shR', axis: [0, 0, 1], amp: 0.035, rate: 1 }, { pivot: 'chest', joint: 'shL', axis: [0, 0, 1], amp: 0.035, rate: 1 }],
+    push: [{ pivot: 'neck', joint: 'head', axis: [0, 1, 0], amp: 0.1, rate: 0.45 }, { pivot: 'chest', joint: 'shR', axis: [0, 1, 0], amp: 0.04, rate: 3.2 }, { pivot: 'chest', joint: 'shL', axis: [0, 1, 0], amp: 0.04, rate: 3.2 }],
+    spray: [{ pivot: 'shR', joint: 'elR', axis: [0, 1, 0], amp: 0.32, rate: 1.4 }],
+    tray: [{ pivot: 'elL', joint: 'haL', axis: [1, 0, 0], amp: 0.05, rate: 2 }, { pivot: 'neck', joint: 'head', axis: [0, 1, 0], amp: 0.1, rate: 0.4 }]
   };
+  function smooth01(a) { a = a < 0 ? 0 : a > 1 ? 1 : a; return a * a * (3 - 2 * a); }
+  function wave(w, t) {
+    var x = t * (w.rate || 1) + (w.phase || 0);
+    switch (w.wave) {
+      case 'hold': return 1;
+      case 'pulse': return Math.pow(Math.max(0, Math.sin(x)), 6);
+      case 'swing': var ph = x % 1; return ph < 0.16 ? smooth01(ph / 0.16) : 1 - smooth01((ph - 0.16) / 0.84);   // a quick strike, a slow lift
+      case 'burst': return Math.sin(x) * Math.max(0, Math.sin(t * (w.gate || 1)));
+      default: return Math.sin(x);
+    }
+  }
+  function actionOf(spec) {
+    var A = spec.action && typeof spec.action === 'object' ? spec.action : ACTIONS[spec.action || (typeof spec.pose === 'string' ? spec.pose : '')];
+    if (!A || !A.length) return null;
+    return function (t, rot) { for (var i = 0; i < A.length; i++) rot(A[i].pivot, A[i].joint, A[i].axis, (A[i].amp || 0) * wave(A[i], t)); };
+  }
   // vector helpers (3-arrays)
   function v3(a, b, k) { return [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k]; }
   function vsub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+  function hyp(x, y) { return Math.sqrt(x * x + y * y); }   // Math.hypot is ES2015; this file stays ES5
   function vlen(a) { return Math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]); }
   function vnorm(a) { var l = vlen(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; }
   function vcross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
@@ -513,7 +550,7 @@
     var SUB = [];
     for (j = 0; j < FIG_J.length; j++) { var s = [j]; for (k = j + 1; k < FIG_J.length; k++) { var q = FIG_UP[k]; while (q > j) q = FIG_UP[q]; if (q === j) s.push(k); } SUB.push(s); }
     var idx = {}; for (j = 0; j < FIG_J.length; j++) idx[FIG_J[j]] = j;
-    var act = FIG_ACTIONS[spec.action || spec.pose] || null, JX = [], JM = [], ft = NaN;
+    var act = actionOf(spec), JX = [], JM = [], ft = NaN;
     for (j = 0; j < FIG_J.length; j++) { JX.push([0, 0, 0]); JM.push([1, 0, 0, 0, 1, 0, 0, 0, 1]); }
     function rotAbout(P, sub, ax, a) {
       if (!a) return;
@@ -539,23 +576,81 @@
   }
   // props, placed from the posed joints: [{ owner, tone, prims: [...] }]; prims are
   //   { k: 'cyl', a, b, ra, rb } · { k: 'ell', c, r: [rx, ry, rz], half? } · { k: 'box', c, h: [hx, hy, hz], m? (rotation) } · { k: 'ring', c, r: [r1, r2], ex, ez }
+  // props as data, placed from the posed joints, so they travel as JSON. A point is
+  //   [x, y, z] · { j: joint, d?: [dx, dy, dz] } · { j, from: joint, t } (t along the bone from 'from' through j)
+  //   · { mid: [jointA, jointB] }, each with optional d (an offset) and x / y / z (an absolute axis)
+  // and a prim is { k: 'cyl', a, b, r | ra, rb } · { k: 'ell', c, r: [rx, ry, rz], half? }
+  //   · { k: 'box', c, h: [hx, hy, hz], tilt?: [ax, ay, az, angle], along?: { j, from }, len? } · { k: 'ring', c, r: [r1, r2], ex?, ez?, band?, plane?: [x, y, z] | { j, from } }
+  var LHAND = { j: 'haL', from: 'elL' }, RHAND = { j: 'haR', from: 'elR' };
+  function rH(t, d) { return { j: 'haR', from: 'elR', t: t, d: d }; }
+  function lH(t, d) { return { j: 'haL', from: 'elL', t: t, d: d }; }
+  function jd(j, d) { return { j: j, d: d }; }
+  // a pole between the hands, out past both: the head end (top) and the foot end (bottom)
+  function poleTop(t, d) { return { j: 'haL', from: 'haR', t: t, d: d }; }
+  function poleFoot(t, d) { return { j: 'haR', from: 'haL', t: t, d: d }; }
+  var POLE = { k: 'cyl', a: poleTop(0.42), b: poleFoot(0.62), r: 0.011 };
+  var PROPS = {
+    hardhat: { owner: 'head', prims: [{ k: 'ell', c: jd('head', [0, -0.03, 0]), r: [0.1, 0.088, 0.11], half: true }, { k: 'ring', c: jd('head', [0, -0.03, 0]), r: [0.1, 0.135], ex: 1, ez: 1.08 }, { k: 'box', c: jd('head', [0, -0.118, 0]), h: [0.012, 0.008, 0.09] }] },
+    cap: { owner: 'head', prims: [{ k: 'ell', c: jd('head', [0, -0.045, 0]), r: [0.088, 0.07, 0.098], half: true }, { k: 'box', c: jd('head', [0, -0.05, -0.12]), h: [0.07, 0.006, 0.04] }] },
+    tablet: { owner: 'chest', prims: [{ k: 'box', c: { mid: ['haL', 'haR'], d: [0, -0.05, -0.01] }, h: [0.105, 0.072, 0.006], tilt: [1, 0, 0, -0.95] }] },
+    wrench: { owner: 'haR', prims: [{ k: 'box', c: rH(0.09), h: [0.011, 0.012, 0.012], along: RHAND, len: 0.1 }, { k: 'ring', c: rH(0.2), r: [0.016, 0.034], plane: RHAND }] },
+    pipe: { owner: 'pelvis', prims: [{ k: 'cyl', a: jd('haR', [-0.3, 0.17, -0.05]), b: jd('haR', [0.22, 0.17, -0.05]), r: 0.028 }, { k: 'cyl', a: jd('haR', [0.22, 0.17, -0.05]), b: { j: 'haR', d: [0.22, 0, -0.05], y: 0.86 }, r: 0.028 }] },
+    toolbelt: { owner: 'pelvis', prims: [{ k: 'ring', c: jd('pelvis', [0, -0.07, 0]), r: [0.138, 0.152], ex: 1, ez: 0.66, band: 0.035 }, { k: 'box', c: jd('pelvis', [-0.13, -0.03, -0.06]), h: [0.03, 0.04, 0.025] }, { k: 'box', c: jd('pelvis', [0.13, -0.03, -0.06]), h: [0.03, 0.04, 0.025] }] },
+    tester: { owner: 'haR', prims: [{ k: 'box', c: rH(0.045), h: [0.018, 0.035, 0.009] }, { k: 'cyl', a: rH(0.08), b: rH(0.13), ra: 0.004, rb: 0.002 }] },
+    gauge: { owner: 'haR', prims: [{ k: 'ring', c: rH(0.05), r: [0.012, 0.034], plane: [0, 0, 1] }, { k: 'cyl', a: rH(-0.01), b: rH(0.03), r: 0.008 }] },
+    hammer: { owner: 'haR', prims: [{ k: 'cyl', a: rH(-0.03), b: rH(0.2), r: 0.012 }, { k: 'box', c: rH(0.2), h: [0.018, 0.018, 0.062] }] },
+    phone: { owner: 'haL', prims: [{ k: 'box', c: jd('haL', [0.03, 0, 0]), h: [0.008, 0.038, 0.018] }] },
+    clipboard: { owner: 'haR', prims: [{ k: 'box', c: jd('haR', [-0.04, -0.03, -0.03]), h: [0.065, 0.085, 0.005], tilt: [1, 0, 0, -0.5] }] },
+    keys: { owner: 'haL', prims: [{ k: 'ring', c: lH(0.05), r: [0.014, 0.022], plane: [0, 0, 1] }, { k: 'box', c: lH(0.085), h: [0.006, 0.022, 0.002] }, { k: 'box', c: lH(0.08, [-0.018, 0, 0]), h: [0.006, 0.018, 0.002] }] },
+    remote: { owner: 'haL', prims: [{ k: 'box', c: lH(0.04), h: [0.016, 0.03, 0.008] }] },
+    yardsign: { owner: 'pelvis', prims: [{ k: 'cyl', a: [0.38, -0.42, 0.04], b: [0.38, 0.88, 0.04], r: 0.01 }, { k: 'cyl', a: [0.38, -0.4, 0.04], b: [0.6, -0.4, 0.04], r: 0.007 }, { k: 'box', c: [0.49, -0.29, 0.04], h: [0.1, 0.068, 0.006] }] },
+    roller: { owner: 'haR', prims: [POLE, { k: 'cyl', a: poleTop(0.42, [-0.07, 0, 0]), b: poleTop(0.42, [0.07, 0, 0]), r: 0.03 }] },
+    rake: { owner: 'haR', prims: [POLE, { k: 'box', c: poleFoot(0.62), h: [0.11, 0.012, 0.02] }, { k: 'box', c: poleFoot(0.62, [0, 0.025, 0]), h: [0.1, 0.02, 0.004] }] },
+    skimmer: { owner: 'haR', prims: [POLE, { k: 'ring', c: poleFoot(0.66, [0.05, 0, 0]), r: [0.05, 0.075], ex: 1, ez: 1, plane: [0, 1, 0.3] }] },
+    mop: { owner: 'haR', prims: [POLE, { k: 'ell', c: poleFoot(0.64, [0, 0.02, 0]), r: [0.07, 0.03, 0.05] }] },
+    bucket: { owner: 'pelvis', prims: [{ k: 'cyl', a: [0.4, 0.72, -0.02], b: [0.4, 0.88, -0.02], ra: 0.07, rb: 0.08 }, { k: 'ring', c: [0.4, 0.72, -0.02], r: [0.06, 0.072] }] },
+    sprayer: { owner: 'pelvis', prims: [{ k: 'cyl', a: [-0.3, -0.2, 0.02], b: [-0.3, 0.1, 0.02], r: 0.058 }, { k: 'ell', c: [-0.3, -0.2, 0.02], r: [0.058, 0.03, 0.058], half: true }, { k: 'cyl', a: jd('haR', [0, 0, 0]), b: rH(0.44), r: 0.008 }, { k: 'cyl', a: rH(0.44), b: rH(0.5), ra: 0.008, rb: 0.022 }] },
+    box: { owner: 'chest', prims: [{ k: 'box', c: { mid: ['haL', 'haR'], d: [0, -0.06, -0.08] }, h: [0.16, 0.11, 0.11] }] },
+    windowpane: { owner: 'chest', prims: [{ k: 'box', c: { mid: ['haL', 'haR'], d: [0, -0.2, -0.04] }, h: [0.2, 0.26, 0.008] }, { k: 'box', c: { mid: ['haL', 'haR'], d: [0, -0.2, -0.05] }, h: [0.006, 0.25, 0.004] }, { k: 'box', c: { mid: ['haL', 'haR'], d: [0, -0.2, -0.05] }, h: [0.19, 0.006, 0.004] }] },
+    solarpanel: { owner: 'chest', prims: [{ k: 'box', c: { mid: ['haL', 'haR'], d: [0, -0.03, 0] }, h: [0.34, 0.012, 0.2], tilt: [1, 0, 0, 0.3] }, { k: 'box', c: { mid: ['haL', 'haR'], d: [0, -0.045, 0] }, h: [0.005, 0.004, 0.19], tilt: [1, 0, 0, 0.3] }] },
+    dolly: { owner: 'chest', prims: [{ k: 'cyl', a: { mid: ['haL', 'haR'], d: [-0.08, 0, 0] }, b: { mid: ['haL', 'haR'], d: [-0.08, 0, -0.12], y: 0.84 }, r: 0.01 }, { k: 'cyl', a: { mid: ['haL', 'haR'], d: [0.08, 0, 0] }, b: { mid: ['haL', 'haR'], d: [0.08, 0, -0.12], y: 0.84 }, r: 0.01 }, { k: 'box', c: { mid: ['haL', 'haR'], d: [0, 0, -0.2], y: 0.62 }, h: [0.14, 0.2, 0.1] }, { k: 'ring', c: { mid: ['haL', 'haR'], d: [0, 0, -0.14], y: 0.84 }, r: [0.02, 0.045], plane: [1, 0, 0] }] },
+    chainsaw: { owner: 'chest', prims: [{ k: 'box', c: { mid: ['haL', 'haR'], d: [0.02, 0.03, -0.05] }, h: [0.08, 0.07, 0.09] }, { k: 'box', c: { mid: ['haL', 'haR'], d: [0.26, 0.06, -0.08] }, h: [0.19, 0.028, 0.012], tilt: [0, 0, 1, 0.25] }] },
+    trowel: { owner: 'haR', prims: [{ k: 'box', c: rH(0.04, [0, 0.03, 0]), h: [0.05, 0.004, 0.09] }, { k: 'cyl', a: rH(-0.01), b: rH(0.04, [0, 0.028, 0]), r: 0.006 }] },
+    fence: { owner: 'pelvis', prims: [{ k: 'cyl', a: [0.36, -0.1, 0.06], b: [0.36, 0.88, 0.06], r: 0.018 }, { k: 'cyl', a: [0.7, -0.1, 0.06], b: [0.7, 0.88, 0.06], r: 0.018 }, { k: 'box', c: [0.53, 0.12, 0.06], h: [0.18, 0.015, 0.008] }, { k: 'box', c: [0.53, 0.5, 0.06], h: [0.18, 0.015, 0.008] }] },
+    fan: { owner: 'pelvis', prims: [{ k: 'ring', c: [0.46, 0.45, 0.02], r: [0.1, 0.12], plane: [0, 0, 1] }, { k: 'box', c: [0.46, 0.45, 0.02], h: [0.1, 0.012, 0.004], tilt: [0, 0, 1, 0.6] }, { k: 'box', c: [0.46, 0.45, 0.02], h: [0.1, 0.012, 0.004], tilt: [0, 0, 1, -0.6] }, { k: 'cyl', a: [0.46, 0.57, 0.02], b: [0.46, 0.88, 0.02], r: 0.012 }] },
+    hvacunit: { owner: 'pelvis', prims: [{ k: 'box', c: [0.5, 0.66, 0.04], h: [0.15, 0.22, 0.15] }, { k: 'ring', c: [0.5, 0.43, 0.04], r: [0.04, 0.11] }] },
+    garagedoor: { owner: 'pelvis', prims: [{ k: 'box', c: [0.62, 0.42, 0.12], h: [0.24, 0.46, 0.01] }, { k: 'box', c: [0.62, 0.2, 0.11], h: [0.24, 0.004, 0.004] }, { k: 'box', c: [0.62, 0.42, 0.11], h: [0.24, 0.004, 0.004] }, { k: 'box', c: [0.62, 0.64, 0.11], h: [0.24, 0.004, 0.004] }] },
+    tray: { owner: 'haL', prims: [{ k: 'ring', c: jd('haL', [0, -0.03, 0]), r: [0, 0.13], plane: [0, 1, -0.75] }, { k: 'ell', c: jd('haL', [0, -0.05, 0]), r: [0.065, 0.06, 0.065], half: true }, { k: 'cyl', a: jd('haL', [0, -0.11, 0]), b: jd('haL', [0, -0.13, 0]), r: 0.008 }] },
+    bullfloat: { owner: 'haR', prims: [POLE, { k: 'box', c: poleFoot(0.64, [0, 0.02, 0]), h: [0.17, 0.012, 0.05] }] }
+  };
   function figProps(names, J, idx) {
-    var out = [], i, hR = J[idx.haR], hL = J[idx.haL], eR = J[idx.elR], hd = J[idx.head], pv = J[idx.pelvis];
-    var dirR = vnorm(vsub(hR, eR)), dirL = vnorm(vsub(hL, J[idx.elL]));
-    var P = {
-      hardhat: { owner: 'head', prims: [{ k: 'ell', c: v3(hd, [0, -0.03, 0], 1), r: [0.1, 0.088, 0.11], half: true }, { k: 'ring', c: v3(hd, [0, -0.03, 0], 1), r: [0.1, 0.135], ex: 1, ez: 1.08 }, { k: 'box', c: v3(hd, [0, -0.118, 0], 1), h: [0.012, 0.008, 0.09] }] },
-      tablet: { owner: 'chest', prims: [{ k: 'box', c: [(hL[0] + hR[0]) / 2, (hL[1] + hR[1]) / 2 - 0.05, (hL[2] + hR[2]) / 2 - 0.01], h: [0.105, 0.072, 0.006], m: rotM([1, 0, 0], -0.95) }] },
-      wrench: { owner: 'haR', prims: [{ k: 'box', c: v3(hR, dirR, 0.09), h: [0.011, 0.012, 0.012], m: null, along: dirR, len: 0.1 }, { k: 'ring', c: v3(hR, dirR, 0.2), r: [0.016, 0.034], ex: 1, ez: 1, plane: dirR }] },
-      pipe: { owner: 'pelvis', prims: [{ k: 'cyl', a: [hR[0] - 0.3, hR[1] + 0.17, hR[2] - 0.05], b: [hR[0] + 0.22, hR[1] + 0.17, hR[2] - 0.05], ra: 0.028, rb: 0.028 }, { k: 'cyl', a: [hR[0] + 0.22, hR[1] + 0.17, hR[2] - 0.05], b: [hR[0] + 0.22, 0.86, hR[2] - 0.05], ra: 0.028, rb: 0.028 }] },
-      toolbelt: { owner: 'pelvis', prims: [{ k: 'ring', c: v3(pv, [0, -0.07, 0], 1), r: [0.138, 0.152], ex: 1, ez: 0.66, band: 0.035 }, { k: 'box', c: v3(pv, [-0.13, -0.03, -0.06], 1), h: [0.03, 0.04, 0.025] }, { k: 'box', c: v3(pv, [0.13, -0.03, -0.06], 1), h: [0.03, 0.04, 0.025] }] },
-      tester: { owner: 'haR', prims: [{ k: 'box', c: v3(hR, dirR, 0.045), h: [0.018, 0.035, 0.009] }, { k: 'cyl', a: v3(hR, dirR, 0.08), b: v3(hR, dirR, 0.13), ra: 0.004, rb: 0.002 }] },
-      hammer: { owner: 'haR', prims: [{ k: 'cyl', a: v3(hR, dirR, -0.03), b: v3(hR, dirR, 0.2), ra: 0.012, rb: 0.012 }, { k: 'box', c: v3(hR, dirR, 0.2), h: [0.018, 0.018, 0.062] }] },
-      phone: { owner: 'haL', prims: [{ k: 'box', c: v3(hL, [0.03, 0, 0], 1), h: [0.008, 0.038, 0.018] }] },
-      clipboard: { owner: 'haR', prims: [{ k: 'box', c: v3(hR, [-0.04, -0.03, -0.03], 1), h: [0.065, 0.085, 0.005], m: rotM([1, 0, 0], -0.5) }] },
-      keys: { owner: 'haL', prims: [{ k: 'ring', c: v3(hL, dirL, 0.05), r: [0.014, 0.022], ex: 1, ez: 1, plane: [0, 0, 1] }, { k: 'box', c: v3(hL, dirL, 0.085), h: [0.006, 0.022, 0.002] }, { k: 'box', c: v3(v3(hL, dirL, 0.08), [-0.018, 0, 0], 1), h: [0.006, 0.018, 0.002] }] },
-      yardsign: { owner: 'pelvis', prims: [{ k: 'cyl', a: [0.38, -0.42, 0.04], b: [0.38, 0.88, 0.04], ra: 0.01, rb: 0.01 }, { k: 'cyl', a: [0.38, -0.4, 0.04], b: [0.6, -0.4, 0.04], ra: 0.007, rb: 0.007 }, { k: 'box', c: [0.49, -0.29, 0.04], h: [0.1, 0.068, 0.006] }] }
-    };
-    for (i = 0; i < (names || []).length; i++) if (P[names[i]]) { var p = P[names[i]]; p.name = names[i]; out.push(p); }
+    function joint(n) { var q = idx[n]; if (q == null) throw new Error('aurora-field: unknown joint "' + n + '"'); return J[q]; }
+    function at(p) {
+      if (Array.isArray(p)) return p.slice();
+      var v;
+      if (p.mid) { var A = joint(p.mid[0]), B = joint(p.mid[1]); v = [(A[0] + B[0]) / 2, (A[1] + B[1]) / 2, (A[2] + B[2]) / 2]; }
+      else { v = joint(p.j).slice(); if (p.from) v = v3(v, vnorm(vsub(joint(p.j), joint(p.from))), p.t || 0); }
+      if (p.d) v = v3(v, p.d, 1);
+      if (p.x != null) v[0] = p.x; if (p.y != null) v[1] = p.y; if (p.z != null) v[2] = p.z;
+      return v;
+    }
+    function dir(p) { return Array.isArray(p) ? vnorm(p) : vnorm(vsub(joint(p.j), joint(p.from))); }
+    var out = [], i, k;
+    for (i = 0; i < (names || []).length; i++) {
+      var def = typeof names[i] === 'string' ? PROPS[names[i]] : names[i];
+      if (!def) throw new Error('aurora-field: unknown prop "' + names[i] + '"');
+      var prims = [];
+      for (k = 0; k < def.prims.length; k++) {
+        var q = def.prims[k], o = { k: q.k };
+        if (q.k === 'cyl') { o.a = at(q.a); o.b = at(q.b); o.ra = q.ra != null ? q.ra : q.r; o.rb = q.rb != null ? q.rb : q.r; }
+        else if (q.k === 'ell') { o.c = at(q.c); o.r = q.r.slice(); o.half = !!q.half; }
+        else if (q.k === 'box') { o.c = at(q.c); o.h = q.h.slice(); if (q.tilt) o.m = rotM(vnorm(q.tilt.slice(0, 3)), q.tilt[3]); if (q.along) { o.along = dir(q.along); o.len = q.len || 0.1; } }
+        else if (q.k === 'ring') { o.c = at(q.c); o.r = q.r.slice(); o.ex = q.ex || 1; o.ez = q.ez || 1; if (q.band) o.band = q.band; if (q.plane) o.plane = dir(q.plane); }
+        else throw new Error('aurora-field: unknown prim "' + q.k + '"');
+        prims.push(o);
+      }
+      out.push({ name: typeof names[i] === 'string' ? names[i] : (def.name || 'prop' + i), owner: def.owner, prims: prims });
+    }
     return out;
   }
   // the body as lit surfaces: [{ k, owner, …, area }], shared by the lit build and (as bones) the line build
@@ -732,8 +827,8 @@
     // measure, drop crumbs, put the silhouette (the chain through the crown) first, starting at the crown
     var top = -1, ty = 9;
     for (i = 0; i < chains.length; i++) {
-      var C = chains[i], L = 0; for (q = 1; q < C.P.length; q++) L += Math.hypot(C.P[q][0] - C.P[q - 1][0], C.P[q][1] - C.P[q - 1][1]);
-      if (C.closed) L += Math.hypot(C.P[0][0] - C.P[C.P.length - 1][0], C.P[0][1] - C.P[C.P.length - 1][1]);
+      var C = chains[i], L = 0; for (q = 1; q < C.P.length; q++) L += hyp(C.P[q][0] - C.P[q - 1][0], C.P[q][1] - C.P[q - 1][1]);
+      if (C.closed) L += hyp(C.P[0][0] - C.P[C.P.length - 1][0], C.P[0][1] - C.P[C.P.length - 1][1]);
       C.L = L; for (q = 0; q < C.P.length; q++) if (C.P[q][1] < ty) { ty = C.P[q][1]; top = i; }
     }
     chains = chains.filter(function (c5, j5) { return j5 === top || c5.L > 0.08; });
@@ -767,14 +862,14 @@
   // normal (for a clockwise loop) and how sharply it turns there; s0 offsets the first sample (0…1 of a step)
   function along(C, count, s0) {
     var P = C.P, n = P.length, seg = [], tot = 0, i, out = [];
-    for (i = 0; i < (C.closed ? n : n - 1); i++) { var a = P[i], b = P[(i + 1) % n], l = Math.hypot(b[0] - a[0], b[1] - a[1]); seg.push(l); tot += l; }
+    for (i = 0; i < (C.closed ? n : n - 1); i++) { var a = P[i], b = P[(i + 1) % n], l = hyp(b[0] - a[0], b[1] - a[1]); seg.push(l); tot += l; }
     if (!count || !tot) return out;
     var step = tot / (C.closed ? count : Math.max(1, count - 1)), j = 0, acc = 0;
     for (i = 0; i < count; i++) {
       var d = Math.min(tot, (i + (s0 || 0)) * step);
       while (j < seg.length - 1 && acc + seg[j] < d) { acc += seg[j]; j++; }
-      var A = P[j], B = P[(j + 1) % n], f = seg[j] ? (d - acc) / seg[j] : 0, tx = B[0] - A[0], ty = B[1] - A[1], tl = Math.hypot(tx, ty) || 1;
-      var Pp = P[(j - 1 + n) % n], t0x = A[0] - Pp[0], t0y = A[1] - Pp[1], t0l = Math.hypot(t0x, t0y) || 1;
+      var A = P[j], B = P[(j + 1) % n], f = seg[j] ? (d - acc) / seg[j] : 0, tx = B[0] - A[0], ty = B[1] - A[1], tl = hyp(tx, ty) || 1;
+      var Pp = P[(j - 1 + n) % n], t0x = A[0] - Pp[0], t0y = A[1] - Pp[1], t0l = hyp(t0x, t0y) || 1;
       var turn = Math.abs(Math.atan2(t0x / t0l * ty / tl - t0y / t0l * tx / tl, t0x / t0l * tx / tl + t0y / t0l * ty / tl));
       out.push([A[0] + (B[0] - A[0]) * f, A[1] + (B[1] - A[1]) * f, A[2] + (B[2] - A[2]) * f, f < 0.5 ? A[3] : B[3], f < 0.5 ? A[4] : B[4], ty / tl, -tx / tl, turn]);
     }
@@ -782,6 +877,7 @@
   }
 
   function figure(spec) {
+    if (typeof spec === 'string') { if (!TRADES[spec]) throw new Error('aurora-field: unknown trade "' + spec + '"'); spec = TRADES[spec]; }
     spec = spec || {};
     var rig = figRig(spec), J = rig.J0, idx = rig.idx, props = figProps(spec.props, J, idx), body = figBody(J, idx);
     // the outline, built once and shared: the line's silhouette and the lit body's rim are the same points
@@ -976,28 +1072,75 @@
   }
 
   // the crew: the people Digital Craft builds for, each drawn then lit (registerCrew, or create({ crew: true }))
-  var CREW = {
+  // trades: who Digital Craft builds for, each a pose, props and (by default) the pose's action
+  var TRADES = {
     contractor: { pose: 'tablet', props: ['hardhat', 'tablet'] },
     plumber: { pose: 'wrench', props: ['wrench', 'pipe'] },
     electrician: { pose: 'inspect', props: ['toolbelt', 'tester'] },
     roofer: { pose: 'hammer', props: ['hardhat', 'hammer'] },
+    manager: { pose: 'phone', props: ['phone', 'clipboard'] },
     realtor: { pose: 'keys', props: ['keys', 'yardsign'] },
-    manager: { pose: 'phone', props: ['phone', 'clipboard'] }
+    hvac: { pose: 'inspect', props: ['gauge', 'hvacunit', 'cap'] },
+    painter: { pose: 'pole', props: ['roller', 'cap'] },
+    landscaper: { pose: 'pole', props: ['rake', 'cap'] },
+    cleaner: { pose: 'pole', props: ['mop', 'bucket'] },
+    pest: { pose: 'spray', props: ['sprayer', 'cap'] },
+    pool: { pose: 'pole', props: ['skimmer'] },
+    restoration: { pose: 'inspect', props: ['tester', 'fan'] },
+    mover: { pose: 'carry', props: ['box'] },
+    solar: { pose: 'reach', props: ['solarpanel', 'hardhat'] },
+    window: { pose: 'carry', props: ['windowpane'] },
+    garagedoor: { pose: 'keys', props: ['remote', 'garagedoor'] },
+    arborist: { pose: 'push', props: ['chainsaw', 'hardhat'] },
+    fencer: { pose: 'hammer', props: ['hammer', 'fence'] },
+    concrete: { pose: 'pole', props: ['bullfloat', 'cap'] },
+    host: { pose: 'tray', props: ['tray'] }
   };
-  var CREW_NAMES = ['contractor', 'plumber', 'electrician', 'roofer', 'manager', 'realtor'], crewDone = false;
-  function registerCrew() {
-    if (crewDone) return CREW_NAMES.slice();
-    crewDone = true;
-    var lits = [];
-    for (var i = 0; i < CREW_NAMES.length; i++) {
-      var f = figure(CREW[CREW_NAMES[i]]);
-      register('crew:' + CREW_NAMES[i] + ':line', f.line); register('crew:' + CREW_NAMES[i] + ':lit', f.lit);
-      var x = -1 + i * 0.4, a = (i - 2.5) / 2.5;
-      lits.push([f.lit, [x, 0.12, 0.28 * a * a], 0.46]);
+  var CREW_NAMES = ['contractor', 'plumber', 'electrician', 'roofer', 'manager', 'realtor'];
+  var registered = {};
+  // crew:<trade>:line and :lit for one trade (or every trade), and crew:all, the default lineup
+  function registerCrew(only) {
+    var list = only ? [].concat(only) : Object.keys(TRADES), i;
+    for (i = 0; i < list.length; i++) {
+      var t = list[i]; if (!TRADES[t]) throw new Error('aurora-field: unknown trade "' + t + '"');
+      if (registered[t] === TRADES[t]) continue;
+      registered[t] = TRADES[t];
+      (function (t2) {
+        var memo = null; function f() { return memo || (memo = figure(TRADES[t2])); }   // built on first use
+        register('crew:' + t2 + ':line', function (n, r) { return f().line(n, r); });
+        register('crew:' + t2 + ':lit', function (n, r) { return f().lit(n, r); });
+      })(t);
     }
-    register('crew:all', group(lits));
+    if (!only && !SHAPES['crew:all']) register('crew:all', crewGroup(CREW_NAMES));
     return CREW_NAMES.slice();
   }
+  // a lineup of trades, lit, in a shallow arc
+  function crewGroup(names) {
+    var parts = [], k = names.length;
+    for (var i = 0; i < k; i++) {
+      var f = figure(TRADES[names[i]] || names[i]), x = k > 1 ? -1 + i * 2 / (k - 1) : 0, a = k > 1 ? (i - (k - 1) / 2) / ((k - 1) / 2) : 0;
+      parts.push([f.lit, [x, 0.12, 0.28 * a * a], Math.min(0.5, 2.4 / (k + 0.4))]);
+    }
+    return group(parts);
+  }
+  // plugins: add vocabulary and shapes without touching the engine.
+  //   AuroraField.use({ poses: {…}, props: {…}, actions: {…}, trades: {…}, palettes: {…}, shapes: { name: build | data }, beats: {…} })
+  var BEATS = {};
+  function use(plugin) {
+    if (!plugin) return api0;
+    var k;
+    for (k in plugin.poses || {}) FIG_POSES[k] = plugin.poses[k];
+    for (k in plugin.props || {}) PROPS[k] = plugin.props[k];
+    for (k in plugin.actions || {}) ACTIONS[k] = plugin.actions[k];
+    for (k in plugin.palettes || {}) PALETTES[k] = plugin.palettes[k];
+    for (k in plugin.beats || {}) BEATS[k] = plugin.beats[k];
+    for (k in plugin.trades || {}) { TRADES[k] = plugin.trades[k]; if (registered[k]) registerCrew(k); }
+    for (k in plugin.shapes || {}) register(k, plugin.shapes[k]);
+    return api0;
+  }
+  // what the vocabulary holds right now (for validation, editors and AI schemas)
+  function vocab() { return { poses: Object.keys(FIG_POSES), props: Object.keys(PROPS), actions: Object.keys(ACTIONS), trades: Object.keys(TRADES), palettes: Object.keys(PALETTES), joints: FIG_J.slice() }; }
+  var api0 = null;
 
   // ---- shape factories: point lists, SVG paths, text and images become shapes ----
   // Each returns a build function for register(). Flat sources sit in the x-y plane (y down,
@@ -2128,8 +2271,13 @@
       advance: function (ms) {
         if (!manual) throw new Error("aurora-field: advance() needs create({ clock: 'manual' })");
         var steps = Math.max(1, Math.round((+ms || 0) / 16.667)), h = (+ms || 0) / steps;
-        for (var q = 0; q < steps; q++) { vnow += h; update(h / 1000, vnow); }
+        for (var q = 0; q < steps; q++) { vnow += h; update(h / 1000, vnow); if (EV.frame) emit('frame', vnow); }
         draw(vnow); return api;
+      },
+      // add shapes to a live field (registered names); they compile on first use
+      add: function (list) {
+        for (var q = 0; q < (list || []).length; q++) { var nm = list[q]; if (!SHAPES[nm]) throw new Error('aurora-field: unknown shape "' + nm + '"'); if (!S[nm]) { S[nm] = { w: 0, ready: false }; names.push(nm); } }
+        return api;
       },
       // compile shapes ahead of use, one per idle slice, so setShape never stalls a frame
       prepare: function (list, done) {
@@ -2251,9 +2399,257 @@
     return SHAPES[name](n, rng(seed == null ? 1 : seed));
   }
 
-  return {
+  // ---- the stage: a story told as data ----
+  // stage(canvas, storyboard, opts) plays a storyboard: beats that draw a trade from a blank
+  // canvas, show the moment it went wrong (a missed call at 9:47 PM), bring in the AI, fill the
+  // drawing with light from the chest, and caption the outcome; and beats that line up the crew.
+  // A storyboard is JSON (validate() checks it, schema() describes it), so it can come from a
+  // server, an editor or an AI and change while the page is open: load() swaps it at the next beat.
+  //   { version: 1, palette?, light?, loop?: true, beats: [
+  //       { trade: 'roofer' | { pose, props, action }, draw?: { ms }, moment?: { text, at?, ms? }, ai?: { ms?, text? },
+  //         fill?: { from?, ms? }, caption?: { who?, did, metric?: { to, from?, prefix?, suffix?, ms? } }, hold?: ms },
+  //       { crew: ['contractor', …] | true, caption?, hold? } ] }
+  var ANCHORS = ['head', 'chest', 'hand', 'prop', 'feet'];
+  var LIMITS = { beats: 12, crew: 8, who: 32, did: 64, moment: 48, ms: 20000 };
+  function isObj(o) { return o && typeof o === 'object' && !Array.isArray(o); }
+  function present(v) { return v !== undefined && v !== null; }
+  function validate(sb, opts) {
+    var errs = [], V = vocab(), i;
+    function err(path, msg) { errs.push(path + ': ' + msg); }
+    function text(path, v, max) {
+      if (!present(v)) return;
+      if (typeof v !== 'string') return err(path, 'must be text');
+      if (v.length > max) err(path, 'is ' + v.length + ' characters; the limit is ' + max);
+      if (opts && opts.text) { var m = opts.text(v, path); if (m) err(path, m); }
+    }
+    function ms(path, v) { if (present(v) && !(typeof v === 'number' && v >= 0 && v <= LIMITS.ms)) err(path, 'must be 0…' + LIMITS.ms + ' ms'); }
+    function caption(path, c) {
+      if (!present(c)) return;
+      if (!isObj(c)) return err(path, 'must be an object');
+      text(path + '.who', c.who, LIMITS.who); text(path + '.did', c.did, LIMITS.did);
+      if (!present(c.did) && !present(c.who)) err(path, 'needs did or who');
+      if (present(c.metric)) {
+        var m = c.metric;
+        if (!isObj(m) || typeof m.to !== 'number' || !isFinite(m.to)) err(path + '.metric', 'needs a number "to"');
+        else { text(path + '.metric.prefix', m.prefix, 8); text(path + '.metric.suffix', m.suffix, 12); ms(path + '.metric.ms', m.ms); }
+      }
+    }
+    function trade(path, t) {
+      if (typeof t === 'string') { if (V.trades.indexOf(t) < 0) err(path, 'unknown trade "' + t + '" (known: ' + V.trades.join(', ') + ')'); return; }
+      if (!isObj(t)) return err(path, 'must be a trade name or { pose, props, action }');
+      if (typeof t.pose === 'string' && V.poses.indexOf(t.pose) < 0) err(path + '.pose', 'unknown pose "' + t.pose + '"');
+      if (present(t.props)) { if (!Array.isArray(t.props)) err(path + '.props', 'must be a list'); else t.props.forEach(function (p, k) { if (typeof p === 'string' ? V.props.indexOf(p) < 0 : !(isObj(p) && Array.isArray(p.prims))) err(path + '.props[' + k + ']', 'unknown prop ' + JSON.stringify(p)); }); }
+      if (typeof t.action === 'string' && V.actions.indexOf(t.action) < 0) err(path + '.action', 'unknown action "' + t.action + '"');
+    }
+    if (!isObj(sb)) return { ok: false, errors: ['storyboard: must be an object'] };
+    if (sb.version !== 1) err('version', 'must be 1');
+    if (present(sb.palette) && typeof sb.palette === 'string' && V.palettes.indexOf(sb.palette) < 0) err('palette', 'unknown palette "' + sb.palette + '"');
+    if (!Array.isArray(sb.beats) || !sb.beats.length) err('beats', 'needs at least one beat');
+    else if (sb.beats.length > LIMITS.beats) err('beats', 'at most ' + LIMITS.beats);
+    else for (i = 0; i < sb.beats.length; i++) {
+      var b = sb.beats[i], p = 'beats[' + i + ']';
+      if (!isObj(b)) { err(p, 'must be an object'); continue; }
+      if (present(b.trade) === present(b.crew)) { err(p, 'needs exactly one of trade or crew'); continue; }
+      if (present(b.trade)) {
+        trade(p + '.trade', b.trade);
+        if (present(b.draw)) ms(p + '.draw.ms', b.draw.ms);
+        if (present(b.moment)) { text(p + '.moment.text', b.moment.text, LIMITS.moment); ms(p + '.moment.ms', b.moment.ms); if (present(b.moment.at) && ANCHORS.indexOf(b.moment.at) < 0) err(p + '.moment.at', 'must be one of ' + ANCHORS.join(', ')); }
+        if (present(b.ai)) { ms(p + '.ai.ms', b.ai.ms); text(p + '.ai.text', b.ai.text, LIMITS.moment); }
+        if (present(b.fill)) { ms(p + '.fill.ms', b.fill.ms); if (present(b.fill.from) && ANCHORS.indexOf(b.fill.from) < 0) err(p + '.fill.from', 'must be one of ' + ANCHORS.join(', ')); }
+      } else if (b.crew !== true) {
+        if (!Array.isArray(b.crew) || !b.crew.length || b.crew.length > LIMITS.crew) err(p + '.crew', 'must be true or 1…' + LIMITS.crew + ' trades');
+        else b.crew.forEach(function (t, k) { trade(p + '.crew[' + k + ']', t); });
+      }
+      caption(p + '.caption', b.caption); ms(p + '.hold', b.hold);
+    }
+    return { ok: !errs.length, errors: errs };
+  }
+  // JSON Schema for a storyboard, with today's vocabulary as enums. strict: the shape OpenAI's
+  // structured outputs accept (every key required, optional ones nullable, no extra keys).
+  function schema(opts) {
+    var V = vocab(), strict = opts && opts.strict;
+    function obj(props, req) {
+      var o = { type: 'object', properties: props, additionalProperties: false };
+      if (strict) { o.required = Object.keys(props); for (var k in props) if (!req || req.indexOf(k) < 0) props[k] = nullable(props[k]); }
+      else if (req) o.required = req;
+      return o;
+    }
+    function nullable(s) { var c = {}; for (var k in s) c[k] = s[k]; c.type = [].concat(s.type, 'null'); if (c.enum) c.enum = c.enum.concat([null]); return c; }
+    var str = function (max) { return { type: 'string', maxLength: max }; }, num = { type: 'number' }, msS = { type: 'number', minimum: 0, maximum: LIMITS.ms };
+    var anchor = { type: 'string', enum: ANCHORS }, trade = { type: 'string', enum: V.trades };
+    var caption = obj({ who: str(LIMITS.who), did: str(LIMITS.did), metric: obj({ to: num, from: num, prefix: str(8), suffix: str(12), ms: msS }, ['to']) }, ['did']);
+    var tradeBeat = obj({ trade: trade, moment: obj({ text: str(LIMITS.moment), at: anchor, ms: msS }, ['text']), ai: obj({ ms: msS, text: str(LIMITS.moment) }), fill: obj({ from: anchor, ms: msS }), caption: caption, hold: msS }, ['trade']);
+    var crewBeat = obj({ crew: { type: 'array', items: trade, minItems: 1, maxItems: LIMITS.crew }, caption: caption, hold: msS }, ['crew']);
+    return obj({ version: { type: 'number', enum: [1] }, loop: { type: 'boolean' }, beats: { type: 'array', minItems: 1, maxItems: LIMITS.beats, items: { anyOf: [tradeBeat, crewBeat] } } }, ['version', 'beats']);
+  }
+
+  var STAGE_CSS = '.af-hud{position:absolute;inset:0;pointer-events:none;font:500 12px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--af-ink,#f4efe6)}' +
+    '.af-hud>*{position:absolute;left:0;top:0;opacity:0;transition:opacity .45s ease;will-change:transform}' +
+    '.af-hud .af-on{opacity:1}' +
+    '.af-moment{display:flex;align-items:center;gap:8px;white-space:nowrap;color:var(--af-alert,#ffb547);text-transform:uppercase;letter-spacing:.12em;font-size:11px}' +
+    '.af-moment i{width:12px;height:12px;border-radius:50%;border:2px solid currentColor;flex:none;animation:af-ping 1.1s ease-out infinite}' +
+    '@keyframes af-ping{0%{box-shadow:0 0 0 0 currentColor}100%{box-shadow:0 0 0 14px transparent}}' +
+    '.af-orb{width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:radial-gradient(circle,#fff 0,var(--af-accent,#7be3c3) 40%,transparent 72%);box-shadow:0 0 22px 6px var(--af-accent,#7be3c3);transition:opacity .4s ease,transform .7s cubic-bezier(.2,.7,.2,1)}' +
+    '.af-caption{min-width:180px;max-width:260px;padding:9px 12px;border:1px solid rgba(255,255,255,.12);border-radius:3px;background:rgba(11,11,13,.72);backdrop-filter:blur(6px)}' +
+    '.af-caption .af-who{display:flex;align-items:center;gap:7px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;opacity:.6}' +
+    '.af-caption .af-who:before{content:"";width:6px;height:6px;border-radius:50%;background:var(--af-accent,#7be3c3);box-shadow:0 0 8px var(--af-accent,#7be3c3)}' +
+    '.af-caption .af-did{margin-top:4px;letter-spacing:.06em;text-transform:uppercase}' +
+    '.af-caption .af-metric{display:block;margin-top:2px;font-size:22px;letter-spacing:0;color:var(--af-accent,#7be3c3)}' +
+    '.af-crewline{left:50%!important;top:auto!important;bottom:10px;transform:translateX(-50%)!important;letter-spacing:.14em;text-transform:uppercase;font-size:10px;opacity:0}' +
+    '@media (prefers-reduced-motion:reduce){.af-moment i{animation:none}.af-orb{transition:none}}';
+  var cssDone = false;
+
+  function stage(canvas, sb, opts) {
+    opts = opts || {};
+    var V = validate(sb, opts);
+    if (!V.ok) throw new Error('aurora-field: invalid storyboard: ' + V.errors.join('; '));
+    var doc = canvas.ownerDocument || null, win = doc && doc.defaultView, headless = !!opts.headless || !doc;
+    var host = opts.container || canvas.parentNode;
+    var EV = {}, Q = [], now = 0, board = sb, pending = null, idx = -1, seq = 0, focused = null, phase = '', beat = null, shapeName = '', still = false;
+    function emit(n, a) { var l = EV[n]; if (l) for (var k = 0; k < l.length; k++) l[k](a); }
+    function at(ms, fn) { var my = seq; Q.push({ t: now + ms, fn: function () { if (my === seq) fn(); } }); }
+    function shapesFor(b) { return Array.isArray(b.crew) || b.crew === true ? [] : [b.trade]; }
+    // every trade the board names, registered as crew:<trade>:line|lit (inline trades get their own names)
+    var inline = 0;
+    function tradeKey(t) {
+      if (typeof t === 'string') { registerCrew(t); return t; }
+      var name = 'inline' + (++inline); TRADES[name] = t; registerCrew(name); return name;
+    }
+    function groupKey(list) {
+      var keys = (list === true ? CREW_NAMES : list).map(tradeKey), nm = 'crew:group:' + keys.join('+');
+      if (!SHAPES[nm]) register(nm, crewGroup(keys));
+      return nm;
+    }
+    function prepare(b0) {
+      var names = [];
+      b0.beats.forEach(function (b) { if (present(b.trade)) { b._k = tradeKey(b.trade); names.push('crew:' + b._k + ':line', 'crew:' + b._k + ':lit'); } else { b._g = groupKey(b.crew); names.push(b._g); } });
+      return names;
+    }
+    var names = prepare(board), all = names.slice();
+    // the field holds every shape any board may need; a board loaded later adds its own via set()
+    var fo = { crew: false, blank: true, cycle: 0, seed: opts.seed != null ? opts.seed : 7, stars: opts.stars != null ? opts.stars : 60, autonomy: 0.45,
+      palette: board.palette || opts.palette || { preset: 'ranger', signal: [123, 227, 195], head: [200, 255, 236], glow: [62, 143, 122], glow2: [24, 30, 32] },
+      light: board.light || opts.light || { ambient: 0.18, key: 1.35, rim: 0.95, spec: 0.8, shine: 14 } };
+    ['container', 'stage', 'count', 'radius', 'depth', 'interactive', 'quality', 'renderer', 'reducedMotion', 'clock', 'maxDpr'].forEach(function (k) { if (opts[k] !== undefined) fo[k] = opts[k]; });
+    fo.shapes = uniq(all.concat(names)); fo.initial = names[0];
+    var field = create(canvas, fo);
+    field.prepare(names.slice(0, 4));
+    still = field.stats().reduced;
+
+    // the HUD: a moment pulse, the AI orb, the caption; DOM over the canvas unless headless
+    var hud = null, el = {};
+    if (!headless) {
+      if (!cssDone && doc.head && opts.styles !== false) { var st = doc.createElement('style'); st.textContent = STAGE_CSS; doc.head.appendChild(st); cssDone = true; }
+      hud = doc.createElement('div'); hud.className = 'af-hud'; hud.setAttribute('aria-hidden', 'true');
+      if (win && win.getComputedStyle(host).position === 'static') host.style.position = 'relative';
+      host.appendChild(hud);
+      ['moment', 'orb', 'caption', 'crewline'].forEach(function (k) { var d = doc.createElement('div'); d.className = 'af-' + k; hud.appendChild(d); el[k] = d; });
+    }
+    function show(k, on) { if (el[k]) el[k].className = 'af-' + k + (on ? ' af-on' : ''); emit('overlay', { el: k, on: !!on }); }
+    function place(k, x, y) { if (el[k]) el[k].style.transform = 'translate3d(' + Math.round(x) + 'px,' + Math.round(y) + 'px,0)'; }
+    var metric = null;
+    function setCaption(c) {
+      if (!c) { show('caption', false); return; }
+      if (el.caption) el.caption.innerHTML = '<span class="af-who"></span><span class="af-did"></span>' + (c.metric ? '<span class="af-metric"></span>' : '');
+      if (el.caption) { el.caption.querySelector('.af-who').textContent = c.who || ''; el.caption.querySelector('.af-did').textContent = c.did || ''; }
+      metric = c.metric ? { m: c.metric, t0: now } : null;
+      show('caption', true); emit('caption', c);
+    }
+    function anchor(name) { var a = field.anchors(); return a[name] || a.chest || null; }
+    field.on('frame', function (t) {
+      now = t;
+      Q.sort(function (a, b) { return a.t - b.t; });
+      while (Q.length && Q[0].t <= now) Q.shift().fn();
+      if (headless) return;
+      var W = host.clientWidth, c = anchor('chest');
+      if (c) {
+        var cap = el.caption, x = Math.min(W - (cap.offsetWidth || 200) - 8, Math.max(8, c.x + W * 0.12));
+        place('caption', x, Math.max(8, c.y - 24));
+      }
+      if (beat && beat.moment) { var m = anchor(beat.moment.at || 'prop'); if (m) place('moment', m.x + 10, m.y - 6); }
+      if (metric && el.caption) {
+        var mm = metric.m, k = Math.min(1, (now - metric.t0) / (mm.ms || 900)), e = 1 - Math.pow(1 - k, 3), v = (mm.from || 0) + (mm.to - (mm.from || 0)) * e;
+        var out = el.caption.querySelector('.af-metric'); if (out) out.textContent = (mm.prefix || '') + (Math.abs(mm.to) >= 10 ? Math.round(v) : v.toFixed(1)) + (mm.suffix || '');
+      }
+    });
+    field.on('traced', function (nm) { if (beat && nm === shapeName && phase === 'draw') afterDraw(); });
+
+    function go(i) {
+      seq++; Q.length = 0;
+      if (pending) { board = pending; pending = null; prepare(board); emit('load', board); i = 0; }
+      if (i >= board.beats.length) { if (board.loop === false) return; i = 0; emit('loop'); }
+      idx = i; beat = board.beats[i]; emit('beat', { index: i, beat: beat });
+      show('moment', false); show('orb', false); show('crewline', false); setCaption(null);
+      if (present(beat.crew)) {
+        phase = 'crew'; emit('phase', { index: i, phase: phase });
+        shapeName = beat._g; field.setShape(shapeName, { pin: 1e9, arrive: { from: [0, 0.2, 0], ms: 1400 } }).signal(undefined, 30, 10);
+        if (beat.caption) at(900, function () { if (el.crewline) { el.crewline.textContent = beat.caption.did || beat.caption.who || ''; show('crewline', true); } emit('caption', beat.caption); });
+        return at(still ? 1e9 : (beat.hold || 4500) + 1400, next);
+      }
+      if (still) { shapeName = 'crew:' + beat._k + ':lit'; field.setShape(shapeName, { pin: 1e9 }); setCaption(beat.caption); phase = 'hold'; return; }
+      phase = 'draw'; emit('phase', { index: i, phase: phase });
+      shapeName = 'crew:' + beat._k + ':line'; field.setShape(shapeName, { pin: 1e9 }); field.trace();
+      at((beat.draw && beat.draw.ms) || 3200, function () { if (phase === 'draw') afterDraw(); });   // in case the pen's event is missed
+    }
+    function afterDraw() {
+      var b = beat;
+      phase = 'moment';
+      if (b.moment) {
+        emit('phase', { index: idx, phase: phase, text: b.moment.text });
+        if (el.moment) el.moment.innerHTML = '<i></i><span></span>', el.moment.querySelector('span').textContent = b.moment.text;
+        show('moment', true);
+      }
+      at(b.moment ? (b.moment.ms || 1400) : 0, function () {
+        phase = 'ai'; emit('phase', { index: idx, phase: phase });
+        var dur = (b.ai && b.ai.ms) || 900, m = anchor((b.moment && b.moment.at) || 'prop'), h = anchor('head');
+        if (el.orb && m) { place('orb', 20, 20); show('orb', true); at(30, function () { place('orb', m.x, m.y); }); at(dur * 0.6, function () { if (h) place('orb', h.x, h.y); }); }
+        field.signal('head', 40, 6);
+        at(dur, function () {
+          phase = 'fill'; emit('phase', { index: idx, phase: phase });
+          show('moment', false); show('orb', false);
+          shapeName = 'crew:' + b._k + ':lit';
+          field.setShape(shapeName, { pin: 1e9, arrive: { from: (b.fill && b.fill.from) || 'chest', ms: (b.fill && b.fill.ms) || 1100 } }).signal('chest', 30, 8);
+          at(((b.fill && b.fill.ms) || 1100) * 0.6, function () { phase = 'caption'; emit('phase', { index: idx, phase: phase }); setCaption(b.caption); });
+          at(((b.fill && b.fill.ms) || 1100) + (b.hold || 3600), next);
+        });
+      });
+    }
+    function next() { if (focused) return; go(idx + 1); }
+
+    var api = {
+      field: field,
+      get storyboard() { return board; }, get index() { return idx; }, get phase() { return phase; },
+      // swap in a new storyboard at the next beat (now, if nothing is playing); returns the validation
+      load: function (nb) {
+        var v = validate(nb, opts); if (!v.ok) return v;
+        field.add(prepare(nb));   // trades the field hasn't met yet join it, compiled on first use
+        pending = nb; if (idx < 0 || focused) { focused = null; go(0); }
+        return v;
+      },
+      goto: function (i) { focused = null; go(Math.max(0, Math.min(board.beats.length - 1, i | 0))); return api; },
+      // show one trade now and hold it (a headline hover); null hands the stage back to the story
+      focus: function (t) {
+        if (!t) { if (focused) { focused = null; go(idx + 1); } return api; }
+        var k = -1; board.beats.forEach(function (b, j) { if (k < 0 && (b.trade === t || b._k === t)) k = j; });
+        if (k >= 0) { focused = t; go(k); }   // the beat plays, then holds: next() waits while focused
+        return api;
+      },
+      advance: function (ms) { field.advance(ms); return api; },
+      play: function () { field.play(); return api; }, pause: function () { field.pause(); return api; },
+      on: function (n, fn) { (EV[n] || (EV[n] = [])).push(fn); return api; },
+      off: function (n, fn) { var l = EV[n]; if (l) for (var k = l.length - 1; k >= 0; k--) if (!fn || l[k] === fn) l.splice(k, 1); return api; },
+      destroy: function () { seq++; Q.length = 0; field.destroy(); if (hud && hud.parentNode) hud.parentNode.removeChild(hud); }
+    };
+    function uniq(a) { var o = [], k; for (k = 0; k < a.length; k++) if (o.indexOf(a[k]) < 0) o.push(a[k]); return o; }
+    if (still) go(0); else at(0, function () { go(0); });   // the story starts on the first frame, after listeners attach
+    return api;
+  }
+
+  api0 = {
     version: VERSION, create: create, register: register, build: build, shapes: function () { return ORDER.slice(); }, defaults: DEFAULTS,
     palettes: PALETTES, armour: armour, offload: offload, serve: serve, fromPoints: fromPoints, fromSVG: fromSVG, fromImage: fromImage, fromText: fromText, parsePath: parsePath,
-    figure: figure, group: group, registerCrew: registerCrew, crew: CREW_NAMES.slice(), poses: Object.keys(FIG_POSES)
+    figure: figure, group: group, registerCrew: registerCrew, crew: CREW_NAMES.slice(), poses: Object.keys(FIG_POSES),
+    use: use, vocab: vocab, crewGroup: crewGroup, stage: stage, validate: validate, schema: schema, trades: function () { return Object.keys(TRADES); }
   };
+  return api0;
 });

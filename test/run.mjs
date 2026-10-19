@@ -432,8 +432,9 @@ test('crew: registers six trades, drawn and lit, plus the whole crew; idempotent
   const before = AF.shapes().length;
   assert.deepEqual(AF.registerCrew(), AF.crew);
   assert.equal(AF.crew.length, 6);
-  assert.equal(AF.shapes().length, before + 13);
-  AF.registerCrew(); assert.equal(AF.shapes().length, before + 13, 'idempotent');
+  const want = before + AF.trades().length * 2 + 1;
+  assert.equal(AF.shapes().length, want);
+  AF.registerCrew(); assert.equal(AF.shapes().length, want, 'idempotent');
   for (const c of AF.crew) for (const k of ['line', 'lit']) assert.equal(AF.build('crew:' + c + ':' + k, 700, 3).points.length, 700);
   const all = AF.build('crew:all', 1800, 3);
   assert.equal(all.points.length, 1800); assert.ok(all.anchors['0.chest'] && all.anchors['5.prop']);
@@ -486,6 +487,40 @@ test('3.0: manual clock, lazy compile, prepare, the arrive wave', () => {
   f.advance(3000); assert.ok(f.stats().settle > 0.8, 'then it has arrived (' + f.stats().settle + ')');
   let done = false; f.prepare(['mind'], () => { done = true; });
   return new Promise(res => setTimeout(() => { assert.ok(done, 'prepare() compiles in idle slices and calls back'); f.setShape('mind'); f.advance(50); f.destroy(); res(); }, 80));
+});
+
+test('3.0: plugins and vocabulary as data', () => {
+  const v = AF.vocab();
+  assert.ok(v.trades.length >= 21 && v.poses.includes('pole') && v.props.includes('skimmer'));
+  AF.use({ props: { flag: { owner: 'haL', prims: [{ k: 'cyl', a: { j: 'haL', d: [0, 0, 0] }, b: { j: 'haL', d: [0, -0.3, 0] }, r: 0.008 }, { k: 'box', c: { j: 'haL', d: [0.06, -0.26, 0] }, h: [0.06, 0.04, 0.004] }] } },
+    actions: { wave: [{ pivot: 'elL', joint: 'haL', axis: [0, 0, 1], amp: 0.3, rate: 3 }] }, trades: { guide: { pose: 'keys', props: ['flag', 'cap'], action: 'wave' } } });
+  assert.ok(AF.trades().includes('guide'));
+  AF.registerCrew('guide');
+  const s = AF.build('crew:guide:lit', 1200, 3); assert.equal(s.points.length, 1200);
+  assert.notDeepEqual(s.flow(5, 0).slice(), s.flow(5, 0.4).slice(), 'the data action moves the figure');
+  assert.throws(() => AF.figure({ props: ['nope'] }).lit(100, () => 0.5), /unknown prop/);
+});
+
+test('3.0: storyboards validate, describe themselves, and play on a stage', () => {
+  const sb = JSON.parse(readFileSync(new URL('../examples/missed-moment.json', import.meta.url), 'utf8'));
+  assert.deepEqual(AF.validate(sb), { ok: true, errors: [] });
+  const bad = AF.validate({ version: 1, beats: [{ trade: 'astronaut' }, { trade: 'roofer', crew: true }, { crew: [], caption: { did: 'x'.repeat(99) } }] });
+  assert.equal(bad.ok, false); assert.ok(bad.errors.length >= 4, bad.errors.join(' | '));
+  assert.ok(AF.validate(sb, { text: v => v.includes('·') ? null : 'needs a middle dot' }).ok === false, 'custom text rules');
+  const sc = AF.schema({ strict: true });
+  assert.equal(sc.additionalProperties, false); assert.ok(sc.properties.beats.items.anyOf[0].properties.trade.enum.includes('roofer'));
+  // play it headless on a manual clock and watch the phases go by
+  const env = stubEnv({ gl: true }), seen = [];
+  const st = AF.stage(env.canvas, sb, { clock: 'manual', count: 800, headless: true });
+  st.on('phase', p => seen.push(p.index + ':' + p.phase));
+  for (let k = 0; k < 70; k++) st.advance(500);
+  for (const want of ['0:draw', '0:moment', '0:ai', '0:fill', '0:caption', '1:draw', '3:crew']) assert.ok(seen.includes(want), 'saw ' + want + ' in ' + seen.join(','));
+  // load(): a new board takes over at the next beat; focus() holds a trade
+  const v = st.load({ version: 1, beats: [{ trade: 'pool', caption: { did: 'Route booked' } }] }); assert.ok(v.ok);
+  for (let k = 0; k < 30; k++) st.advance(500);
+  assert.ok(seen.some(x => x.startsWith('0:') && st.storyboard.beats[0].trade === 'pool'));
+  assert.equal(st.load({ version: 2 }).ok, false, 'a bad board is refused and the old one plays on');
+  st.destroy();
 });
 
 test('create: refuses a missing canvas', () => {

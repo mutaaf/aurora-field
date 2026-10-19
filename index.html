@@ -160,6 +160,7 @@
       <div class="row" id="crew" role="group" aria-label="Crew"></div>
       <div class="row"><button class="chip" id="enlighten" aria-pressed="false">loop the crew</button><button class="chip" id="redraw">draw again</button></div>
       <p class="note">A pen draws each worker on a blank canvas, then a signal reaches them and they fill into a lit body (figure(), registerCrew()).</p>
+      <div class="row"><button class="chip" id="sbopen">storyboard editor</button></div>
     </div></details>
 
     <details open><summary>look</summary><div class="sec">
@@ -215,6 +216,16 @@
   </dl>
 </div></div>
 <div class="toast" id="toast"></div>
+<style>#sb[hidden]{display:none!important}@media (max-width:760px){#sb{grid-template-columns:1fr!important;overflow:auto}}</style>
+<div id="sb" role="dialog" aria-modal="true" aria-label="Storyboard editor" hidden style="position:fixed;inset:0;z-index:50;background:rgba(5,7,8,.94);display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px;padding:16px">
+  <div id="sbstage" style="position:relative;min-height:60vh;border:1px solid rgba(255,255,255,.08);border-radius:6px;overflow:hidden"><canvas id="sbcanvas" style="position:absolute;inset:0;width:100%;height:100%"></canvas></div>
+  <div style="display:grid;grid-template-rows:auto 1fr auto auto;gap:10px;min-width:0">
+    <div class="row"><button class="chip" id="sbplay">play</button><button class="chip" id="sbcopy">copy JSON</button><button class="chip" id="sbclose">close</button></div>
+    <textarea id="sbjson" spellcheck="false" aria-label="Storyboard JSON" style="width:100%;min-height:40vh;resize:vertical;background:#0b0f12;color:#dfe8e4;border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:10px;font:12px/1.5 ui-monospace,Menlo,monospace"></textarea>
+    <pre id="sberr" style="margin:0;white-space:pre-wrap;font:11px/1.5 ui-monospace,Menlo,monospace;color:#ffb547"></pre>
+    <form id="sbpub" class="row" style="gap:6px"><input id="sburl" placeholder="publish to (e.g. https://cto.digitalcraftai.com/api/scene-direct)" style="flex:1;min-width:0" aria-label="Publish endpoint"><input id="sbtok" type="password" placeholder="token" style="width:120px" aria-label="Publish token"><button class="chip" type="submit">publish</button></form>
+  </div>
+</div>
 
 <script src="src/aurora-field.js"></script>
 <script>
@@ -324,6 +335,20 @@
     var at=-1; AF.crew.forEach(function(c,i){ if(state.shape.indexOf('crew:'+c+':')===0) at=i; });
     drawCrew(AF.crew[(at+1)%AF.crew.length]);
   }
+  // ---- storyboard editor: JSON in, a stage out; validate as you type; publish to a scene endpoint ----
+  var sbStage=null, SB_DEFAULT='{\n  "version": 1,\n  "beats": [\n    { "trade": "roofer", "moment": { "text": "9:47 PM · missed call", "at": "hand" }, "caption": { "who": "Roofer", "did": "Call answered · job booked", "metric": { "to": 38, "suffix": "s" } } },\n    { "trade": "pool", "moment": { "text": "Sun 8:02 AM · new lead", "at": "prop" }, "caption": { "who": "Pool service", "did": "Route booked" } },\n    { "crew": ["roofer", "pool", "painter", "hvac", "realtor"], "caption": { "did": "Your whole crew · on autopilot" } }\n  ]\n}';
+  function sbCheck(){ try { var v=AF.validate(JSON.parse($('sbjson').value)); $('sberr').textContent=v.ok?'':v.errors.join('\n'); return v.ok; } catch(e){ $('sberr').textContent='JSON: '+e.message; return false; } }
+  function sbPlay(){ if(!sbCheck()) return; var board=JSON.parse($('sbjson').value); if(sbStage){ var v=sbStage.load(board); if(v.ok) sbStage.goto(0); return; } sbStage=AF.stage($('sbcanvas'),board,{container:$('sbstage'),interactive:false}); }
+  try { $('sbjson').value=localStorage.getItem('af-storyboard')||SB_DEFAULT; } catch(e){ $('sbjson').value=SB_DEFAULT; }
+  $('sbjson').oninput=function(){ sbCheck(); try { localStorage.setItem('af-storyboard',$('sbjson').value); } catch(e){} };
+  $('sbopen').onclick=function(){ $('sb').hidden=false; if(field) field.pause(); sbPlay(); };
+  $('sbclose').onclick=function(){ $('sb').hidden=true; if(sbStage){ sbStage.destroy(); sbStage=null; } if(field&&!paused) field.play(); };
+  $('sbplay').onclick=sbPlay;
+  $('sbcopy').onclick=function(){ if(navigator.clipboard) navigator.clipboard.writeText($('sbjson').value).then(function(){ $('sberr').textContent='copied'; },function(){}); };
+  $('sbpub').onsubmit=function(e){ e.preventDefault(); if(!sbCheck()) return; var url=$('sburl').value.trim(); if(!url) { $('sberr').textContent='Add the endpoint to publish to.'; return; }
+    fetch(url,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+$('sbtok').value},body:JSON.stringify({ publish: JSON.parse($('sbjson').value) })})
+      .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ $('sberr').textContent=r.ok?'published: open pages pick it up within a minute':('publish failed ('+r.status+'): '+(j.error||'')); }); })
+      .catch(function(err){ $('sberr').textContent='publish failed: '+err.message; }); };
   $('enlighten').onclick=function(){ crewLoop=!crewLoop; this.setAttribute('aria-pressed',String(crewLoop)); if(crewLoop) nextCrew(); else clearTimeout(crewT); };
   $('redraw').onclick=function(){ var m=state.shape.match(/^crew:([a-z]+):/); drawCrew(m?m[1]:AF.crew[0]); };
   function setPalette(k,quiet){ state.palette=k; field.set({palette:k}); if(!quiet){ marks(); syncURL(); } }

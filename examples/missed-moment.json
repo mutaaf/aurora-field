@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "loop": true,
+  "beats": [
+    { "trade": "roofer", "moment": { "text": "9:47 PM · missed call", "at": "hand" }, "caption": { "who": "Roofer", "did": "Call answered · job booked", "metric": { "to": 38, "suffix": "s" } } },
+    { "trade": "plumber", "moment": { "text": "Sat 7:12 AM · voicemail", "at": "prop" }, "caption": { "who": "Plumber", "did": "Estimate sent · under an hour" } },
+    { "trade": "realtor", "moment": { "text": "11:03 PM · new lead", "at": "hand" }, "caption": { "who": "Realtor", "did": "Deal analyzed · comps and an offer" } },
+    { "crew": true, "caption": { "did": "Your whole crew · on autopilot" }, "hold": 4500 }
+  ]
+}
