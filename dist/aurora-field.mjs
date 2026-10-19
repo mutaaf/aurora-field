@@ -1232,7 +1232,8 @@ const module = { exports: {} };
     }
     function fire(sh, p, hops) {
       var adj = S[sh].adj; if (!adj || sig.length >= 60 || !adj[p].length || (visOn && VIS[OWN[p]] < 0.5)) return;
-      sig.push({ sh: sh, a: p, b: adj[p][Math.floor(Math.random() * adj[p].length)], t: 0, hops: hops || 6 + Math.floor(Math.random() * 10) });
+      var b = adj[p][Math.floor(Math.random() * adj[p].length)]; if (visOn && VIS[OWN[b]] < 0.5) return;   // signals only run where the pen has drawn
+      sig.push({ sh: sh, a: p, b: b, t: 0, hops: hops || 6 + Math.floor(Math.random() * 10) });
     }
     function burst() { if (S[shape].adj) for (var k = 0; k < 14; k++) fire(shape, Math.floor(Math.random() * N)); }
 
@@ -1594,7 +1595,7 @@ const module = { exports: {} };
     function update(dt, t) {
       var tn = now(), cur = S[shape], def = cur.def, T = cur.T, flowT = t / 1000, n, k;
       // the pen: while a traced shape is being drawn, points past its progress wait at its tip
-      var since = (tn - shapeAt) / 1000, tr = cur.tr, prog = 1, pen = -1, trOn = false, vt;
+      var since = (tn - shapeAt) / 1000, tr = cur.tr, prog = 1, pen = -1, trOn = false, vt, park;
       if (tr && !reduced) {
         prog = since * 1000 / cur.trMs;
         if (prog < 1) { trOn = true; pen = cur.tri[Math.min(N - 1, Math.max(0, Math.floor(prog * N)))]; }
@@ -1698,12 +1699,13 @@ const module = { exports: {} };
             tx += breathe * (bs1 * BC1[n] + bc1 * BS1[n]); ty += breathe * (bs2 * BC2[n] + bc2 * BS2[n]); tz += breathe * (bc3 * BC3[n] - bs3 * BS3[n]);
           }
         }
-        vt = 1;
+        vt = 1; park = false;
         if (trOn && tr[p] > prog) {
+          park = !visOn || VIS[n] < 0.05;   // unseen: ride the pen exactly, so it's already there when drawn
           // not drawn yet: wait in a small knot at the pen; only the next stretch shows, as its bright tip
           tx = T[pen * 3] + 0.025 * BC1[n]; ty = T[pen * 3 + 1] + 0.025 * BS2[n]; tz = T[pen * 3 + 2] + 0.025 * BC3[n];
           vt = tr[p] - prog < 0.008 && Math.abs(X[n] - tx) + Math.abs(Y[n] - ty) + Math.abs(Z[n] - tz) < 0.12 ? 1 : 0;   // the tip shows once it has caught up with the pen
-        }
+        } else if (trOn && VIS[n] < 0.5 && Math.abs(X[n] - tx) + Math.abs(Y[n] - ty) + Math.abs(Z[n] - tz) > 0.12) vt = 0;   // just drawn: appear on arrival, not in flight
         var om = W[n] * (introDone ? 1 : 0.55), damp = 1.5 * om;
         var ex = tx - X[n], ey = ty - Y[n], ez = tz - Z[n];
         var dist = Math.abs(ex) + Math.abs(ey) + Math.abs(ez), sw = swirlK * Math.min(1, dist);
@@ -1711,6 +1713,7 @@ const module = { exports: {} };
         VY[n] += (om * om * ey - damp * VY[n]) * dt;
         VZ[n] += (om * om * ez - damp * VZ[n] + ex * sw) * dt;
         X[n] += VX[n] * dt; Y[n] += VY[n] * dt; Z[n] += VZ[n] * dt;
+        if (park) { X[n] = tx; Y[n] = ty; Z[n] = tz; VX[n] = VY[n] = VZ[n] = 0; }
         if (near) {
           var dx = cx + SX[n] + OX[n] - mx, dy = cy + SY[n] + OY[n] - my, d2 = dx * dx + dy * dy;
           if (d2 < 8100 && d2 > 0.01) { var d = Math.sqrt(d2), f = (1 - d / 90); f = f * f * 7; OX[n] += dx / d * f; OY[n] += dy / d * f; if (f > 2) GLOW[n] = Math.max(GLOW[n], 0.4); }
@@ -1751,7 +1754,8 @@ const module = { exports: {} };
         if (g.t >= 1) {
           if (AUTO) GLOW[OWN[g.b]] = Math.max(GLOW[OWN[g.b]], 0.6 + 0.4 * AUTO);
           var adj = S[g.sh].adj[g.b];
-          if (--g.hops > 0 && adj.length) { g.a = g.b; g.b = adj[Math.floor(Math.random() * adj.length)]; g.t = 0; } else sig.splice(s, 1);
+          var nb = adj.length ? adj[Math.floor(Math.random() * adj.length)] : -1;
+          if (--g.hops > 0 && nb >= 0 && !(visOn && VIS[OWN[nb]] < 0.5)) { g.a = g.b; g.b = nb; g.t = 0; } else sig.splice(s, 1);
         }
       }
     }
