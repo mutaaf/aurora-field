@@ -38,12 +38,13 @@ console.table(rows);
 if (process.argv.includes('--budget')) {
   const { gzipSync } = await import('node:zlib');
   const { readFileSync } = await import('node:fs');
-  const BUDGET = { 'lit figure ms/frame @2800': 0.35, 'create() ms (crew field)': 8, 'min.js gzip KB': 40 };
-  const lit = rows.find(r => r.renderer === 'webgl' && r.shape === 'crew:contractor:lit' && r.nodes === 2800);
+  // frame cost is relative to the lit helm on the same machine (CI runners are slower than laptops); sizes are absolute
+  const BUDGET = { 'lit figure frame ÷ lit helm frame @2800': 1.25, 'create() ms (crew field)': 8, 'min.js gzip KB': 40 };
+  const lit = rows.find(r => r.renderer === 'webgl' && r.shape === 'crew:contractor:lit' && r.nodes === 2800), helm = rows.find(r => r.renderer === 'webgl' && r.shape === 'helm' && r.nodes === 2800);
   let best = Infinity;
   for (let k = 0; k < 5; k++) { const e = env('gl'); const t0 = process.hrtime.bigint(); const f = AF.create(e.canvas, { seed: 1, count: 2800, crew: true, shapes: AF.crew.flatMap(t => ['crew:' + t + ':line', 'crew:' + t + ':lit']), initial: 'crew:contractor:line', cycle: 0 }); best = Math.min(best, Number(process.hrtime.bigint() - t0) / 1e6); f.destroy(); }
   const gz = gzipSync(readFileSync(new URL('../dist/aurora-field.min.js', import.meta.url))).length / 1024;
-  const got = { 'lit figure ms/frame @2800': lit ? lit['ms/frame'] : Infinity, 'create() ms (crew field)': +best.toFixed(2), 'min.js gzip KB': +gz.toFixed(1) };
+  const got = { 'lit figure frame ÷ lit helm frame @2800': lit && helm ? +(lit['ms/frame'] / helm['ms/frame']).toFixed(2) : Infinity, 'create() ms (crew field)': +best.toFixed(2), 'min.js gzip KB': +gz.toFixed(1) };
   let over = 0;
   for (const k in BUDGET) { const ok = got[k] <= BUDGET[k]; if (!ok) over++; console.log((ok ? '✓ ' : '✗ ') + k + ': ' + got[k] + ' (budget ' + BUDGET[k] + ')'); }
   if (over) process.exit(1);

@@ -20,7 +20,7 @@ Quality and speed, ahead of the stage, plugin and React work in 3.0.
 - **Minified builds:** `dist/aurora-field.min.js` (UMD, 35 KB gzipped) and `.min.mjs`. esbuild is a dev dependency only; the runtime has zero dependencies.
 - **Deterministic and measured:**
   - `clock: 'manual'` with `field.advance(ms)`.
-  - `npm run budget` enforces 0.35 ms/frame for a lit figure at 2,800 points, 8 ms for `create()` and 40 KB gzipped, in CI.
+  - `npm run budget` keeps a lit figure's frame within 1.25× the lit helm's (same machine), 8 ms for `create()` and 40 KB gzipped, in CI.
   - `npm run render` renders contact sheets in headless Chromium. `--check` diffs them against goldens and `--update` refreshes the goldens.
 
 ## 2.1.0 — 2026-10-19
