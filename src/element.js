@@ -7,7 +7,8 @@
  * Attributes (all live): shapes ("mind,helm"), shape, rotation, palette (a preset name),
  * count, autonomy, quality, depth, cycle, seed, stars, interactive ("false" turns it off),
  * light ("false" turns lit shapes flat), surfels ("false" draws skins as points only),
- * worker (a URL to dist/aurora-field.worker.js: renders off the main thread when supported).
+ * worker (a URL to dist/aurora-field.worker.js: renders off the main thread when supported),
+ * crew (registers the built-in crew: shapes="crew:roofer:line,crew:roofer:lit"), blank (start from an empty sky).
  * Events (CustomEvent, detail = data): shape, stats, settled, spinout.
  * The element's .field is the live field (setShape, setPose, set, anchors, view…).
  */
@@ -25,7 +26,7 @@
   El.prototype = Object.create(root.HTMLElement.prototype);
   El.prototype.constructor = El;
   Object.setPrototypeOf(El, root.HTMLElement);
-  El.observedAttributes = ['shapes', 'shape', 'rotation', 'palette', 'count', 'autonomy', 'quality', 'depth', 'cycle', 'seed', 'stars', 'interactive', 'light', 'surfels', 'worker'];
+  El.observedAttributes = ['shapes', 'shape', 'rotation', 'palette', 'count', 'autonomy', 'quality', 'depth', 'cycle', 'seed', 'stars', 'interactive', 'light', 'surfels', 'worker', 'crew', 'blank'];
   El.prototype.connectedCallback = function () {
     if (this._field) return;
     if (!this.style.display) this.style.display = 'block';
@@ -41,7 +42,7 @@
       container: this, shapes: list(g('shapes')) || undefined, initial: g('shape') || undefined, rotation: list(g('rotation')) || undefined,
       palette: g('palette') || undefined, count: num(g('count')), autonomy: num(g('autonomy')), quality: g('quality') || undefined,
       depth: num(g('depth')), cycle: num(g('cycle')), seed: num(g('seed')), stars: num(g('stars')), interactive: g('interactive') !== 'false',
-      light: g('light') !== 'false', surfels: g('surfels') !== 'false',
+      light: g('light') !== 'false', surfels: g('surfels') !== 'false', crew: g('crew') != null && g('crew') !== 'false', blank: g('blank') != null && g('blank') !== 'false',
       onShape: fire('shape'), onStats: fire('stats'), onSpinout: fire('spinout')
     };
   };

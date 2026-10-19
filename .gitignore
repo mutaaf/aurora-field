@@ -1,2 +1,4 @@
 node_modules/
 .DS_Store
+test/render-out/
+node_modules/

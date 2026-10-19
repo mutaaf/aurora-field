@@ -1,5 +1,39 @@
 # Changelog
 
+## 3.0.0-alpha.1 — 2026-10-19
+Quality and speed, ahead of the stage, plugin and React work in 3.0.
+- **Drawings that read as people.** `figure().line` is now an outline instead of stick bones.
+  - **How it's built:** the body and props are splatted into a front-view depth grid. Edges are kept where the figure meets empty space (the silhouette), and where an arm or a prop passes in front of the body. Silhouette and inner edges are chained separately, then depth-smoothed, Chaikin-smoothed and resampled.
+  - **Drawing order:** the pen draws the silhouette as one stroke, clockwise from the crown, then the inner lines.
+  - **Line weight:** a crisp hairline, plus ink that thickens on the side away from the light.
+- **A pen that draws like a hand.** It eases in and out (`trace.ease`) and slows into corners. Its head is a comet with a short tail, and the tail never bridges a pen lift. Points the pen hasn't reached ride with it exactly. A drawn point appears in place, right behind the pen, so nothing streaks.
+- **Enlightenment spreads.** `setShape(name, { arrive: { from, ms } })` switches points to the new shape in a wave from an anchor. The lit body's rim is the same points as the drawing's hairline, and the skin is ordered along the outline. So the edge of the drawing stays put while the body fills in from it.
+- **Lit bodies that read as solid, not fog:**
+  - Skin points buried inside another part are culled, and each part's share follows its visible area.
+  - Ambient occlusion is baked with deterministic probes.
+  - New flat-disc surfels (`surfelFlat`, `surfelAlpha`), which shrink edge-on so the silhouette stays clean.
+  - Figures hold still: `still` turns off place-trading and scouts, and `edges: false` keeps pairs for signals only.
+- **Faster:**
+  - Shapes compile on first use; `field.prepare(names, done)` warms them in idle slices. `create()` with all 13 crew shapes takes 2.3 ms.
+  - A cold trade outline takes about 25–37 ms.
+  - `offload()` streams anchors and view back about 30×/s, so overlays work with the worker.
+- **Minified builds:** `dist/aurora-field.min.js` (UMD, 35 KB gzipped) and `.min.mjs`. esbuild is a dev dependency only; the runtime has zero dependencies.
+- **Deterministic and measured:**
+  - `clock: 'manual'` with `field.advance(ms)`.
+  - `npm run budget` keeps a lit figure's frame within 1.25× the lit helm's (same machine), 8 ms for `create()` and 40 KB gzipped, in CI.
+  - `npm run render` renders contact sheets in headless Chromium. `--check` diffs them against goldens and `--update` refreshes the goldens.
+
+## 2.1.0 — 2026-10-19
+- **People, drawn then lit.** `figure(spec)` builds a person from an 18-joint skeleton in two forms.
+  - **The line form** is a modern stick figure: bones, joint nodes and prop outlines, with pairs along every stroke for signals. A pen traces it from the chin round.
+  - **The lit form** is the same person as a sleek, solid mannequin: a lofted torso, tapered limbs and an egg head, sampled evenly (R2 low-discrepancy) with analytic normals and surfels. Seams at the collar, waist, wrists and knees carry signals, a visor line crosses the face, and a bright core sits at the chest. Props take the accent tone.
+  - **Shared by both:** pose, props, anchors (`head`, `chest`, `hand`, `prop`, `feet`) and an idle loop. Every point rides its joint through `flow`: breathing, a weight shift, a glance, and the trade's action (the hammer swings, the wrench turns, the head nods on the phone).
+  - **The crew:** `registerCrew()` (or `create({ crew: true })`, which also works in workers) adds a contractor, plumber, electrician, roofer, property manager and realtor, each as `crew:<trade>:line` and `crew:<trade>:lit`, plus `crew:all`. `group()` composes shapes.
+- **The pen.** Any shape can carry `trace: { order, ms }`. Undrawn points wait unseen at the pen, which shows as a bright tip; points glint as they're drawn; edges appear only between drawn points. Place-trading pauses while it draws. The field emits `traced` once a drawing is done, and `field.trace()` replays it.
+- **`blank: true`** starts from an empty sky, with particles born unseen at the centre. `field.signal(at, hops, count)` sends signals from an anchor or a point. `flow(i, t, since)` now gets the seconds since the shape arrived.
+- **The studio** has a crew panel: draw any trade, *draw again*, or *loop the crew*.
+- `<aurora-field crew blank>`. `create` now explains an unknown `initial` shape instead of failing later. Bench: `crew:contractor:lit` costs the same per frame as the lit helm (0.26 ms at 2,800 points).
+
 ## 2.0.1 — 2026-10-19
 - Republish of 2.0.0 from its tag. The 2.0.0 tarball on npm was packed from a working tree that held unreleased work; 2.0.1 is exactly the 2.0.0 release. Use 2.0.1.
 

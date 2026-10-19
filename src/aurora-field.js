@@ -1,8 +1,8 @@
-/*! aurora-field v2.0.1 · MIT · https://github.com/mutaaf/aurora-field
+/*! aurora-field v3.0.0-alpha.1 · MIT · https://github.com/mutaaf/aurora-field
  * A particle field that assembles into shapes and morphs between them: a neural sphere
  * with travelling signals, a team of orbs, a stack of platforms, an armoured helm, a ranger
- * helmet — or text, SVG paths, images and point clouds (fromText/fromSVG/fromImage/fromPoints,
- * armour() for your own helmets). Two-tone palettes and presets; options change live (set).
+ * helmet, a crew of people a pen draws and light fills (figure(), registerCrew()) — or text,
+ * SVG paths, images and point clouds (fromText/fromSVG/fromImage/fromPoints, armour() for your own helmets). Two-tone palettes and presets; options change live (set).
  * Runs on any canvas: in a page, headless (OffscreenCanvas, servers) or in a worker (offload).
  * Drag spins it, the cursor parts it, a click sends a shockwave. Particles are damped
  * springs that swirl into place, breathe, trade places and send out scouts; a governor
@@ -17,7 +17,7 @@
   else root.AuroraField = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var VERSION = '2.0.1';
+  var VERSION = '3.0.0-alpha.1';
   var TAU = Math.PI * 2;
 
   var imul = Math.imul || function (a, b) {
@@ -455,6 +455,550 @@
     rig: RANGER_RIG, dim: ['eyeBlinkL', 'eyeBlinkR']
   }));
 
+  // ---- figure: people from a skeleton ----
+  // figure(spec) → { line, lit }: two builders for one person, sharing a pose, an idle loop and
+  // anchors. line is a modern stick figure (bones, joint nodes, prop outlines) that a pen traces
+  // head first; lit is the same person as a sleek lit mannequin (a lofted torso, tapered limbs,
+  // an egg head, props in the accent tone) with seams that carry signals and a bright core at
+  // the chest. Morph line → lit and the drawing fills into a body.
+  //   spec: { pose: name | { joint: [x, y, z] }, action?: name, props?: [name…], trace?: ms }
+  // Joints sit in a ~1.8-tall box, y down, facing the viewer (−z). Every point belongs to a
+  // joint; the idle loop moves joints (breathing, a weight shift, a glance, the trade's own
+  // action) and flow carries their points with them, rotations and all.
+  var FIG_J = ['pelvis', 'chest', 'neck', 'head', 'shL', 'elL', 'haL', 'shR', 'elR', 'haR', 'hipL', 'knL', 'anL', 'toL', 'hipR', 'knR', 'anR', 'toR'];
+  var FIG_UP = [-1, 0, 1, 2, 1, 4, 5, 1, 7, 8, 0, 10, 11, 12, 0, 14, 15, 16];
+  var FIG_REST = [[0, -0.06, 0], [0, -0.48, 0], [0, -0.64, 0], [0, -0.8, 0], [-0.175, -0.585, 0], [-0.215, -0.3, 0.01], [-0.235, -0.04, -0.01],
+    [0.175, -0.585, 0], [0.215, -0.3, 0.01], [0.235, -0.04, -0.01], [-0.085, -0.03, 0], [-0.095, 0.4, -0.01], [-0.1, 0.83, 0.01], [-0.11, 0.89, -0.09],
+    [0.085, -0.03, 0], [0.095, 0.4, -0.01], [0.1, 0.83, 0.01], [0.11, 0.89, -0.09]];
+  var FIG_POSES = {
+    stand: {},
+    tablet: { elL: [-0.2, -0.34, -0.07], haL: [-0.075, -0.31, -0.19], elR: [0.2, -0.34, -0.07], haR: [0.075, -0.31, -0.19], head: [0, -0.79, -0.03] },
+    wrench: { elL: [-0.27, -0.33, 0.01], haL: [-0.14, -0.12, -0.05], elR: [0.21, -0.35, -0.08], haR: [0.17, -0.21, -0.25] },
+    hammer: { elL: [-0.2, -0.35, -0.09], haL: [-0.11, -0.25, -0.23], elR: [0.26, -0.6, -0.05], haR: [0.22, -0.84, -0.1] },
+    phone: { elL: [-0.25, -0.47, -0.05], haL: [-0.105, -0.76, -0.035], elR: [0.21, -0.32, -0.05], haR: [0.12, -0.17, -0.16], head: [-0.015, -0.8, 0] },
+    keys: { elL: [-0.25, -0.44, -0.1], haL: [-0.21, -0.66, -0.2] },
+    inspect: { elL: [-0.27, -0.33, 0.01], haL: [-0.14, -0.12, -0.05], elR: [0.22, -0.4, -0.11], haR: [0.1, -0.61, -0.2], head: [0, -0.8, -0.02] }
+  };
+  // actions: the trade's own motion, as rotations of a joint's subtree about another joint
+  function smooth01(a) { a = a < 0 ? 0 : a > 1 ? 1 : a; return a * a * (3 - 2 * a); }
+  var FIG_ACTIONS = {
+    tablet: function (t, rot) { rot('elR', 'haR', [1, 0, 0], 0.07 * Math.pow(Math.max(0, Math.sin(t * 2.4)), 6)); rot('neck', 'head', [1, 0, 0], 0.05 * Math.sin(t * 0.8)); },
+    wrench: function (t, rot) { rot('elR', 'haR', [0, 0, 1], 0.36 * Math.sin(t * 2.1)); rot('neck', 'head', [1, 0, 0], 0.08); },
+    hammer: function (t, rot) { var ph = (t * 0.85) % 1, a = ph < 0.16 ? smooth01(ph / 0.16) : 1 - smooth01((ph - 0.16) / 0.84); rot('shR', 'elR', [1, 0, 0], 0.95 * a); rot('elR', 'haR', [1, 0, 0], 0.45 * a); },
+    phone: function (t, rot) { rot('neck', 'head', [1, 0, 0], 0.05 * Math.sin(t * 1.9)); rot('elR', 'haR', [0, 1, 0], 0.22 * Math.sin(t * 0.9)); },
+    keys: function (t, rot) { rot('elL', 'haL', [0, 0, 1], 0.12 * Math.sin(t * 7) * Math.max(0, Math.sin(t * 0.9))); rot('neck', 'head', [0, 1, 0], 0.14 * Math.sin(t * 0.5)); },
+    inspect: function (t, rot) { rot('neck', 'head', [0, 1, 0], 0.12 * Math.sin(t * 0.6)); rot('shR', 'elR', [1, 0, 0], 0.08 * Math.sin(t * 0.7)); }
+  };
+  // vector helpers (3-arrays)
+  function v3(a, b, k) { return [a[0] + b[0] * k, a[1] + b[1] * k, a[2] + b[2] * k]; }
+  function vsub(a, b) { return [a[0] - b[0], a[1] - b[1], a[2] - b[2]]; }
+  function vlen(a) { return Math.sqrt(a[0] * a[0] + a[1] * a[1] + a[2] * a[2]); }
+  function vnorm(a) { var l = vlen(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; }
+  function vcross(a, b) { return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]; }
+  function basis(d) { var up = Math.abs(d[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0], e1 = vnorm(vcross(d, up)); return [e1, vcross(d, e1)]; }
+  function rotM(ax, a) {   // Rodrigues: a 3×3 rotation about a unit axis, row-major
+    var x = ax[0], y = ax[1], z = ax[2], c = Math.cos(a), s = Math.sin(a), C = 1 - c;
+    return [c + x * x * C, x * y * C - z * s, x * z * C + y * s, y * x * C + z * s, c + y * y * C, y * z * C - x * s, z * x * C - y * s, z * y * C + x * s, c + z * z * C];
+  }
+  function mulMV(m, v) { return [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[3] * v[0] + m[4] * v[1] + m[5] * v[2], m[6] * v[0] + m[7] * v[1] + m[8] * v[2]]; }
+  function figRig(spec) {
+    var J0 = [], j, k, pose = typeof spec.pose === 'string' ? FIG_POSES[spec.pose] || {} : spec.pose || {};
+    // pose joints keep their bone lengths; joints a pose leaves alone ride along with their parent
+    for (j = 0; j < FIG_J.length; j++) {
+      var up = FIG_UP[j], want = pose[FIG_J[j]];
+      if (up < 0) { J0.push((want || FIG_REST[j]).slice()); continue; }
+      var restOff = vsub(FIG_REST[j], FIG_REST[up]);
+      J0.push(want ? v3(J0[up], vnorm(vsub(want, J0[up])), vlen(restOff)) : v3(J0[up], restOff, 1));
+    }
+    var SUB = [];
+    for (j = 0; j < FIG_J.length; j++) { var s = [j]; for (k = j + 1; k < FIG_J.length; k++) { var q = FIG_UP[k]; while (q > j) q = FIG_UP[q]; if (q === j) s.push(k); } SUB.push(s); }
+    var idx = {}; for (j = 0; j < FIG_J.length; j++) idx[FIG_J[j]] = j;
+    var act = FIG_ACTIONS[spec.action || spec.pose] || null, JX = [], JM = [], ft = NaN;
+    for (j = 0; j < FIG_J.length; j++) { JX.push([0, 0, 0]); JM.push([1, 0, 0, 0, 1, 0, 0, 0, 1]); }
+    function rotAbout(P, sub, ax, a) {
+      if (!a) return;
+      var m = rotM(vnorm(ax), a);
+      for (var q = 0; q < sub.length; q++) {
+        var i = sub[q], d = mulMV(m, vsub(JX[i], P)), o = JM[i], n2 = [];
+        JX[i] = [P[0] + d[0], P[1] + d[1], P[2] + d[2]];
+        for (var r0 = 0; r0 < 3; r0++) for (var c0 = 0; c0 < 3; c0++) n2.push(m[r0 * 3] * o[c0] + m[r0 * 3 + 1] * o[3 + c0] + m[r0 * 3 + 2] * o[6 + c0]);
+        JM[i] = n2;
+      }
+    }
+    function rot(pivot, root, ax, a) { rotAbout(JX[idx[pivot]].slice(), SUB[idx[root]], ax, a); }
+    function at(t) {
+      if (t === ft) return; ft = t;
+      for (var i = 0; i < FIG_J.length; i++) { JX[i] = J0[i].slice(); JM[i] = [1, 0, 0, 0, 1, 0, 0, 0, 1]; }
+      var feet = [(J0[12][0] + J0[16][0]) / 2, (J0[12][1] + J0[16][1]) / 2, (J0[12][2] + J0[16][2]) / 2];
+      rotAbout(feet, SUB[0], [0, 0, 1], 0.012 * Math.sin(t * 0.5));              // a weight shift
+      var br = 0.004 * Math.sin(t * 1.25), ch = SUB[1];                          // breathing
+      for (i = 0; i < ch.length; i++) JX[ch[i]][1] -= br;
+      if (act) act(t, rot); else rot('neck', 'head', [0, 1, 0], 0.1 * Math.sin(t * 0.33));
+    }
+    return { J0: J0, idx: idx, at: at, JX: JX, JM: JM };
+  }
+  // props, placed from the posed joints: [{ owner, tone, prims: [...] }]; prims are
+  //   { k: 'cyl', a, b, ra, rb } · { k: 'ell', c, r: [rx, ry, rz], half? } · { k: 'box', c, h: [hx, hy, hz], m? (rotation) } · { k: 'ring', c, r: [r1, r2], ex, ez }
+  function figProps(names, J, idx) {
+    var out = [], i, hR = J[idx.haR], hL = J[idx.haL], eR = J[idx.elR], hd = J[idx.head], pv = J[idx.pelvis];
+    var dirR = vnorm(vsub(hR, eR)), dirL = vnorm(vsub(hL, J[idx.elL]));
+    var P = {
+      hardhat: { owner: 'head', prims: [{ k: 'ell', c: v3(hd, [0, -0.03, 0], 1), r: [0.1, 0.088, 0.11], half: true }, { k: 'ring', c: v3(hd, [0, -0.03, 0], 1), r: [0.1, 0.135], ex: 1, ez: 1.08 }, { k: 'box', c: v3(hd, [0, -0.118, 0], 1), h: [0.012, 0.008, 0.09] }] },
+      tablet: { owner: 'chest', prims: [{ k: 'box', c: [(hL[0] + hR[0]) / 2, (hL[1] + hR[1]) / 2 - 0.05, (hL[2] + hR[2]) / 2 - 0.01], h: [0.105, 0.072, 0.006], m: rotM([1, 0, 0], -0.95) }] },
+      wrench: { owner: 'haR', prims: [{ k: 'box', c: v3(hR, dirR, 0.09), h: [0.011, 0.012, 0.012], m: null, along: dirR, len: 0.1 }, { k: 'ring', c: v3(hR, dirR, 0.2), r: [0.016, 0.034], ex: 1, ez: 1, plane: dirR }] },
+      pipe: { owner: 'pelvis', prims: [{ k: 'cyl', a: [hR[0] - 0.3, hR[1] + 0.17, hR[2] - 0.05], b: [hR[0] + 0.22, hR[1] + 0.17, hR[2] - 0.05], ra: 0.028, rb: 0.028 }, { k: 'cyl', a: [hR[0] + 0.22, hR[1] + 0.17, hR[2] - 0.05], b: [hR[0] + 0.22, 0.86, hR[2] - 0.05], ra: 0.028, rb: 0.028 }] },
+      toolbelt: { owner: 'pelvis', prims: [{ k: 'ring', c: v3(pv, [0, -0.07, 0], 1), r: [0.138, 0.152], ex: 1, ez: 0.66, band: 0.035 }, { k: 'box', c: v3(pv, [-0.13, -0.03, -0.06], 1), h: [0.03, 0.04, 0.025] }, { k: 'box', c: v3(pv, [0.13, -0.03, -0.06], 1), h: [0.03, 0.04, 0.025] }] },
+      tester: { owner: 'haR', prims: [{ k: 'box', c: v3(hR, dirR, 0.045), h: [0.018, 0.035, 0.009] }, { k: 'cyl', a: v3(hR, dirR, 0.08), b: v3(hR, dirR, 0.13), ra: 0.004, rb: 0.002 }] },
+      hammer: { owner: 'haR', prims: [{ k: 'cyl', a: v3(hR, dirR, -0.03), b: v3(hR, dirR, 0.2), ra: 0.012, rb: 0.012 }, { k: 'box', c: v3(hR, dirR, 0.2), h: [0.018, 0.018, 0.062] }] },
+      phone: { owner: 'haL', prims: [{ k: 'box', c: v3(hL, [0.03, 0, 0], 1), h: [0.008, 0.038, 0.018] }] },
+      clipboard: { owner: 'haR', prims: [{ k: 'box', c: v3(hR, [-0.04, -0.03, -0.03], 1), h: [0.065, 0.085, 0.005], m: rotM([1, 0, 0], -0.5) }] },
+      keys: { owner: 'haL', prims: [{ k: 'ring', c: v3(hL, dirL, 0.05), r: [0.014, 0.022], ex: 1, ez: 1, plane: [0, 0, 1] }, { k: 'box', c: v3(hL, dirL, 0.085), h: [0.006, 0.022, 0.002] }, { k: 'box', c: v3(v3(hL, dirL, 0.08), [-0.018, 0, 0], 1), h: [0.006, 0.018, 0.002] }] },
+      yardsign: { owner: 'pelvis', prims: [{ k: 'cyl', a: [0.38, -0.42, 0.04], b: [0.38, 0.88, 0.04], ra: 0.01, rb: 0.01 }, { k: 'cyl', a: [0.38, -0.4, 0.04], b: [0.6, -0.4, 0.04], ra: 0.007, rb: 0.007 }, { k: 'box', c: [0.49, -0.29, 0.04], h: [0.1, 0.068, 0.006] }] }
+    };
+    for (i = 0; i < (names || []).length; i++) if (P[names[i]]) { var p = P[names[i]]; p.name = names[i]; out.push(p); }
+    return out;
+  }
+  // the body as lit surfaces: [{ k, owner, …, area }], shared by the lit build and (as bones) the line build
+  var FIG_TORSO = [[0.05, 0.128, 0.08], [-0.06, 0.142, 0.088], [-0.22, 0.114, 0.075], [-0.4, 0.148, 0.088], [-0.5, 0.166, 0.084], [-0.56, 0.156, 0.078], [-0.6, 0.122, 0.07], [-0.635, 0.066, 0.056]];
+  function figBody(J, idx) {
+    var B = [], g = function (n) { return J[idx[n]]; };
+    function limb(a, b, ra, rb) { B.push({ k: 'cyl', a: g(a), b: g(b), ra: ra, rb: rb, owner: b }); }
+    B.push({ k: 'loft', prof: FIG_TORSO, x: g('pelvis')[0], z: 0, owners: ['pelvis', 'chest'], split: -0.25 });
+    B.push({ k: 'cyl', a: v3(g('neck'), [0, 0.03, 0], 1), b: v3(g('head'), [0, 0.06, 0], 1), ra: 0.036, rb: 0.034, owner: 'neck' });
+    B.push({ k: 'ell', c: g('head'), r: [0.082, 0.108, 0.094], owner: 'head', chin: true });
+    limb('shL', 'elL', 0.043, 0.036); limb('elL', 'haL', 0.034, 0.025); limb('shR', 'elR', 0.043, 0.036); limb('elR', 'haR', 0.034, 0.025);
+    limb('hipL', 'knL', 0.066, 0.047); limb('knL', 'anL', 0.045, 0.031); limb('hipR', 'knR', 0.066, 0.047); limb('knR', 'anR', 0.045, 0.031);
+    B.push({ k: 'ell', c: g('shL'), r: [0.05, 0.05, 0.05], owner: 'shL' }, { k: 'ell', c: g('shR'), r: [0.05, 0.05, 0.05], owner: 'shR' });
+    B.push({ k: 'ell', c: g('elL'), r: [0.037, 0.037, 0.037], owner: 'elL' }, { k: 'ell', c: g('elR'), r: [0.037, 0.037, 0.037], owner: 'elR' });
+    B.push({ k: 'ell', c: g('knL'), r: [0.049, 0.049, 0.049], owner: 'knL' }, { k: 'ell', c: g('knR'), r: [0.049, 0.049, 0.049], owner: 'knR' });
+    B.push({ k: 'ell', c: v3(g('haL'), vnorm(vsub(g('haL'), g('elL'))), 0.035), r: [0.024, 0.04, 0.02], owner: 'haL' });
+    B.push({ k: 'ell', c: v3(g('haR'), vnorm(vsub(g('haR'), g('elR'))), 0.035), r: [0.024, 0.04, 0.02], owner: 'haR' });
+    function foot(an, to) { var a = g(an), b = g(to); B.push({ k: 'ell', c: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2 + 0.03, (a[2] + b[2]) / 2], r: [0.04, 0.03, 0.085], owner: to }); }
+    foot('anL', 'toL'); foot('anR', 'toR');
+    return B;
+  }
+  function loftAt(prof, y) {   // torso half-width and half-depth at height y
+    if (y >= prof[0][0]) return [prof[0][1], prof[0][2]];
+    for (var i = 0; i < prof.length - 1; i++) if (y >= prof[i + 1][0]) { var f = (y - prof[i][0]) / (prof[i + 1][0] - prof[i][0]); return [prof[i][1] + (prof[i + 1][1] - prof[i][1]) * f, prof[i][2] + (prof[i + 1][2] - prof[i][2]) * f]; }
+    var l = prof[prof.length - 1]; return [l[1], l[2]];
+  }
+  function ellPerim(a, b) { return Math.PI * (3 * (a + b) - Math.sqrt((3 * a + b) * (a + 3 * b))); }
+  function primArea(p) {
+    var r = p.r, l;
+    if (p.k === 'cyl') return Math.PI * (p.ra + p.rb) * vlen(vsub(p.b, p.a));
+    if (p.k === 'ell') { var m = (r[0] * r[1] + r[1] * r[2] + r[0] * r[2]) / 3; return 4 * Math.PI * m * (p.half ? 0.5 : 1); }
+    if (p.k === 'box') return 8 * (p.h[0] * p.h[1] + p.h[1] * p.h[2] + p.h[0] * p.h[2]);
+    if (p.k === 'ring') return p.band ? ellPerim(r[1] * p.ex, r[1] * p.ez) * p.band : Math.PI * (r[1] * r[1] - r[0] * r[0]);
+    if (p.k === 'loft') { l = 0; for (var y = p.prof[0][0]; y > p.prof[p.prof.length - 1][0]; y -= 0.01) { var wd = loftAt(p.prof, y); l += ellPerim(wd[0], wd[1]) * 0.01; } return l; }
+    return 0;
+  }
+  // one point on a primitive's surface, with its unit normal: [p, n]
+  // k: the point's index within its primitive, for an even (R2 low-discrepancy) spread; null for random
+  function primPoint(p, r, k) {
+    var u, th, d, e, rad;
+    if (k == null) { u = r(); th = r() * TAU; } else { u = (0.5 + 0.7548776662 * k) % 1; th = ((0.5 + 0.569840291 * k) % 1) * TAU; }
+    var c = Math.cos(th), s = Math.sin(th);
+    if (p.k === 'cyl') {
+      d = vsub(p.b, p.a); var L = vlen(d); d = vnorm(d); e = basis(d); rad = p.ra + (p.rb - p.ra) * u;
+      var nn = [e[0][0] * c + e[1][0] * s, e[0][1] * c + e[1][1] * s, e[0][2] * c + e[1][2] * s];
+      return [v3(v3(p.a, d, L * u), nn, rad), nn];
+    }
+    if (p.k === 'ell') {
+      var uy = 1 - 2 * u, rr = Math.sqrt(Math.max(0, 1 - uy * uy)); if (p.half && uy > 0) uy = -uy;
+      var ux = rr * c, uz = rr * s, R3 = p.r, sx = 1;
+      if (p.chin && uy > 0.25) sx = 1 - 0.28 * (uy - 0.25) / 0.75;              // the jaw narrows to the chin
+      return [[p.c[0] + R3[0] * ux * sx, p.c[1] + R3[1] * uy, p.c[2] + R3[2] * uz * sx], vnorm([ux / R3[0], uy / R3[1], uz / R3[2]])];
+    }
+    if (p.k === 'box') {
+      var h = p.h, a1 = h[1] * h[2], a2 = h[0] * h[2], a3 = h[0] * h[1], pick = r() * (a1 + a2 + a3), sg = r() < 0.5 ? -1 : 1, q, n3;
+      var a = (r() * 2 - 1), b = (r() * 2 - 1);
+      if (pick < a1) { q = [sg * h[0], a * h[1], b * h[2]]; n3 = [sg, 0, 0]; } else if (pick < a1 + a2) { q = [a * h[0], sg * h[1], b * h[2]]; n3 = [0, sg, 0]; } else { q = [a * h[0], b * h[1], sg * h[2]]; n3 = [0, 0, sg]; }
+      if (p.along) { var bs = basis(p.along), L2 = (p.len || 0.1) / 2; q = v3(v3(v3([0, 0, 0], bs[0], q[0]), p.along, q[1] / h[1] * L2), bs[1], q[2]); n3 = vnorm(v3(v3(v3([0, 0, 0], bs[0], n3[0]), p.along, n3[1]), bs[1], n3[2])); }
+      else if (p.m) { q = mulMV(p.m, q); n3 = mulMV(p.m, n3); }
+      return [v3(p.c, q, 1), n3];
+    }
+    if (p.k === 'ring') {
+      var R1 = p.r[0], R2 = p.r[1];
+      if (p.band) { var yb = (u - 0.5) * p.band; return [[p.c[0] + R2 * p.ex * c, p.c[1] + yb, p.c[2] + R2 * p.ez * s], vnorm([c / p.ex, 0, s / p.ez])]; }
+      rad = Math.sqrt(R1 * R1 + (R2 * R2 - R1 * R1) * u);
+      if (p.plane) { e = basis(vnorm(p.plane)); return [v3(v3(p.c, e[0], rad * c), e[1], rad * s), vnorm(p.plane)]; }
+      return [[p.c[0] + rad * c * p.ex, p.c[1], p.c[2] + rad * s * p.ez], [0, -1, 0]];
+    }
+    // loft: a height by its girth (an inverse CDF over the profile), then a point round that ring
+    if (!p.cdf) {
+      var top = p.prof[p.prof.length - 1][0], bot = p.prof[0][0], acc = 0; p.cdf = [[0, bot]];
+      for (var q = 1; q <= 96; q++) { var yq = bot + (top - bot) * q / 96, w0 = loftAt(p.prof, yq); acc += ellPerim(w0[0], w0[1]); p.cdf.push([acc, yq]); }
+      for (q = 0; q < p.cdf.length; q++) p.cdf[q][0] /= acc;
+    }
+    var lo = 0; while (lo < p.cdf.length - 2 && p.cdf[lo + 1][0] < u) lo++;
+    var A0 = p.cdf[lo], A1 = p.cdf[lo + 1], y = A0[1] + (A1[1] - A0[1]) * ((u - A0[0]) / ((A1[0] - A0[0]) || 1)), wd2 = loftAt(p.prof, y);
+    return [[p.x + wd2[0] * c, y, p.z + wd2[1] * s], vnorm([c / wd2[0], 0, s / wd2[1]])];
+  }
+  function primOwner(p, pt) { return p.owners ? (pt[1] > p.split ? p.owners[0] : p.owners[1]) : p.owner; }
+
+  // ---- the outline: how a figure reads as a drawing ----
+  // Splat every surface (body and props) into a front-view grid that keeps the nearest depth,
+  // its joint and its part. Keep a cell edge where the figure meets empty space (the silhouette)
+  // or where one part passes in front of another (an arm across the chest). Chain the edges into
+  // strokes, smooth them (Chaikin) and hand them back in drawing order: the silhouette from the
+  // crown round, then the inner lines top to bottom. Deterministic, so the line and lit builds of
+  // one figure share it exactly.
+  var OUT_CELL = 0.0105, OUT_X0 = -1.05, OUT_Y0 = -1.1, OUT_W = Math.ceil(2.1 / OUT_CELL), OUT_H = Math.ceil(2.2 / OUT_CELL);
+  function figGroup(owner) {
+    if (owner === 'head' || owner === 'neck') return 1;
+    if (owner === 'chest' || owner === 'pelvis') return 0;
+    if (/^(sh|el|ha)L$/.test(owner)) return 2;
+    if (/^(sh|el|ha)R$/.test(owner)) return 3;
+    return /L$/.test(owner) ? 4 : 5;
+  }
+  function figOutline(body, props, idx) {
+    var W = OUT_W, H = OUT_H, NC = W * H, Z = new F32(NC), O = new I32(NC), G = new I32(NC), i, k, q, r = rng(0x5eed);
+    for (i = 0; i < NC; i++) { Z[i] = 9; O[i] = -1; G[i] = -1; }
+    var parts = [];
+    for (i = 0; i < body.length; i++) parts.push({ p: body[i], g: -2 });
+    for (i = 0; i < props.length; i++) for (k = 0; k < props[i].prims.length; k++) parts.push({ p: props[i].prims[k], g: 6 + i, owner: props[i].owner });
+    for (i = 0; i < parts.length; i++) {
+      var P = parts[i].p, cnt = Math.ceil(primArea(P) / (OUT_CELL * OUT_CELL) * 1.8) + 24;
+      for (k = 0; k < cnt; k++) {
+        var sp = primPoint(P, r, k), pt = sp[0], ix = Math.floor((pt[0] - OUT_X0) / OUT_CELL), iy = Math.floor((pt[1] - OUT_Y0) / OUT_CELL);
+        if (ix < 0 || iy < 0 || ix >= W || iy >= H) continue;
+        var c = iy * W + ix;
+        if (pt[2] < Z[c]) {
+          var own = parts[i].owner || primOwner(P, pt);
+          Z[c] = pt[2]; O[c] = idx[own]; G[c] = parts[i].g >= 0 ? parts[i].g : figGroup(own);
+        }
+      }
+    }
+    // close pinholes the sampling missed: an empty cell with three or more filled neighbours takes the nearest one
+    for (var pass = 0; pass < 2; pass++) for (var y = 1; y < H - 1; y++) for (var x = 1; x < W - 1; x++) {
+      var c2 = y * W + x; if (O[c2] >= 0) continue;
+      var nb = [c2 - 1, c2 + 1, c2 - W, c2 + W], f = 0, best = -1;
+      for (q = 0; q < 4; q++) if (O[nb[q]] >= 0) { f++; if (best < 0 || Z[nb[q]] < Z[best]) best = nb[q]; }
+      if (f >= 3) { Z[c2] = Z[best]; O[c2] = O[best]; G[c2] = G[best]; }
+    }
+    // edges on the cell lattice: [x0, y0, x1, y1, cell] with lattice vertices at cell corners
+    var E = [], EPS = 0.045;
+    // which inner lines read as drawing: an arm or a prop in front of the body; not leg against leg or hip against torso
+    function inner(front, back) { return front === 2 || front === 3 || front >= 6 || (back >= 6 && front <= 3); }
+    function edge(c3, side, kind) {   // kind 0: silhouette, 1: one part in front of another
+      var x3 = c3 % W, y3 = (c3 - x3) / W;
+      if (side === 0) E.push([x3, y3, x3, y3 + 1, c3, kind]); else if (side === 1) E.push([x3 + 1, y3, x3 + 1, y3 + 1, c3, kind]);
+      else if (side === 2) E.push([x3, y3, x3 + 1, y3, c3, kind]); else E.push([x3, y3 + 1, x3 + 1, y3 + 1, c3, kind]);
+    }
+    for (y = 1; y < H - 1; y++) for (x = 1; x < W - 1; x++) {
+      var c4 = y * W + x; if (O[c4] < 0) continue;
+      var N4 = [c4 - 1, c4 + 1, c4 - W, c4 + W];
+      for (q = 0; q < 4; q++) { var m = N4[q]; if (O[m] < 0) edge(c4, q, 0); else if (G[m] !== G[c4] && Z[c4] < Z[m] - EPS && inner(G[c4], G[m])) edge(c4, q, 1); }
+    }
+    // chain the edges: walk vertex to vertex, preferring to keep straight, then to turn the same way
+    var at = {}, used = new Uint8Array(E.length);
+    function key(a, b) { return a * 4096 + b; }
+    for (i = 0; i < E.length; i++) { var k0 = key(E[i][0], E[i][1]), k1 = key(E[i][2], E[i][3]); (at[k0] || (at[k0] = [])).push(i); (at[k1] || (at[k1] = [])).push(i); }
+    // from vertex (vx, vy) heading (dx, dy), follow unused edges: keep straight, then turn the same way
+    function walk(vx, vy, dx, dy, kind) {   // silhouettes and inner lines chain separately, so a loop never wanders inside
+      var out = [];
+      for (;;) {
+        var cand = at[key(vx, vy)] || [], nxt = -1, score = -9;
+        for (var j = 0; j < cand.length; j++) {
+          var ce = cand[j]; if (used[ce] || E[ce][5] !== kind) continue;
+          var E2 = E[ce], fw = E2[0] === vx && E2[1] === vy, nx2 = (fw ? E2[2] : E2[0]) - vx, ny2 = (fw ? E2[3] : E2[1]) - vy;
+          var sc = nx2 * dx + ny2 * dy + (dx * ny2 - dy * nx2) * 0.5;
+          if (sc > score) { score = sc; nxt = ce; }
+        }
+        if (nxt < 0) return out;
+        used[nxt] = 1;
+        var e = E[nxt], f2 = e[0] === vx && e[1] === vy, ox = f2 ? e[2] : e[0], oy = f2 ? e[3] : e[1];
+        dx = ox - vx; dy = oy - vy; vx = ox; vy = oy; out.push([vx, vy, e[4]]);
+      }
+    }
+    var chains = [];
+    for (i = 0; i < E.length; i++) {
+      if (used[i]) continue;
+      used[i] = 1;
+      var e0 = E[i], fwd = walk(e0[2], e0[3], e0[2] - e0[0], e0[3] - e0[1], e0[5]), bwd = walk(e0[0], e0[1], e0[0] - e0[2], e0[1] - e0[3], e0[5]);
+      var raw = bwd.reverse().concat([[e0[0], e0[1], e0[4]], [e0[2], e0[3], e0[4]]]).concat(fwd);
+      if (raw.length < 6) continue;
+      var first = raw[0], last = raw[raw.length - 1], closed = first[0] === last[0] && first[1] === last[1];
+      var pts = [];
+      for (q = 0; q < raw.length; q++) { var cc = raw[q][2]; pts.push([OUT_X0 + raw[q][0] * OUT_CELL, OUT_Y0 + raw[q][1] * OUT_CELL, Z[cc], O[cc], G[cc]]); }
+      if (closed) pts.pop();
+      // depth along an edge jumps cell to cell (an arm's front, then the torso's side): smooth it, or the line zigzags as it turns
+      for (var sw = 0; sw < 3; sw++) {
+        var zs = pts.map(function (p8) { return p8[2]; }), nn = pts.length, rad = 6;
+        for (q = 0; q < nn; q++) { var acc8 = 0, cnt8 = 0; for (var o8 = -rad; o8 <= rad; o8++) { var j8 = q + o8; if (closed) j8 = (j8 + nn) % nn; else if (j8 < 0 || j8 >= nn) continue; acc8 += zs[j8]; cnt8++; } pts[q][2] = acc8 / cnt8; }
+      }
+      chains.push({ P: chaikin(chaikin(chaikin(pts, closed), closed), closed), closed: closed });
+    }
+    // measure, drop crumbs, put the silhouette (the chain through the crown) first, starting at the crown
+    var top = -1, ty = 9;
+    for (i = 0; i < chains.length; i++) {
+      var C = chains[i], L = 0; for (q = 1; q < C.P.length; q++) L += Math.hypot(C.P[q][0] - C.P[q - 1][0], C.P[q][1] - C.P[q - 1][1]);
+      if (C.closed) L += Math.hypot(C.P[0][0] - C.P[C.P.length - 1][0], C.P[0][1] - C.P[C.P.length - 1][1]);
+      C.L = L; for (q = 0; q < C.P.length; q++) if (C.P[q][1] < ty) { ty = C.P[q][1]; top = i; }
+    }
+    chains = chains.filter(function (c5, j5) { return j5 === top || c5.L > 0.08; });
+    var main = null; for (i = 0; i < chains.length; i++) { var hasTop = false; for (q = 0; q < chains[i].P.length; q++) if (chains[i].P[q][1] === ty) hasTop = true; if (hasTop) main = chains[i]; }
+    if (main && main.closed) {
+      var ti = 0; for (q = 0; q < main.P.length; q++) if (main.P[q][1] === ty) ti = q;
+      main.P = main.P.slice(ti).concat(main.P.slice(0, ti));
+      var area = 0; for (q = 0; q < main.P.length; q++) { var a5 = main.P[q], b5 = main.P[(q + 1) % main.P.length]; area += a5[0] * b5[1] - b5[0] * a5[1]; }
+      if (area < 0) main.P = [main.P[0]].concat(main.P.slice(1).reverse());   // clockwise on screen
+    }
+    var rest = chains.filter(function (c6) { return c6 !== main; }).map(function (c7) {
+      if (!c7.closed && c7.P[0][1] > c7.P[c7.P.length - 1][1]) c7.P.reverse();
+      c7.top = Math.min.apply(null, c7.P.map(function (p7) { return p7[1]; })); return c7;
+    }).sort(function (a8, b8) { return a8.top - b8.top; });
+    return main ? [main].concat(rest) : rest;
+  }
+  // Chaikin corner cutting on [x, y, z, owner, group] points: z interpolates, owner and group follow the nearer end
+  function chaikin(P, closed) {
+    var out = [], n = P.length, i;
+    if (n < 3) return P;
+    if (!closed) out.push(P[0]);
+    for (i = 0; i < (closed ? n : n - 1); i++) {
+      var a = P[i], b = P[(i + 1) % n];
+      out.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25, a[2] * 0.75 + b[2] * 0.25, a[3], a[4]]);
+      out.push([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75, a[2] * 0.25 + b[2] * 0.75, b[3], b[4]]);
+    }
+    if (!closed) out.push(P[n - 1]);
+    return out;
+  }
+  // count evenly spaced samples along a chain: [x, y, z, owner, group, nx, ny, turn] with the outward
+  // normal (for a clockwise loop) and how sharply it turns there; s0 offsets the first sample (0…1 of a step)
+  function along(C, count, s0) {
+    var P = C.P, n = P.length, seg = [], tot = 0, i, out = [];
+    for (i = 0; i < (C.closed ? n : n - 1); i++) { var a = P[i], b = P[(i + 1) % n], l = Math.hypot(b[0] - a[0], b[1] - a[1]); seg.push(l); tot += l; }
+    if (!count || !tot) return out;
+    var step = tot / (C.closed ? count : Math.max(1, count - 1)), j = 0, acc = 0;
+    for (i = 0; i < count; i++) {
+      var d = Math.min(tot, (i + (s0 || 0)) * step);
+      while (j < seg.length - 1 && acc + seg[j] < d) { acc += seg[j]; j++; }
+      var A = P[j], B = P[(j + 1) % n], f = seg[j] ? (d - acc) / seg[j] : 0, tx = B[0] - A[0], ty = B[1] - A[1], tl = Math.hypot(tx, ty) || 1;
+      var Pp = P[(j - 1 + n) % n], t0x = A[0] - Pp[0], t0y = A[1] - Pp[1], t0l = Math.hypot(t0x, t0y) || 1;
+      var turn = Math.abs(Math.atan2(t0x / t0l * ty / tl - t0y / t0l * tx / tl, t0x / t0l * tx / tl + t0y / t0l * ty / tl));
+      out.push([A[0] + (B[0] - A[0]) * f, A[1] + (B[1] - A[1]) * f, A[2] + (B[2] - A[2]) * f, f < 0.5 ? A[3] : B[3], f < 0.5 ? A[4] : B[4], ty / tl, -tx / tl, turn]);
+    }
+    return out;
+  }
+
+  function figure(spec) {
+    spec = spec || {};
+    var rig = figRig(spec), J = rig.J0, idx = rig.idx, props = figProps(spec.props, J, idx), body = figBody(J, idx);
+    // the outline, built once and shared: the line's silhouette and the lit body's rim are the same points
+    var outline = null, RIM = 0.24;
+    function getOutline() { return outline || (outline = figOutline(body, props, idx)); }
+    var anchors = { head: v3(J[idx.head], [0, -0.17, 0], 1), chest: v3(J[idx.chest], [0, 0.04, -0.1], 1), hand: J[idx.haR].slice(), feet: [0, 0.9, 0] };
+    if (props.length) { var pp0 = null; for (var q0 = 0; q0 < props.length; q0++) if (props[q0].name !== 'hardhat') { pp0 = props[q0]; break; } var c0 = (pp0 || props[0]).prims[0]; anchors.prop = (c0.c || v3(c0.a, vsub(c0.b, c0.a), 0.5)).slice(); }
+    // flow: every point rides its joint (position and rotation), offsets kept from the rest pose
+    function rider(n, OWN0, LOC) {
+      var OUT = [0, 0, 0];
+      return function (i, t) {
+        rig.at(t);
+        var o = OWN0[i], m = rig.JM[o], x = rig.JX[o], l = i * 3, a = LOC[l], b = LOC[l + 1], c = LOC[l + 2];
+        OUT[0] = x[0] + m[0] * a + m[1] * b + m[2] * c; OUT[1] = x[1] + m[3] * a + m[4] * b + m[5] * c; OUT[2] = x[2] + m[6] * a + m[7] * b + m[8] * c;
+        return OUT;
+      };
+    }
+    function finish(n, pts, own, extra) {
+      var OWN0 = new I32(n), LOC = new F32(n * 3);
+      for (var i = 0; i < n; i++) { var o = idx[own[i]], jp = J[o]; OWN0[i] = o; LOC[i * 3] = pts[i][0] - jp[0]; LOC[i * 3 + 1] = pts[i][1] - jp[1]; LOC[i * 3 + 2] = pts[i][2] - jp[2]; }
+      extra.points = pts; extra.flow = rider(n, OWN0, LOC); extra.anchors = anchors; extra.facing = true;
+      return extra;
+    }
+
+    // line: the figure as a drawing. The silhouette from the crown round, then the inner lines (an arm
+    // across the chest, a hand on a hip), with a calligraphic weight: a hairline that is shared with
+    // the lit body's rim, and a body of ink that thickens on the side away from the light. The pen
+    // slows into corners and lifts briefly between strokes.
+    function line(n, r) {
+      var C = getOutline(), i, k, pts = [], own = [], tone = [], order = [], pairs = [], bright = [0];
+      // a timeline over all strokes: arc length plus a pause for every corner, a short lift between strokes
+      var T0 = [], TL = [], tsum = 0;
+      for (i = 0; i < C.length; i++) {
+        var fine = along(C[i], Math.max(16, Math.round(C[i].L / 0.004))), cum = [0];
+        for (k = 1; k < fine.length; k++) cum.push(cum[k - 1] + C[i].L / fine.length * (1 + 5 * fine[k][7]));
+        T0.push(tsum); TL.push(cum); tsum += cum[cum.length - 1] + 0.025;
+      }
+      function tAt(ci, frac) { var cum = TL[ci], x = frac * (cum.length - 1), j = Math.min(cum.length - 2, Math.floor(x)); return (T0[ci] + cum[j] + (cum[j + 1] - cum[j]) * (x - j)) / tsum; }
+      function put(S, ci, kk, cnt, ink) {
+        var x = S[0], y = S[1], frac = C[ci].closed ? kk / cnt : kk / Math.max(1, cnt - 1);
+        if (ink) {
+          var shade = Math.max(0, S[5] * 0.55 + S[6] * 0.83), w = 0.0015 * (1 + 1.6 * shade);
+          if (!C[ci].closed) w *= Math.min(1, frac * 10, (1 - frac) * 10);
+          var off = (r() * 2 - 1) * w; x += S[5] * off; y += S[6] * off;
+        }
+        pts.push([x, y, S[2]]); own.push(FIG_J[S[3]] || 'chest'); tone.push(S[4] >= 6 ? 1 : 0); order.push(Math.min(1, tAt(ci, frac)));
+      }
+      var rimN = C.length ? Math.round(n * RIM) : 0, rim = rimN ? along(C[0], rimN, 0) : [];
+      for (k = 0; k < rim.length; k++) { if (k) pairs.push([k - 1, k]); put(rim[k], 0, k, rim.length, false); }
+      if (rim.length > 2 && C[0].closed) pairs.push([0, rim.length - 1]);   // the loop closes back to the crown
+      var Ltot = 0; for (i = 0; i < C.length; i++) Ltot += C[i].L;
+      for (i = 0; i < C.length; i++) {
+        var cnt = i === C.length - 1 ? n - pts.length : Math.round((n - rimN) * C[i].L / Ltot);
+        if (cnt <= 0) continue;
+        var S2 = along(C[i], cnt, i === 0 ? 0.5 : 0), base = pts.length;
+        for (k = 0; k < S2.length && pts.length < n; k++) { if (k && i > 0) pairs.push([base + k - 1, base + k]); put(S2[k], i, k, S2.length, i > 0); }   // the silhouette's ink is points around the hairline; inner lines stay single strokes
+        if (i) bright.push(base);
+      }
+      while (pts.length < n) { pts.push(pts[pts.length - 1].slice()); own.push(own[own.length - 1]); tone.push(tone[tone.length - 1]); order.push(1); }
+      return finish(n, pts, own, { pairs: pairs, bright: bright.slice(0, 8), tone: tone, lineArt: true, kick: 0.12, trace: { order: order, ms: spec.trace || 2400 }, still: true });
+    }
+
+    // lit: a skin over the body, seams round the joints and down the front, props in the accent
+    function lit(n, r) {
+      var i, k, skin = [], seams = [], sArea = 0, pArea = 0;
+      for (i = 0; i < body.length; i++) { body[i].area = primArea(body[i]); sArea += body[i].area; }
+      var pr = []; for (i = 0; i < props.length; i++) for (k = 0; k < props[i].prims.length; k++) { var pq = props[i].prims[k]; pq.owner = props[i].owner; pq.area = primArea(pq); pArea += pq.area; pr.push(pq); }
+      var g = function (nm) { return J[idx[nm]]; };
+      function ringOn(c, e1, e2, ra, rb, owner, from, to) { var P = []; from = from || 0; to = to == null ? TAU : to; for (var q = 0; q <= 40; q++) { var a = from + (to - from) * q / 40; P.push(v3(v3(c, e1, Math.cos(a) * ra), e2, Math.sin(a) * rb)); } seams.push({ P: P, owner: owner, cen: c }); }
+      function limbRing(a, b, u, rad, owner) { var d = vnorm(vsub(g(b), g(a))), e = basis(d), L = vlen(vsub(g(b), g(a))); ringOn(v3(g(a), d, L * u), e[0], e[1], rad, rad, owner); }
+      var wa = loftAt(FIG_TORSO, -0.1), nk = loftAt(FIG_TORSO, -0.6);
+      ringOn([0, -0.1, 0], [1, 0, 0], [0, 0, 1], wa[0] * 1.03, wa[1] * 1.03, 'pelvis');                     // the waist
+      ringOn([0, -0.6, 0], [1, 0, 0], [0, 0, 1], nk[0] * 1.04, nk[1] * 1.04, 'chest');                      // the collar
+      seams.push({ P: [[0, -0.6, -nk[1] * 1.03], [0, -0.4, -0.09], [0, -0.22, -0.078], [0, -0.1, -wa[1] * 1.03]], owner: 'chest', n: [0, 0, -1] });   // down the front
+      var hd = g('head');
+      ringOn(v3(hd, [0, -0.005, 0], 1), [1, 0, 0], [0, 0, -1], 0.084, 0.096, 'head', -1.1, 1.1);           // a visor line across the face
+      limbRing('elL', 'haL', 0.86, 0.028, 'haL'); limbRing('elR', 'haR', 0.86, 0.028, 'haR');
+      limbRing('knL', 'anL', 0.9, 0.034, 'anL'); limbRing('knR', 'anR', 0.9, 0.034, 'anR');
+      limbRing('hipL', 'knL', 0.96, 0.05, 'knL'); limbRing('hipR', 'knR', 0.96, 0.05, 'knR');
+      limbRing('shL', 'elL', 0.08, 0.046, 'elL'); limbRing('shR', 'elR', 0.08, 0.046, 'elR');
+      var seamL = 0; for (i = 0; i < seams.length; i++) { var Ls = 0; for (k = 0; k < seams[i].P.length - 1; k++) Ls += vlen(vsub(seams[i].P[k + 1], seams[i].P[k])); seams[i].L = Ls; seamL += Ls; }
+      var C = getOutline(), rimN = C.length ? Math.round(n * RIM) : 0, m = n - rimN;
+      var coreN = Math.min(10, Math.floor(m * 0.003)), seamN = Math.floor(m * 0.1), propN = pr.length ? Math.floor(m * 0.15) : 0, skinN = m - coreN - seamN - propN;
+      var pts = [], nrm = [], al = [], sf = [], tone = [], own = [], pairs = [], bright = [];
+      // the rim: exactly the line's hairline, so the drawing's edge stays put while the body fills in
+      var rim = rimN ? along(C[0], rimN, 0) : [];
+      for (k = 0; k < rim.length; k++) { var R0 = rim[k]; if (k) pairs.push([k - 1, k]); pts.push([R0[0], R0[1], R0[2]]); nrm.push([R0[5], R0[6], 0]); al.push(1); sf.push(0); tone.push(R0[4] >= 6 ? 1 : 0); own.push(FIG_J[R0[3]] || 'chest'); }
+      if (rim.length > 2 && C[0].closed) pairs.push([0, rim.length - 1]);   // the loop closes back to the crown
+      // ambient occlusion, baked: probe a little way out along the normal; inside the body means a crease
+      // is q inside the body? (skip: one primitive to ignore; sh: shrink every other one by this much)
+      function inside(q, skip, sh) {
+        sh = sh || 0;
+        for (var b2 = 0; b2 < body.length; b2++) {
+          if (b2 === skip) continue;
+          var P2 = body[b2];
+          if (P2.k === 'cyl') { var d2 = vsub(P2.b, P2.a), L2 = vlen(d2), u2 = Math.max(0, Math.min(1, ((q[0] - P2.a[0]) * d2[0] + (q[1] - P2.a[1]) * d2[1] + (q[2] - P2.a[2]) * d2[2]) / (L2 * L2))); if (vlen(vsub(q, v3(P2.a, d2, u2))) < P2.ra + (P2.rb - P2.ra) * u2 - sh) return true; }
+          else if (P2.k === 'ell') { var ex = (q[0] - P2.c[0]) / (P2.r[0] - sh), ey = (q[1] - P2.c[1]) / (P2.r[1] - sh), ez = (q[2] - P2.c[2]) / (P2.r[2] - sh); if (ex * ex + ey * ey + ez * ez < 1) return true; }
+          else if (P2.k === 'loft' && q[1] < P2.prof[0][0] && q[1] > P2.prof[P2.prof.length - 1][0]) { var wd = loftAt(P2.prof, q[1]), lx = (q[0] - P2.x) / (wd[0] - sh), lz = (q[2] - P2.z) / (wd[1] - sh); if (lx * lx + lz * lz < 1) return true; }
+        }
+        return false;
+      }
+      var AOK = [[0.05, 0, 0], [0.04, 0.03, 0], [0.04, -0.03, 0], [0.04, 0, 0.03], [0.04, 0, -0.03], [0.08, 0, 0]];   // along the normal, then fanned out
+      function ao(p3, n3) {
+        var e = basis(n3), occ = 0;
+        for (var pr2 = 0; pr2 < AOK.length; pr2++) { var k3 = AOK[pr2]; if (inside(v3(v3(v3(p3, n3, k3[0]), e[0], k3[1]), e[1], k3[2]))) occ++; }
+        return occ / AOK.length;
+      }
+      // the body's skin: only the surface you could see. A point buried inside another part (a shoulder
+      // ball inside the torso) is dropped, and each part's share follows its visible area, so overlaps
+      // don't pile up into bright blotches.
+      function emitSurf(list, total, count, alpha, tn) {
+        var q, z, vis = [], vtot = 0;
+        for (q = 0; q < list.length; q++) {
+          var seen = 0; if (tn) seen = 1; else { for (z = 0; z < 160; z++) if (!inside(primPoint(list[q], r, z * 7 + 3)[0], list === body ? q : -1, 0.004)) seen++; seen /= 160; }
+          vis.push(list[q].area * seen); vtot += list[q].area * seen;
+        }
+        for (q = 0; q < list.length && count > 0; q++) {
+          if (!vis[q]) continue;
+          var p = list[q], c = q === list.length - 1 ? count - (pts.length - start) : Math.round(count * vis[q] / (vtot || 1)), w = Math.sqrt(vis[q] / Math.max(1, c));
+          if (pts.length - start + c > count) c = count - (pts.length - start);
+          for (z = 0, got = 0; got < c && z < c * 6; z++) {
+            var s = primPoint(p, r, z);
+            if (!tn && inside(s[0], list === body ? q : -1, 0.004)) continue;
+            pts.push(s[0]); nrm.push(s[1]); al.push(tn ? alpha : alpha * (1 - 0.7 * ao(s[0], s[1]))); sf.push(w * 0.9); tone.push(tn); own.push(primOwner(p, s[0])); got++;
+          }
+        }
+      }
+      var got = 0;
+      var start = pts.length; emitSurf(body, sArea, skinN, 0.7, 0);
+      start = pts.length; emitSurf(pr, pArea, propN, 0.9, 1);
+      // order the skin and props along the outline, the way the line orders its ink: then each particle's
+      // move from the drawing into the body is a short step inward, not a flight across the figure
+      (function () {
+        var marks = [], ci, kk;
+        for (ci = 0; ci < C.length; ci++) { var sm = along(C[ci], Math.max(8, Math.round(C[ci].L / 0.02))); for (kk = 0; kk < sm.length; kk++) marks.push([sm[kk][0], sm[kk][1], ci + kk / sm.length]); }
+        if (!marks.length) return;
+        var lo = rimN, hi = pts.length, keyed = [];
+        for (var q4 = lo; q4 < hi; q4++) {
+          var bx = pts[q4][0], by = pts[q4][1], bk = 0, bd2 = 1e9;
+          for (var m4 = 0; m4 < marks.length; m4++) { var dx4 = marks[m4][0] - bx, dy4 = marks[m4][1] - by, d4 = dx4 * dx4 + dy4 * dy4; if (d4 < bd2) { bd2 = d4; bk = marks[m4][2]; } }
+          keyed.push([bk, pts[q4], nrm[q4], al[q4], sf[q4], tone[q4], own[q4]]);
+        }
+        keyed.sort(function (a4, b4) { return a4[0] - b4[0]; });
+        for (q4 = 0; q4 < keyed.length; q4++) { var K4 = keyed[q4], at4 = lo + q4; pts[at4] = K4[1]; nrm[at4] = K4[2]; al[at4] = K4[3]; sf[at4] = K4[4]; tone[at4] = K4[5]; own[at4] = K4[6]; }
+      })();
+      start = pts.length;
+      for (i = 0; i < seams.length; i++) {
+        var sm = seams[i], cnt = i === seams.length - 1 ? seamN - (pts.length - start) : Math.round(seamN * sm.L / seamL), segs = [];
+        for (k = 0; k < sm.P.length - 1; k++) segs.push(vlen(vsub(sm.P[k + 1], sm.P[k])));
+        for (k = 0; k < cnt; k++) {
+          var dist = cnt > 1 ? k / (cnt - 1) * sm.L : 0, sg = 0; while (sg < segs.length - 1 && dist > segs[sg]) { dist -= segs[sg]; sg++; }
+          var f = segs[sg] ? dist / segs[sg] : 0, A = sm.P[sg], B = sm.P[sg + 1], pt = [A[0] + (B[0] - A[0]) * f, A[1] + (B[1] - A[1]) * f, A[2] + (B[2] - A[2]) * f];
+          if (k > 0) pairs.push([pts.length - 1, pts.length]);
+          var nv = sm.n || vnorm(vsub(pt, sm.cen));
+          pts.push(pt); nrm.push(nv); al.push(1); sf.push(0); tone.push(0); own.push(sm.owner);
+        }
+      }
+      // the core: a small bright knot on the chest, where the signal lands
+      var cc = anchors.chest;
+      for (i = 0; i < coreN; i++) { var cp = onSphere(r, 0.004 + 0.012 * r()); bright.push(pts.length); pts.push([cc[0] + cp[0], cc[1] + cp[1], cc[2] - 0.004 + cp[2] * 0.3]); nrm.push([0, 0, -1]); al.push(1); sf.push(0); tone.push(0); own.push('chest'); }
+      // a pair from the core to the nearest seam point, so signals from the chest reach the seams
+      if (coreN && seamN) { var best = -1, bd = 9; for (i = n - coreN - seamN; i < n - coreN; i++) { var dd2 = vlen(vsub(pts[i], cc)); if (dd2 < bd) { bd = dd2; best = i; } } for (i = 0; i < coreN; i++) pairs.push([n - coreN + i, best]); }
+      while (pts.length < n) { var s2 = primPoint(body[0], r); pts.push(s2[0]); nrm.push(s2[1]); al.push(0.55); sf.push(0.02); tone.push(0); own.push(primOwner(body[0], s2[0])); }
+      pts.length = n; nrm.length = n; al.length = n; sf.length = n; tone.length = n; own.length = n;
+      var cleanPairs = []; for (i = 0; i < pairs.length; i++) if (pairs[i][0] < n && pairs[i][1] < n && pairs[i][1] >= 0) cleanPairs.push(pairs[i]);
+      return finish(n, pts, own, { normals: nrm, alpha: al, surfel: sf, tone: tone, pairs: cleanPairs, bright: bright, kick: 0.12, lineArt: true, surfelAlpha: 0.1, surfelFlat: true, still: true, edges: false });
+    }
+    return { line: line, lit: lit, anchors: anchors };
+  }
+
+  // group: several shapes in one, each scaled and placed ([builder, [x, y, z], scale]…); points
+  // are shared out by weight, and pairs, bright, anchors and flow are carried over
+  function group(parts) {
+    return function (n, r) {
+      var pts = [], nrm = [], al = [], sf = [], tone = [], pairs = [], bright = [], anchors = {}, flows = [], base = 0, any = { n: false, a: false, s: false };
+      for (var k = 0; k < parts.length; k++) {
+        var cnt = k === parts.length - 1 ? n - base : Math.floor(n / parts.length), sh = parts[k][0](cnt, r), at = parts[k][1], sc = parts[k][2], i;
+        for (i = 0; i < cnt; i++) { var p = sh.points[i]; pts.push([at[0] + p[0] * sc, at[1] + p[1] * sc, at[2] + p[2] * sc]); nrm.push(sh.normals ? sh.normals[i] : [0, 0, -1]); al.push(sh.alpha ? sh.alpha[i] : 1); sf.push(sh.surfel ? sh.surfel[i] * sc : 0); tone.push(sh.tone ? sh.tone[i] : 0); }
+        if (sh.normals) any.n = true; if (sh.alpha) any.a = true; if (sh.surfel) any.s = true;
+        if (sh.pairs) for (i = 0; i < sh.pairs.length; i++) pairs.push([sh.pairs[i][0] + base, sh.pairs[i][1] + base]);
+        if (sh.bright) for (i = 0; i < sh.bright.length; i++) bright.push(sh.bright[i] + base);
+        if (sh.anchors) for (var an in sh.anchors) { var q = sh.anchors[an]; anchors[k + '.' + an] = [at[0] + q[0] * sc, at[1] + q[1] * sc, at[2] + q[2] * sc]; }
+        flows.push([base, cnt, sh.flow || null, at, sc]); base += cnt;
+      }
+      var OUT = [0, 0, 0];
+      return { points: pts, normals: any.n ? nrm : null, alpha: any.a ? al : null, surfel: any.s ? sf : null, tone: tone, pairs: pairs, bright: bright, anchors: anchors, facing: true, kick: 0.2,
+        flow: function (i, t, since) {
+          for (var k2 = 0; k2 < flows.length; k2++) { var F = flows[k2]; if (i < F[0] + F[1]) { if (!F[2]) return null; var v = F[2](i - F[0], t, since); if (!v) return null; OUT[0] = F[3][0] + v[0] * F[4]; OUT[1] = F[3][1] + v[1] * F[4]; OUT[2] = F[3][2] + v[2] * F[4]; return OUT; } }
+          return null;
+        } };
+    };
+  }
+
+  // the crew: the people Digital Craft builds for, each drawn then lit (registerCrew, or create({ crew: true }))
+  var CREW = {
+    contractor: { pose: 'tablet', props: ['hardhat', 'tablet'] },
+    plumber: { pose: 'wrench', props: ['wrench', 'pipe'] },
+    electrician: { pose: 'inspect', props: ['toolbelt', 'tester'] },
+    roofer: { pose: 'hammer', props: ['hardhat', 'hammer'] },
+    realtor: { pose: 'keys', props: ['keys', 'yardsign'] },
+    manager: { pose: 'phone', props: ['phone', 'clipboard'] }
+  };
+  var CREW_NAMES = ['contractor', 'plumber', 'electrician', 'roofer', 'manager', 'realtor'], crewDone = false;
+  function registerCrew() {
+    if (crewDone) return CREW_NAMES.slice();
+    crewDone = true;
+    var lits = [];
+    for (var i = 0; i < CREW_NAMES.length; i++) {
+      var f = figure(CREW[CREW_NAMES[i]]);
+      register('crew:' + CREW_NAMES[i] + ':line', f.line); register('crew:' + CREW_NAMES[i] + ':lit', f.lit);
+      var x = -1 + i * 0.4, a = (i - 2.5) / 2.5;
+      lits.push([f.lit, [x, 0.12, 0.28 * a * a], 0.46]);
+    }
+    register('crew:all', group(lits));
+    return CREW_NAMES.slice();
+  }
+
   // ---- shape factories: point lists, SVG paths, text and images become shapes ----
   // Each returns a build function for register(). Flat sources sit in the x-y plane (y down,
   // like the screen), fitted to the unit box, with a little depth so they still turn in space.
@@ -619,6 +1163,9 @@
     autoPause: true,          // pause when off-screen or the tab is hidden
     reducedMotion: 'auto',    // 'auto' follows prefers-reduced-motion; true/false forces it
     seed: null,               // number → deterministic field
+    clock: 'auto',            // 'manual': no animation loop; field.advance(ms) steps it (tests, goldens, video export)
+    blank: false,             // start from an empty sky: particles are born unseen at the centre and appear as they arrive
+    crew: false,              // register the built-in crew (crew:<trade>:line|lit, crew:all) before building the field
     palette: {
       point: [123, 227, 195], hot: '#F4FFFB', star: '#CFE9E0',
       signal: [200, 255, 236], head: [220, 255, 244], glow: [123, 227, 195], glow2: [62, 143, 122],
@@ -695,7 +1242,15 @@
     // surfels: points that also paint a soft lit disc this wide (shape units), so a sparse skin reads solid
     var SFS = null;
     if (s.surfel && s.surfel.length === n) { SFS = f32(n); for (i = 0; i < n; i++) SFS[i] = Math.max(0, +s.surfel[i] || 0); }
-    var c = { def: s, T: T, adj: adj, tone: TN, nm: NM, al: AL, sf: SFS };
+    // trace: a pen draws the shape in order (0…1 per point) over ms; undrawn points ride the pen
+    var TR = null, TRI = null, trMs = 0;
+    if (s.trace && s.trace.order && s.trace.order.length === n) {
+      TR = f32(n); TRI = [];
+      for (i = 0; i < n; i++) { TR[i] = Math.max(0, Math.min(1, +s.trace.order[i] || 0)); TRI.push(i); }
+      TRI.sort(function (a, b) { return TR[a] - TR[b]; });
+      trMs = Math.max(1, +s.trace.ms || 1800);
+    }
+    var c = { def: s, T: T, adj: adj, tone: TN, nm: NM, al: AL, sf: SFS, tr: TR, tri: TRI, trMs: trMs };
     CACHE[key] = c; CACHE_KEYS.push(key);
     if (CACHE_KEYS.length > 24) delete CACHE[CACHE_KEYS.shift()];
     return c;
@@ -706,6 +1261,7 @@
 
   function create(canvas, options) {
     var o = merge(DEFAULTS, options);
+    if (o.crew) registerCrew();
     o.palette = palette(options && options.palette);
     if (!canvas || !canvas.getContext) throw new Error('aurora-field: needs a <canvas>');
     var gl = null, ctx = null;
@@ -742,7 +1298,7 @@
     // breathing without per-particle trig: sin(a + q) = sin a cos q + cos a sin q, tables built once
     var BC1 = f32(N), BS1 = f32(N), BC2 = f32(N), BS2 = f32(N), BC3 = f32(N), BS3 = f32(N);
     for (i = 0; i < N; i++) {
-      var r0 = between(r, 2.5, 6), th = between(r, 0, TAU), ph = Math.acos(between(r, -1, 1));
+      var r0 = o.blank ? between(r, 0, 0.04) : between(r, 2.5, 6), th = between(r, 0, TAU), ph = Math.acos(between(r, -1, 1));
       X[i] = r0 * Math.sin(ph) * Math.cos(th); Y[i] = r0 * Math.cos(ph); Z[i] = r0 * Math.sin(ph) * Math.sin(th);
       W[i] = between(r, 4.2, 8.5);          // each particle's own spring: some eager, some lazy
       PH[i] = between(r, 0, TAU);
@@ -750,12 +1306,23 @@
       HOT[i] = r() < 0.07 ? 1 : 0;
       TI[i] = i; OWN[i] = i;                // particle i currently holds point i (they trade later)
     }
-    var S = {};
-    var anyAL = false;
-    for (i = 0; i < names.length; i++) { var c0 = compile(names[i], N, seed); S[names[i]] = { def: c0.def, T: c0.T, adj: c0.adj, tone: c0.tone, nm: c0.nm, al: c0.al, sf: c0.sf, w: 0 }; if (c0.al) anyAL = true; }
+    // shapes compile on first use (setShape, or prepare() ahead of time), not all at create
+    var S = {}, lineNeed = 0;
+    var anyAL = false, visOn = !!o.blank;
+    for (i = 0; i < names.length; i++) S[names[i]] = { w: 0, ready: false };
+    function ensure(name) {
+      var sh = S[name]; if (sh.ready) return sh;
+      var c0 = compile(name, N, seed);
+      sh.def = c0.def; sh.T = c0.T; sh.adj = c0.adj; sh.tone = c0.tone; sh.nm = c0.nm; sh.al = c0.al; sh.sf = c0.sf; sh.tr = c0.tr; sh.tri = c0.tri; sh.trMs = c0.trMs; sh.ready = true;
+      if (c0.al) anyAL = true; if (c0.tr) visOn = true;
+      lineNeed = Math.max(lineNeed, (c0.def.pairs || []).length + (c0.def.links || []).length);
+      return sh;
+    }
     // light: per-particle shade (key + ambient + rim) and a specular glint, for shapes with normals
     var LIT = f32(N), SPC = f32(N), AW = f32(N), FACE = f32(N), litOn = false, LGT = null;
     for (i = 0; i < N; i++) { LIT[i] = 1; AW[i] = 1; }
+    // visibility: blank fields and traced shapes hide particles until they're drawn
+    var VIS = f32(N); for (i = 0; i < N; i++) VIS[i] = o.blank ? 0 : 1;
     function lightRig(l) {
       if (l === false || l === 0) { LGT = null; return; }
       l = merge(DEFAULTS.lightRig, l && typeof l === 'object' ? l : null);
@@ -768,8 +1335,10 @@
     var stars = [];
     for (i = 0; i < o.stars; i++) stars.push([r(), r() * 0.8, between(r, 0.4, 1.3), between(r, 0, TAU)]);
 
-    var shape = o.initial || names[0], autoAt = 0, pinnedUntil = 0, born = 0, introDone = false;
-    S[shape].w = 1;
+    if (!names.length) throw new Error('aurora-field: no shapes');
+    if (o.initial && !S[o.initial]) throw new Error('aurora-field: initial shape "' + o.initial + '" is not in shapes');
+    var shape = o.initial || names[0], autoAt = 0, pinnedUntil = 0, born = 0, introDone = false, shapeAt = 0, traced = null, arr = null, HELD = new Uint8Array(N);
+    ensure(shape); S[shape].w = 1;
     for (i = 0; i < N; i++) TONE[i] = S[shape].tone[TI[i]];
     if (S[shape].al) for (i = 0; i < N; i++) AW[i] = S[shape].al[TI[i]];
     var CW = 0, CH = 0, DPR = 1, cx = 0, cy = 0, R = 1, D = Math.max(1.6, +o.depth || 2.8);
@@ -780,6 +1349,8 @@
     var raf = 0, last = 0, running = false, wanted = true, inView = true, destroyed = false, listeners = [], settle = 0, clock = 0, GLR = null, lost = false;
     var glowCache = null, glowKey = '', haloCache = null, haloKey = '';
     // scouts: a few particles leave the shape, orbit with a trail, and come home
+    // the pen's comet: its last positions on screen, drawn as a fading tail
+    var PENT = 9, PENX = f32(PENT), PENY = f32(PENT), PENP = [0, 0, 0], penH = 0, penN = 0;
     var SCOUTS = [], MAXSCOUTS = Math.round(N * 0.008), TRAIL = 10, arrived = false;
 
     // events: field.on('shape' | 'stats' | 'spinout' | 'settled' | 'frame', fn); the on* options still work
@@ -790,7 +1361,9 @@
       var l = EV[name]; if (l) for (var q = 0; q < l.length; q++) l[q](a);
     }
     function on(el, ev, fn, opt) { el.addEventListener(ev, fn, opt || false); listeners.push([el, ev, fn, opt || false]); }
-    function now() { return Date.now(); }
+    // a manual clock (clock: 'manual') runs only when advance() is called: deterministic frames for tests, goldens and exports
+    var manual = o.clock === 'manual', vnow = manual ? 0 : null;
+    function now() { return vnow != null ? vnow : Date.now(); }
     function mkCanvas(w, h) {
       if (doc && doc.createElement) { var c = doc.createElement('canvas'); c.width = w; c.height = h; return c; }
       return typeof OffscreenCanvas !== 'undefined' ? new OffscreenCanvas(w, h) : null;
@@ -837,9 +1410,10 @@
       g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
       haloCache = c; return c;
     }
-    function fire(sh, p) {
-      var adj = S[sh].adj; if (!adj || sig.length >= 60 || !adj[p].length) return;
-      sig.push({ sh: sh, a: p, b: adj[p][Math.floor(Math.random() * adj[p].length)], t: 0, hops: 6 + Math.floor(Math.random() * 10) });
+    function fire(sh, p, hops) {
+      var adj = S[sh].adj; if (!adj || sig.length >= 60 || !adj[p].length || (visOn && VIS[OWN[p]] < 0.5)) return;
+      var b = adj[p][Math.floor(Math.random() * adj[p].length)]; if (visOn && VIS[OWN[b]] < 0.5) return;   // signals only run where the pen has drawn
+      sig.push({ sh: sh, a: p, b: b, t: 0, hops: hops || 6 + Math.floor(Math.random() * 10) });
     }
     function burst() { if (S[shape].adj) for (var k = 0; k < 14; k++) fire(shape, Math.floor(Math.random() * N)); }
 
@@ -894,11 +1468,11 @@
       // edges follow measured convergence: they fade out mid-morph and in as points arrive
       for (var name in S) {
         var sh = S[name], w = sh.w * settle; if (w < 0.02) continue;
-        var pairs = sh.def.pairs, links = sh.def.links;
+        var pairs = sh.def.edges === false ? null : sh.def.pairs, links = sh.def.links;   // edges: false keeps pairs for signals only
         if (pairs) {
           ctx.strokeStyle = rgba(pal.point, 0.13 * w); ctx.lineWidth = 0.7; ctx.beginPath();
           for (i = 0; i < pairs.length; i += stp) {
-            var A = OWN[pairs[i][0]], B = OWN[pairs[i][1]]; if ((ZZ[A] > 0.35 && ZZ[B] > 0.35) || SC[A] > 0 || SC[B] > 0) continue;
+            var A = OWN[pairs[i][0]], B = OWN[pairs[i][1]]; if ((ZZ[A] > 0.35 && ZZ[B] > 0.35) || SC[A] > 0 || SC[B] > 0 || (visOn && (VIS[A] < 0.5 || VIS[B] < 0.5))) continue;
             var ex2 = SX[A] - SX[B], ey2 = SY[A] - SY[B]; if (ex2 * ex2 + ey2 * ey2 > maxEdge2) continue;
             ctx.moveTo(cx + SX[A] + OX[A], cy + SY[A] + OY[A]); ctx.lineTo(cx + SX[B] + OX[B], cy + SY[B] + OY[B]);
           }
@@ -928,6 +1502,16 @@
         }
         ctx.stroke();
       }
+      if (penN > 1) {
+        ctx.lineCap = 'round';
+        for (j = 1; j < penN; j++) {
+          var e0 = (penH - j + 1 + PENT) % PENT, e1 = (penH - j + PENT) % PENT, fa2 = 1 - j / penN;
+          if (Math.abs(PENX[e0] - PENX[e1]) + Math.abs(PENY[e0] - PENY[e1]) > 24) break;   // never draw the tail across a pen lift
+          ctx.strokeStyle = rgba(pal.signal, 0.85 * fa2); ctx.lineWidth = 2.6 * fa2 + 0.4;
+          ctx.beginPath(); ctx.moveTo(PENX[e0], PENY[e0]); ctx.lineTo(PENX[e1], PENY[e1]); ctx.stroke();
+        }
+        ctx.fillStyle = pal.hot; ctx.beginPath(); ctx.arc(PENX[penH], PENY[penH], 2.4, 0, TAU); ctx.fill();
+      }
       // scout trails
       if (SCOUTS.length) {
         ctx.lineWidth = 1.2;
@@ -946,6 +1530,7 @@
       for (k = 0; k < NB; k++) bCount[k] = 0;
       var nh = 0, nl = 0;
       for (n = 0; n < N; n += stp) {
+        if (visOn && VIS[n] < 0.5) continue;
         if (GLOW[n] > 0.25 || SC[n] > 0) { litIdx[nl++] = n; continue; }
         if (litOn ? SPC[n] > 0.4 : HOT[n]) { hotIdx[nh++] = n; continue; }
         var fz = (1 - ZZ[n]) / 2 * (litOn ? Math.min(1.3, LIT[n]) : 1) * (anyAL ? 0.35 + 0.65 * AW[n] : 1);
@@ -1038,6 +1623,7 @@
         'void main(){gl_Position=clip(floor(p*dpr)+0.5);gl_PointSize=s;vc=c;vk=k;vs=s;}',
         'precision mediump float;varying vec4 vc;varying float vk;varying float vs;' +
         'void main(){float d=length(gl_PointCoord-0.5)*2.0;' +
+        'if(vk>3.5){gl_FragColor=vec4(vc.rgb,vc.a*(1.0-smoothstep(0.55,1.0,d)));return;}' +
         'if(vk>2.5){gl_FragColor=vec4(vc.rgb,vc.a*exp(-d*d*4.0)*step(d,1.0));return;}' +
         'if(vk>1.5){float h=max(0.0,1.0-d);gl_FragColor=vec4(vc.rgb,vc.a*h*h*h);return;}' +
         'float a=clamp((1.0-d)*vs*0.5,0.0,1.0);' +
@@ -1053,9 +1639,8 @@
         'precision mediump float;varying vec2 uv;uniform vec3 c0;uniform vec3 c1;' +
         'void main(){float d=length(uv);float a=mix(0.13,0.05,smoothstep(0.0,0.5,d))*(1.0-smoothstep(0.5,1.0,d));gl_FragColor=vec4(mix(c0,c1,smoothstep(0.0,0.5,d)),a);}',
         ['p']);
-      var maxPairs = 0, maxLinks = 0;
-      for (var nm in S) { maxPairs = Math.max(maxPairs, (S[nm].def.pairs || []).length); maxLinks = Math.max(maxLinks, (S[nm].def.links || []).length); }
-      var PMAX = N * 3 + stars.length + 64 + MAXSCOUTS * 2 + 8, LMAX = maxPairs + maxLinks + 64 + (MAXSCOUTS + 2) * TRAIL + 4 * 48 + 8;
+      var LXTRA = 64 + (MAXSCOUTS + 2) * TRAIL + 4 * 48 + PENT + 8;
+      var PMAX = N * 3 + stars.length + 64 + MAXSCOUTS * 2 + 8, LMAX = lineNeed + LXTRA;
       var PB = new F32(PMAX * 8), LB = new F32(LMAX * 12), np = 0, nl = 0;
       var pbuf = gl.createBuffer(), lbuf = gl.createBuffer(), qbuf = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, pbuf); gl.bufferData(gl.ARRAY_BUFFER, PB.byteLength, gl.DYNAMIC_DRAW);
@@ -1078,6 +1663,7 @@
       for (var li = 0; li <= 256; li++) { var lf = li / 256; LUT_M[li] = Math.pow(lf, 0.85); LUT_S[li] = 0.7 + 3.1 * Math.pow(lf, 1.25); LUT_A[li] = 0.12 + 0.88 * Math.pow(lf, 1.5); }
       function drawGL(t) {
         var pal = o.palette, fog = pal.fog || pal.point, stp = step(), n, i, j, k;
+        if (lineNeed + LXTRA > LMAX) { LMAX = lineNeed + LXTRA; LB = new F32(LMAX * 12); gl.bindBuffer(gl.ARRAY_BUFFER, lbuf); gl.bufferData(gl.ARRAY_BUFFER, LB.byteLength, gl.DYNAMIC_DRAW); }   // a newly compiled shape needs more lines
         if (palKey !== pal.hot + pal.star) { palKey = pal.hot + pal.star; HOTC = hexRGB(pal.hot); STARC = hexRGB(pal.star); }
         np = 0; nl = 0;
         // stars
@@ -1088,9 +1674,9 @@
         // edges, links, signals: one line batch (1 device px, so a touch brighter than 2D)
         for (var name in S) {
           var sh = S[name], w = sh.w * settle; if (w < 0.02) continue;
-          var pairs = sh.def.pairs, links = sh.def.links;
+          var pairs = sh.def.edges === false ? null : sh.def.pairs, links = sh.def.links;
           if (pairs) for (i = 0; i < pairs.length; i += stp) {
-            var A = OWN[pairs[i][0]], B = OWN[pairs[i][1]]; if ((ZZ[A] > 0.35 && ZZ[B] > 0.35) || SC[A] > 0 || SC[B] > 0) continue;
+            var A = OWN[pairs[i][0]], B = OWN[pairs[i][1]]; if ((ZZ[A] > 0.35 && ZZ[B] > 0.35) || SC[A] > 0 || SC[B] > 0 || (visOn && (VIS[A] < 0.5 || VIS[B] < 0.5))) continue;
             var gx = SX[A] - SX[B], gy = SY[A] - SY[B]; if (gx * gx + gy * gy > maxEdge2) continue;
             var fa = Math.max(0, Math.min(1, (1 - (ZZ[A] + ZZ[B]) / 2) / 2));
             ln(cx + SX[A] + OX[A], cy + SY[A] + OY[A], cx + SX[B] + OX[B], cy + SY[B] + OY[B], TONE[A] > 0.5 ? pal.accent : pal.point, 0.2 * w * (0.4 + 0.6 * fa));
@@ -1113,6 +1699,8 @@
             ln(tr[h0 * 2], tr[h0 * 2 + 1], tr[h1 * 2], tr[h1 * 2 + 1], pal.signal, 0.6 * (1 - j / TRAIL) * sc.fade);
           }
         }
+        // the pen's comet tail
+        for (j = 1; j < penN; j++) { var e0 = (penH - j + 1 + PENT) % PENT, e1 = (penH - j + PENT) % PENT; if (Math.abs(PENX[e0] - PENX[e1]) + Math.abs(PENY[e0] - PENY[e1]) > 24) break; ln(PENX[e0], PENY[e0], PENX[e1], PENY[e1], pal.signal, 0.9 * (1 - j / penN)); }
         for (i = 0; i < waves.length; i++) {
           var wv = waves[i], wa = Math.max(0, 0.5 * (1 - wv.t / 700));
           for (k = 0; k < 48; k++) { var a0 = k / 48 * TAU, a1 = (k + 1) / 48 * TAU; ln(wv.x + Math.cos(a0) * wv.t, wv.y + Math.sin(a0) * wv.t, wv.x + Math.cos(a1) * wv.t, wv.y + Math.sin(a1) * wv.t, pal.point, wa); }
@@ -1120,13 +1708,14 @@
         // particles: continuous depth (no buckets on the GPU) — size, fog and alpha by z
         var pp0 = pal.point, pa0 = pal.accent, two = pp0 !== pa0, SFc = o.surfels ? S[shape].sf : null, swt = S[shape].w, sfK = R * D * DPR;
         for (n = 0; n < N; n += stp) {
+          var vz = visOn ? VIS[n] : 1; if (vz < 0.02) continue;
           var x = cx + SX[n] + OX[n], y = cy + SY[n] + OY[n], tn = two ? TONE[n] : 0;
           BASE[0] = pp0[0] + (pa0[0] - pp0[0]) * tn; BASE[1] = pp0[1] + (pa0[1] - pp0[1]) * tn; BASE[2] = pp0[2] + (pa0[2] - pp0[2]) * tn;
           if (GLOW[n] > 0.25 || SC[n] > 0) {
             var gl2 = Math.max(GLOW[n], SC[n] > 0 ? 0.8 : 0), sfe = SFc && !SC[n] ? SFc[TI[n]] : 0;
-            if (sfe > 0) pt(x, y, sfe * sfK / (D + ZZ[n]) * 3.6, BASE, 0.34 * gl2 * swt, 3);
-            pt(x, y, (5 + 8 * gl2) * DPR, BASE, 0.42, 2);
-            pt(x, y, Math.max(2, 2.4 * DPR), HOTC, 1, 0);
+            if (sfe > 0) pt(x, y, sfe * sfK / (D + ZZ[n]) * 3.6, BASE, 0.34 * gl2 * swt * vz, 3);
+            pt(x, y, (5 + 8 * gl2) * DPR, BASE, 0.42 * vz, 2);
+            pt(x, y, Math.max(2, 2.4 * DPR), HOTC, vz, 0);
             continue;
           }
           if (HOT[n] && !litOn) { pt(x, y, Math.max(1.5, (ZZ[n] < 0 ? 2.8 : 1.5) * DPR), HOTC, 1, ZZ[n] < 0 ? 1 : 0); continue; }
@@ -1144,15 +1733,17 @@
             var sfz = SFc[TI[n]];
             if (sfz > 0) {
               var fc = litOn ? FACE[n] : (ZZ[n] < 0 ? 1 : -1), vis = fc > 0.15 ? 1 : fc < -0.15 ? 0.18 : 0.18 + 0.82 * (fc + 0.15) / 0.3;
-              pt(x, y, sfz * sfK / (D + ZZ[n]) * 3.4, COL, 0.12 * swt * settle * vis, 3);
+              var flat = S[shape].def.surfelFlat;   // flat discs blend into an even, solid surface; soft ones into a glow
+              pt(x, y, sfz * sfK / (D + ZZ[n]) * (flat ? 3.9 * (0.35 + 0.65 * Math.max(0, Math.min(1, fc))) : 3.4), COL, (S[shape].def.surfelAlpha || 0.12) * swt * settle * vis * vz, flat ? 4 : 3);
             }
           }
-          pt(x, y, size, COL, al, f > 0.55 && size >= 3 && (!litOn || SPC[n] > 0.05 || LIT[n] > 1) ? 1 : 0);
+          pt(x, y, size, COL, al * vz, f > 0.55 && size >= 3 && (!litOn || SPC[n] > 0.05 || LIT[n] > 1) ? 1 : 0);
         }
         for (i = 0; i < sig.length; i++) {
           var g2 = sig[i], a2 = OWN[g2.a], b2 = OWN[g2.b];
           pt(cx + SX[a2] + (SX[b2] - SX[a2]) * g2.t, cy + SY[a2] + (SY[b2] - SY[a2]) * g2.t, Math.max(3, 4 * DPR), pal.head, 1, 1);
         }
+        if (penN) { pt(PENX[penH], PENY[penH], 14 * DPR, pal.signal, 0.35, 2); pt(PENX[penH], PENY[penH], Math.max(3, 3.4 * DPR), HOTC, 1, 1); }
         // draw
         var W = canvas.width, H = canvas.height;
         gl.viewport(0, 0, W, H); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
@@ -1198,6 +1789,21 @@
     var TT = [0, 0, 0];
     function update(dt, t) {
       var tn = now(), cur = S[shape], def = cur.def, T = cur.T, flowT = t / 1000, n, k;
+      // the pen: while a traced shape is being drawn, points past its progress wait at its tip
+      var since = (tn - shapeAt) / 1000, tr = cur.tr, prog = 1, pen = -1, trOn = false, vt, park, held;
+      var arrT = arr ? tn - arr.at : 0, arrOn = arr && arrT < arr.ms; if (arr && !arrOn) arr = null;
+      if (tr && !reduced) {
+        var lin = since * 1000 / cur.trMs;
+        prog = lin >= 1 ? lin : def.trace.ease === 'linear' ? lin : (1 - Math.cos(Math.PI * lin)) / 2;   // a hand eases in and out
+        if (prog < 1) {
+          trOn = true; pen = cur.tri[Math.min(N - 1, Math.max(0, Math.floor(prog * N)))];
+          var pf = def.flow ? def.flow(pen, flowT, since) : null, pv = [pf ? pf[0] : T[pen * 3], pf ? pf[1] : T[pen * 3 + 1], pf ? pf[2] : T[pen * 3 + 2]];
+          proj3(pv, PENP); if (penN && Math.abs(PENP[0] - PENX[penH]) + Math.abs(PENP[1] - PENY[penH]) > 40) penN = 0;   // a pen lift: no tail across the gap
+          penH = (penH + 1) % PENT; PENX[penH] = PENP[0]; PENY[penH] = PENP[1]; penN = Math.min(PENT, penN + 1);
+        }
+        else if (traced !== shape) { traced = shape; emit('traced', shape); }
+      }
+      if (!trOn && penN) penN--;   // the tail fades once the pen lifts
       clock += dt;
       if (!introDone && tn - born > o.intro) introDone = true;
       if (introDone && o.cycle > 0 && cycleList.length > 1 && tn > autoAt && tn > pinnedUntil) {
@@ -1226,7 +1832,7 @@
       if (Math.abs(vy) > 7 && tn > spunAt) { spunAt = tn + 4000; emit('spinout'); }
 
       // ---- autonomy: particles manage themselves ----
-      if (AUTO > 0 && introDone) {
+      if (AUTO > 0 && introDone && !trOn && !def.still) {
         // trade places with a neighbour now and then (the shape keeps reorganising itself)
         var swaps = dt * 3 * AUTO * settle;
         while (Math.random() < swaps) {
@@ -1280,7 +1886,7 @@
         } else { offFor = null; if (S[shape].dlOn) S[shape].dlOn = false; }
       }
       // ---- physics: each particle is a damped spring toward its point, swirling in ----
-      var breathe = 0.014 * AUTO, swirlK = 1.6, TN0 = cur.tone, AL0 = cur.al, tk = Math.min(1, dt * 3);
+      var breathe = 0.014 * AUTO * (def.lineArt && def.trace ? 0.3 : 1), swirlK = 1.6, TN0 = cur.tone, AL0 = cur.al, tk = Math.min(1, dt * 3);
       var bs1 = Math.sin(clock * 1.3), bc1 = Math.cos(clock * 1.3), bs2 = Math.sin(clock * 1.1), bc2 = Math.cos(clock * 1.1), bs3 = Math.sin(clock * 0.9), bc3 = Math.cos(clock * 0.9);
       var near = o.interactive && pointerIn, waveOn = waves.length > 0;
       for (n = 0; n < N; n++) {
@@ -1289,13 +1895,23 @@
           for (k = 0; k < SCOUTS.length; k++) if (SCOUTS[k].i === n) { scoutTarget(SCOUTS[k], TT); break; }
           tx = TT[0]; ty = TT[1]; tz = TT[2];
         } else {
-          var fl = def.flow ? def.flow(p, flowT) : null;
+          var fl = def.flow ? def.flow(p, flowT, since) : null;
           if (fl) { tx = fl[0]; ty = fl[1]; tz = fl[2]; } else { tx = T[p * 3]; ty = T[p * 3 + 1]; tz = T[p * 3 + 2]; }
           if (rigOn) { tx += OFF[p * 3]; ty += OFF[p * 3 + 1]; tz += OFF[p * 3 + 2]; }
           if (breathe) {
             tx += breathe * (bs1 * BC1[n] + bc1 * BS1[n]); ty += breathe * (bs2 * BC2[n] + bc2 * BS2[n]); tz += breathe * (bc3 * BC3[n] - bs3 * BS3[n]);
           }
         }
+        vt = 1; park = false; held = false;
+        if (arrOn && arrT < arr.D[p]) { tx = X[n]; ty = Y[n]; tz = Z[n]; held = true; }
+        if (HELD[n] && !held) GLOW[n] = Math.max(GLOW[n], 0.32);   // it lights up as the wave reaches it
+        HELD[n] = held ? 1 : 0;
+        if (trOn && tr[p] > prog) {
+          park = !visOn || VIS[n] < 0.05;   // unseen: ride the pen exactly, so it's already there when drawn
+          // not drawn yet: wait in a small knot at the pen; only the next stretch shows, as its bright tip
+          tx = T[pen * 3] + 0.025 * BC1[n]; ty = T[pen * 3 + 1] + 0.025 * BS2[n]; tz = T[pen * 3 + 2] + 0.025 * BC3[n];
+          vt = tr[p] - prog < 0.004 && Math.abs(X[n] - tx) + Math.abs(Y[n] - ty) + Math.abs(Z[n] - tz) < 0.12 ? 1 : 0;   // the tip shows once it has caught up with the pen
+        } else if (trOn && VIS[n] < 0.05) park = true;   // just drawn and still unseen: it appears in place, right behind the pen
         var om = W[n] * (introDone ? 1 : 0.55), damp = 1.5 * om;
         var ex = tx - X[n], ey = ty - Y[n], ez = tz - Z[n];
         var dist = Math.abs(ex) + Math.abs(ey) + Math.abs(ez), sw = swirlK * Math.min(1, dist);
@@ -1303,6 +1919,7 @@
         VY[n] += (om * om * ey - damp * VY[n]) * dt;
         VZ[n] += (om * om * ez - damp * VZ[n] + ex * sw) * dt;
         X[n] += VX[n] * dt; Y[n] += VY[n] * dt; Z[n] += VZ[n] * dt;
+        if (park) { X[n] = tx; Y[n] = ty; Z[n] = tz; VX[n] = VY[n] = VZ[n] = 0; }
         if (near) {
           var dx = cx + SX[n] + OX[n] - mx, dy = cy + SY[n] + OY[n] - my, d2 = dx * dx + dy * dy;
           if (d2 < 8100 && d2 > 0.01) { var d = Math.sqrt(d2), f = (1 - d / 90); f = f * f * 7; OX[n] += dx / d * f; OY[n] += dy / d * f; if (f > 2) GLOW[n] = Math.max(GLOW[n], 0.4); }
@@ -1314,16 +1931,23 @@
           }
         }
         OX[n] *= 0.9; OY[n] *= 0.9;
-        TONE[n] += (TN0[p] - TONE[n]) * tk;              // colours morph with the shape
-        if (anyAL) AW[n] += ((AL0 ? AL0[p] : 1) - AW[n]) * tk;
+        if (!held) {
+          TONE[n] += (TN0[p] - TONE[n]) * tk;              // colours morph with the shape
+          if (anyAL) AW[n] += ((AL0 ? AL0[p] : 1) - AW[n]) * tk;
+        }
         if (GLOW[n] > 0) GLOW[n] = Math.max(0, GLOW[n] - dt * 1.6);
+        if (visOn) {
+          var vv = VIS[n];
+          if (vt > vv) { if (trOn && vv < 0.3) GLOW[n] = Math.max(GLOW[n], 0.2); VIS[n] = Math.min(vt, vv + dt * 7); }
+          else if (vt < vv) VIS[n] = Math.max(vt, vv - dt * 4);
+        }
       }
       for (var w = waves.length - 1; w >= 0; w--) { waves[w].t += dt * 620; if (waves[w].t > 700) waves.splice(w, 1); }
       // how close is the field to its shape? sample 64 particles
       var err = 0, stride = Math.max(1, Math.floor(N / 64)), cnt = 0;
       for (n = 0; n < N; n += stride) {
-        if (SC[n] > 0) continue;
-        var pp = TI[n], fq = def.flow ? def.flow(pp, flowT) : null;
+        if (SC[n] > 0 || (visOn && VIS[n] < 0.5)) continue;
+        var pp = TI[n], fq = def.flow ? def.flow(pp, flowT, since) : null;
         err += Math.abs((fq ? fq[0] : T[pp * 3]) - X[n]) + Math.abs((fq ? fq[1] : T[pp * 3 + 1]) - Y[n]) + Math.abs((fq ? fq[2] : T[pp * 3 + 2]) - Z[n]); cnt++;
       }
       // breathing is part of being in shape, so it doesn't count as error
@@ -1338,7 +1962,8 @@
         if (g.t >= 1) {
           if (AUTO) GLOW[OWN[g.b]] = Math.max(GLOW[OWN[g.b]], 0.6 + 0.4 * AUTO);
           var adj = S[g.sh].adj[g.b];
-          if (--g.hops > 0 && adj.length) { g.a = g.b; g.b = adj[Math.floor(Math.random() * adj.length)]; g.t = 0; } else sig.splice(s, 1);
+          var nb = adj.length ? adj[Math.floor(Math.random() * adj.length)] : -1;
+          if (--g.hops > 0 && nb >= 0 && !(visOn && VIS[OWN[nb]] < 0.5)) { g.a = g.b; g.b = nb; g.t = 0; } else sig.splice(s, 1);
         }
       }
     }
@@ -1365,22 +1990,33 @@
       raf = raf0(frame);
     }
     function sync() {
-      var want = wanted && !destroyed && !lost && !reduced && (!o.autoPause || (!(doc && doc.hidden) && inView));
+      var want = !manual && wanted && !destroyed && !lost && !reduced && (!o.autoPause || (!(doc && doc.hidden) && inView));
       if (want && !running) { running = true; last = 0; if (!raf) raf = raf0(frame); }
       else if (!want && running) { running = false; if (raf) { caf0(raf); raf = 0; } }
     }
     function snap(name) {
-      var T = S[name].T;
-      for (var n = 0; n < N; n++) { var p = TI[n]; X[n] = T[p * 3]; Y[n] = T[p * 3 + 1]; Z[n] = T[p * 3 + 2]; VX[n] = VY[n] = VZ[n] = 0; TONE[n] = S[name].tone[p]; AW[n] = S[name].al ? S[name].al[p] : 1; }
-      settle = 1;
+      var T = ensure(name).T;
+      for (var n = 0; n < N; n++) { var p = TI[n]; X[n] = T[p * 3]; Y[n] = T[p * 3 + 1]; Z[n] = T[p * 3 + 2]; VX[n] = VY[n] = VZ[n] = 0; TONE[n] = S[name].tone[p]; AW[n] = S[name].al ? S[name].al[p] : 1; VIS[n] = 1; }
+      settle = 1; traced = name;
     }
     function setShape(name, opt) {
       if (!S[name]) throw new Error('aurora-field: shape "' + name + '" is not in this field');
+      ensure(name);
       var pin = opt && opt.pin;
       if (pin) pinnedUntil = now() + (pin === true ? o.pin : pin);
       autoAt = now() + o.cycle;
       if (name === shape) return api;
-      shape = name; kick += S[name].def.kick || 0.6; sig.length = 0; arrived = false;
+      // arrive: points switch to the new shape in a wave from a source, nearest first; the rest hold where they are
+      arr = null;
+      var av = opt && opt.arrive;
+      if (av && !reduced) {
+        var src = typeof av.from === 'string' ? (S[name].def.anchors || {})[av.from] : av.from, T2 = S[name].T, Dl = f32(N), mx2 = 1e-6, q2;
+        if (!src) src = [0, 0, 0];
+        for (q2 = 0; q2 < N; q2++) { var ax = T2[q2 * 3] - src[0], ay = T2[q2 * 3 + 1] - src[1], az = T2[q2 * 3 + 2] - src[2]; Dl[q2] = Math.sqrt(ax * ax + ay * ay + az * az); if (Dl[q2] > mx2) mx2 = Dl[q2]; }
+        var ams = Math.max(1, +av.ms || 900); for (q2 = 0; q2 < N; q2++) Dl[q2] = Dl[q2] / mx2 * ams;
+        arr = { at: now(), ms: ams, D: Dl };
+      }
+      shape = name; shapeAt = now(); traced = null; kick += S[name].def.kick || 0.6; sig.length = 0; arrived = false;
       for (var nm2 in S) S[nm2].dlOn = false;
       if (reduced) { for (var nm in S) S[nm].w = nm === name ? 1 : 0; snap(name); draw(0); }
       emit('shape', name);
@@ -1488,6 +2124,29 @@
         if (!running) draw(0);
         return api;
       },
+      // manual clock: step the simulation ms forward in fixed frames, then draw once
+      advance: function (ms) {
+        if (!manual) throw new Error("aurora-field: advance() needs create({ clock: 'manual' })");
+        var steps = Math.max(1, Math.round((+ms || 0) / 16.667)), h = (+ms || 0) / steps;
+        for (var q = 0; q < steps; q++) { vnow += h; update(h / 1000, vnow); }
+        draw(vnow); return api;
+      },
+      // compile shapes ahead of use, one per idle slice, so setShape never stalls a frame
+      prepare: function (list, done) {
+        var q = (list || names).filter(function (nm) { return S[nm] && !S[nm].ready; }), ric = win.requestIdleCallback || function (f) { return setTimeout(f, 16); };
+        (function next() { if (destroyed) return; if (!q.length) { if (done) done(); return; } ensure(q.shift()); ric(next); })();
+        return api;
+      },
+      // replay the current shape's trace: the pen draws it again from the start
+      trace: function () { shapeAt = now(); traced = null; return api; },
+      // send signals from a point of the current shape (an anchor name or [x, y, z]; default: anywhere)
+      signal: function (at, hops, count) {
+        var a = typeof at === 'string' ? (S[shape].def.anchors || {})[at] : at, T0 = S[shape].T, adj0 = S[shape].adj, best = -1, bd = 1e9, q;
+        if (!adj0) return api;
+        if (a) { for (q = 0; q < N; q++) { if (!adj0[q].length) continue; var dx = T0[q * 3] - a[0], dy = T0[q * 3 + 1] - a[1], dz = T0[q * 3 + 2] - a[2], d = dx * dx + dy * dy + dz * dz; if (d < bd) { bd = d; best = q; } } }
+        for (q = 0; q < (count || 1); q++) fire(shape, best >= 0 ? best : Math.floor(Math.random() * N), hops);
+        return api;
+      },
       next: function () { var ci = cycleList.indexOf(shape); return setShape(cycleList[(ci + 1) % cycleList.length], { pin: true }); },
       play: function () { wanted = true; layout(); sync(); return api; },
       pause: function () { wanted = false; sync(); return api; },
@@ -1501,7 +2160,7 @@
       }
     };
 
-    born = now(); autoAt = born + o.intro + o.cycle;
+    born = now(); shapeAt = born; autoAt = born + o.intro + o.cycle;
     if (gl) {
       GLR = makeGL();
       // the GPU can take the context away (driver reset, too many tabs): pause, then rebuild
@@ -1534,7 +2193,7 @@
     worker.postMessage({ type: 'init', canvas: off, options: clean }, [off]);
     worker.onmessage = function (e) {
       var m = e.data; if (!m || m.type !== 'event') return;
-      if (m.name === 'shape') last.shape = m.data; if (m.name === 'stats') last.stats = m.data;
+      if (m.name === 'shape') last.shape = m.data; if (m.name === 'stats') last.stats = m.data; if (m.name === 'pose') last.pose = m.data;
       var cb = { shape: o.onShape, stats: o.onStats, spinout: o.onSpinout }[m.name]; if (cb) cb(m.data);
       var l = EV[m.name]; if (l) for (var q = 0; q < l.length; q++) l[q](m.data);
     };
@@ -1556,11 +2215,14 @@
       version: VERSION, offloaded: true, worker: worker,
       get shape() { return last.shape; },
       stats: function () { return last.stats; },
+      // the last anchors and view the worker sent (about 30 times a second), for overlays
+      anchors: function () { return last.pose ? last.pose.anchors : {}; },
+      view: function () { return last.pose ? last.pose.view : null; },
       on: function (n, fn) { (EV[n] || (EV[n] = [])).push(fn); return api; },
       off: function (n, fn) { var l = EV[n]; if (l) for (var q = l.length - 1; q >= 0; q--) if (!fn || l[q] === fn) l.splice(q, 1); return api; },
       destroy: function () { call('destroy', []); for (var q = 0; q < listeners.length; q++) listeners[q][0].removeEventListener(listeners[q][1], listeners[q][2]); if (ro) ro.disconnect(); setTimeout(function () { worker.terminate(); }, 50); }
     };
-    var M = ['setShape', 'next', 'play', 'pause', 'setPose', 'set', 'pointer'];
+    var M = ['setShape', 'next', 'play', 'pause', 'setPose', 'set', 'pointer', 'trace', 'signal', 'prepare'];
     for (k = 0; k < M.length; k++) (function (m) { api[m] = function () { call(m, Array.prototype.slice.call(arguments)); return api; }; })(M[k]);
     return api;
   }
@@ -1574,7 +2236,10 @@
         for (var nm in data) register(nm, data[nm]);
         delete opt.shapeData;
         field = create(m.canvas, opt);
-        ['shape', 'stats', 'spinout', 'settled'].forEach(function (ev) { field.on(ev, function (d) { scope.postMessage({ type: 'event', name: ev, data: d }); }); });
+        ['shape', 'stats', 'spinout', 'settled', 'traced'].forEach(function (ev) { field.on(ev, function (d) { scope.postMessage({ type: 'event', name: ev, data: d }); }); });
+        // overlays on the main thread follow the field: anchors and the view, about 30 times a second
+        var lastPose = 0;
+        field.on('frame', function (t) { if (t - lastPose < 33) return; lastPose = t; scope.postMessage({ type: 'event', name: 'pose', data: { anchors: field.anchors(), view: field.view() } }); });
         scope.postMessage({ type: 'event', name: 'ready', data: { shape: field.shape, renderer: field.stats().renderer } });
       } else if (m.type === 'call' && field && typeof field[m.method] === 'function') field[m.method].apply(field, m.args || []);
     };
@@ -1588,6 +2253,7 @@
 
   return {
     version: VERSION, create: create, register: register, build: build, shapes: function () { return ORDER.slice(); }, defaults: DEFAULTS,
-    palettes: PALETTES, armour: armour, offload: offload, serve: serve, fromPoints: fromPoints, fromSVG: fromSVG, fromImage: fromImage, fromText: fromText, parsePath: parsePath
+    palettes: PALETTES, armour: armour, offload: offload, serve: serve, fromPoints: fromPoints, fromSVG: fromSVG, fromImage: fromImage, fromText: fromText, parsePath: parsePath,
+    figure: figure, group: group, registerCrew: registerCrew, crew: CREW_NAMES.slice(), poses: Object.keys(FIG_POSES)
   };
 });

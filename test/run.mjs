@@ -393,6 +393,101 @@ test('face: the solver mirrors the head, learns a resting face, and smooths', as
   assert.ok(y > 4.5, 'a real move gets through quickly');
 });
 
+test('figure: every pose builds a line and a lit person, in the box, deterministic', () => {
+  for (const pose of AF.poses) {
+    const f = AF.figure({ pose, props: ['hardhat', 'tablet', 'wrench', 'pipe', 'toolbelt', 'tester', 'hammer', 'phone', 'clipboard', 'keys', 'yardsign'] });
+    for (const kind of ['line', 'lit']) for (const n of [64, 900, 3000]) {
+      const s = f[kind](n, () => 0.5);
+      assert.equal(s.points.length, n, pose + ' ' + kind + ' ' + n);
+      for (const p of s.points) for (const c of p) { assert.ok(Number.isFinite(c)); assert.ok(Math.abs(c) <= 1.3, pose + ' ' + kind + ' coordinate ' + c); }
+      for (const [a, b] of s.pairs) assert.ok(a >= 0 && b >= 0 && a < n && b < n && a !== b);
+      for (const k of ['head', 'chest', 'hand', 'feet', 'prop']) assert.ok(s.anchors[k], 'anchor ' + k);
+      if (kind === 'lit') {
+        for (const v of s.normals) assert.ok(Math.abs(Math.hypot(v[0], v[1], v[2]) - 1) < 1e-6, 'unit normal');
+        assert.equal(s.surfel.length, n); assert.ok(s.alpha.some(a => a < 1) && s.alpha.some(a => a === 1), 'a skin under crisp seams');
+      } else {
+        const o = s.trace.order; assert.equal(o.length, n);
+        for (const v of o) assert.ok(v >= 0 && v <= 1);
+        for (const [a, b] of s.pairs) assert.ok(o[b] >= o[a], 'the pen moves forward along a stroke');
+        assert.ok(s.lineArt && s.bright.length > 0);
+      }
+    }
+  }
+  const a = AF.figure({ pose: 'hammer', props: ['hammer'] }).lit(500, () => 0.3), b = AF.figure({ pose: 'hammer', props: ['hammer'] }).lit(500, () => 0.3);
+  assert.deepEqual(a.points, b.points);
+});
+
+test('figure: the idle loop moves joints and carries their points, the hammer swings', () => {
+  const s = AF.figure({ pose: 'hammer', props: ['hammer'] }).lit(1200, () => 0.4);
+  const hand = s.points.findIndex((p, i) => i > 0 && Math.hypot(p[0] - s.anchors.hand[0], p[1] - s.anchors.hand[1], p[2] - s.anchors.hand[2]) < 0.05);
+  assert.ok(hand >= 0);
+  const at = t => s.flow(hand, t, t).slice();
+  let travel = 0; for (let t = 0; t < 1.2; t += 0.1) travel = Math.max(travel, Math.hypot(...at(t).map((c, k) => c - at(0)[k])));
+  assert.ok(travel > 0.05, 'the hand moves with the swing (' + travel.toFixed(3) + ')');
+  const st = AF.figure({ pose: 'stand' }).lit(400, () => 0.4), d = Math.hypot(...st.flow(10, 3).map((c, k) => c - st.points[10][k]));
+  assert.ok(d < 0.03, 'standing still is (nearly) still');
+});
+
+test('crew: registers six trades, drawn and lit, plus the whole crew; idempotent', () => {
+  const before = AF.shapes().length;
+  assert.deepEqual(AF.registerCrew(), AF.crew);
+  assert.equal(AF.crew.length, 6);
+  assert.equal(AF.shapes().length, before + 13);
+  AF.registerCrew(); assert.equal(AF.shapes().length, before + 13, 'idempotent');
+  for (const c of AF.crew) for (const k of ['line', 'lit']) assert.equal(AF.build('crew:' + c + ':' + k, 700, 3).points.length, 700);
+  const all = AF.build('crew:all', 1800, 3);
+  assert.equal(all.points.length, 1800); assert.ok(all.anchors['0.chest'] && all.anchors['5.prop']);
+  assert.ok(all.flow(1799, 1) && all.flow(0, 1));
+});
+
+test('trace: a blank field draws a traced shape with the pen, says so once, and replays', async () => {
+  AF.register('tfig:line', AF.figure({ pose: 'stand', trace: 40 }).line);
+  AF.register('tfig:lit', AF.figure({ pose: 'stand' }).lit);
+  for (const gl of [true, false]) {
+    const env = stubEnv({ gl }), traced = [];
+    const f = AF.create(env.canvas, { seed: 3, count: 600, shapes: ['tfig:line', 'tfig:lit', 'mind'], cycle: 0, intro: 0, blank: true, clock: 'manual' });
+    f.on('traced', s => traced.push(s));
+    const until = async (ms) => { f.advance(ms); };   // the manual clock: deterministic, whatever else is running
+    await until(120);
+    assert.deepEqual(traced, ['tfig:line'], 'traced once');
+    f.signal('chest', 10, 3); f.signal([0, 0, 0]); f.setShape('tfig:lit'); await until(30); f.signal('chest', 10, 3);
+    f.setShape('tfig:line'); await until(120); assert.equal(traced.length, 2, 'a new visit traces again');
+    f.trace(); await until(120); assert.equal(traced.length, 3, 'trace() replays');
+    f.setShape('mind'); await until(20); f.signal(); f.destroy();
+  }
+  const env = stubEnv(); let since = null;
+  AF.register('tsince', () => ({ points: [[0, 0, 0], [0.1, 0, 0]], flow: (i, t, s) => { since = s; return null; } }));
+  const g = AF.create(env.canvas, { count: 2, shapes: ['tsince'] }); env.pump(3);
+  assert.ok(typeof since === 'number' && since >= 0, 'flow gets the seconds since the shape arrived'); g.destroy();
+  assert.throws(() => AF.create(stubEnv().canvas, { shapes: ['mind'], initial: 'teams' }), /not in shapes/);
+  const h = AF.create(stubEnv().canvas, { crew: true, count: 500, shapes: ['crew:roofer:line', 'crew:roofer:lit'], cycle: 0 }); h.destroy();
+});
+
+test('3.0: the line is an outline, and its hairline is the lit body\'s rim', () => {
+  AF.registerCrew();
+  for (const t of AF.crew) {
+    const L = AF.build('crew:' + t + ':line', 3000, 7), B = AF.build('crew:' + t + ':lit', 3000, 9), rim = Math.round(3000 * 0.24);
+    for (let i = 0; i < rim; i++) assert.deepEqual(L.points[i], B.points[i], t + ': rim point ' + i + ' shared');
+    // the silhouette starts at the crown: nothing in the figure is higher than the first point
+    assert.ok(L.points.every(p => p[1] >= L.points[0][1] - 0.012), t + ': the pen starts at the crown');
+    assert.ok(L.still && B.still && B.edges === false && B.surfelFlat, t + ': figures hold still; the lit body draws no edges');
+    for (let i = 1; i < rim; i++) assert.ok(Math.hypot(L.points[i][0] - L.points[i - 1][0], L.points[i][1] - L.points[i - 1][1]) < 0.03, t + ': the silhouette is continuous');
+  }
+});
+
+test('3.0: manual clock, lazy compile, prepare, the arrive wave', () => {
+  const env = stubEnv({ gl: true });
+  const f = AF.create(env.canvas, { clock: 'manual', crew: true, count: 900, seed: 4, shapes: ['crew:roofer:line', 'crew:roofer:lit', 'mind'], initial: 'crew:roofer:line', blank: true });
+  assert.throws(() => AF.create(stubEnv().canvas, { count: 10, shapes: ['mind'] }).advance(10), /manual/);
+  const traced = []; f.on('traced', s => traced.push(s));
+  f.advance(1000); assert.deepEqual(traced, []); f.advance(2000); assert.deepEqual(traced, ['crew:roofer:line'], 'the manual clock drives the pen');
+  f.setShape('crew:roofer:lit', { arrive: { from: 'chest', ms: 800 } }); f.advance(100);
+  assert.ok(f.stats().settle < 0.95, 'mid-wave the body is still arriving');
+  f.advance(3000); assert.ok(f.stats().settle > 0.8, 'then it has arrived (' + f.stats().settle + ')');
+  let done = false; f.prepare(['mind'], () => { done = true; });
+  return new Promise(res => setTimeout(() => { assert.ok(done, 'prepare() compiles in idle slices and calls back'); f.setShape('mind'); f.advance(50); f.destroy(); res(); }, 80));
+});
+
 test('create: refuses a missing canvas', () => {
   assert.throws(() => AF.create(null), /canvas/);
 });

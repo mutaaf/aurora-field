@@ -4,7 +4,7 @@
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 const require = createRequire(import.meta.url);
-const AF = require(resolve(process.argv[2] || new URL('../src/aurora-field.js', import.meta.url).pathname));
+const AF = require(resolve(process.argv.slice(2).find(a => !a.startsWith('--')) || new URL('../src/aurora-field.js', import.meta.url).pathname));
 
 function env(kind) {
   const queue = [];
@@ -20,7 +20,8 @@ function env(kind) {
   return { canvas, pump: (n) => { for (let i = 0; i < n; i++) { const q = queue.splice(0); t += 16.7; q.forEach(f => f(t)); } } };
 }
 const rows = [];
-for (const kind of ['gl', '2d']) for (const shape of ['mind', 'helm']) for (const n of [2800, 10000, 30000]) {
+if (AF.registerCrew) AF.registerCrew();
+for (const kind of ['gl', '2d']) for (const shape of ['mind', 'helm'].concat(AF.registerCrew ? ['crew:contractor:lit'] : [])) for (const n of [2800, 10000, 30000]) {
   const e = env(kind);
   const f = AF.create(e.canvas, { seed: 1, count: n, shapes: [shape], cycle: 0, intro: 0, quality: 'high', autoPause: false, renderer: kind === 'gl' ? 'webgl' : '2d' });
   e.pump(120);                                  // settle and warm the JIT
@@ -32,3 +33,19 @@ for (const kind of ['gl', '2d']) for (const shape of ['mind', 'helm']) for (cons
 }
 console.log('aurora-field ' + AF.version + ' · ' + process.version);
 console.table(rows);
+
+// --budget: fail when the library gets slower or heavier than it promises
+if (process.argv.includes('--budget')) {
+  const { gzipSync } = await import('node:zlib');
+  const { readFileSync } = await import('node:fs');
+  // frame cost is relative to the lit helm on the same machine (CI runners are slower than laptops); sizes are absolute
+  const BUDGET = { 'lit figure frame ÷ lit helm frame @2800': 1.25, 'create() ms (crew field)': 8, 'min.js gzip KB': 40 };
+  const lit = rows.find(r => r.renderer === 'webgl' && r.shape === 'crew:contractor:lit' && r.nodes === 2800), helm = rows.find(r => r.renderer === 'webgl' && r.shape === 'helm' && r.nodes === 2800);
+  let best = Infinity;
+  for (let k = 0; k < 5; k++) { const e = env('gl'); const t0 = process.hrtime.bigint(); const f = AF.create(e.canvas, { seed: 1, count: 2800, crew: true, shapes: AF.crew.flatMap(t => ['crew:' + t + ':line', 'crew:' + t + ':lit']), initial: 'crew:contractor:line', cycle: 0 }); best = Math.min(best, Number(process.hrtime.bigint() - t0) / 1e6); f.destroy(); }
+  const gz = gzipSync(readFileSync(new URL('../dist/aurora-field.min.js', import.meta.url))).length / 1024;
+  const got = { 'lit figure frame ÷ lit helm frame @2800': lit && helm ? +(lit['ms/frame'] / helm['ms/frame']).toFixed(2) : Infinity, 'create() ms (crew field)': +best.toFixed(2), 'min.js gzip KB': +gz.toFixed(1) };
+  let over = 0;
+  for (const k in BUDGET) { const ok = got[k] <= BUDGET[k]; if (!ok) over++; console.log((ok ? '✓ ' : '✗ ') + k + ': ' + got[k] + ' (budget ' + BUDGET[k] + ')'); }
+  if (over) process.exit(1);
+}

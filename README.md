@@ -9,6 +9,7 @@ A WebGL particle field (with a canvas-2D fallback) that assembles into **lit, so
 ![Two-tone palettes: the ranger in white and gold, the helm in Mark III red and gold, and Spider-Verse, Barbenheimer, Upside Down, Night City and Spice shapes](docs/palettes.jpg)
 
 - **Lit, solid shapes (2.0).** Shapes can carry surface normals, and the field lights them as they turn: a key light, ambient, a rim at the silhouette and a sheen (`light`). Helmets grow a skin that wraps the whole head, and WebGL paints each skin point as a *surfel*, a soft lit disc as wide as the gap to its neighbours, so a few thousand points read as a continuous surface (`surfels`). Seams stay crisp on top. The helm wears a gold faceplate over a red shell; the ranger is white with gold trim and a black glass visor.
+- **People, drawn then lit (2.1).** `figure(spec)` builds a person from a skeleton in two forms. The line form is a modern stick figure that a pen of light traces from a blank canvas (`trace`, `blank`). The lit form is the same person as a sleek, solid mannequin with seams that carry signals and a bright core. Both share a pose, props and an idle loop: they breathe, shift their weight and work (the hammer swings, the wrench turns). There's a built-in crew of six trades (`registerCrew()`).
 - **WebGL first.** Round, anti-aliased points at whole device pixels, with specular cores, soft halos and additive bloom, in three draw calls a frame. That's 5,600 points by default (2,800 on phones) at 60 fps. Canvas-2D is the automatic fallback, and context loss is handled.
 - **Zero dependencies.** One file, about 90 KB unminified (29 KB gzipped), and ES5, so it can be inlined into pages that support old devices. Also ships as an ES module, a web component and a worker bundle.
 - **Any shape.** Helmets drawn from line art (`helm`, `ranger`, or your own via `armour(spec)`), plus `fromText`, `fromSVG`, `fromImage` and `fromPoints` factories. Flat sources still turn in 3D.
@@ -186,6 +187,29 @@ AuroraField.register('cloud', AuroraField.fromPoints([[0, 0, 0], [1, 0.2, 0.4] /
 - `fromSVG` parses path data itself (`M L H V C S Q T Z`, absolute and relative; arcs become lines), with no DOM. Outlines become joined particle lines that carry signals. Closed paths are filled even-odd, and `tone` picks a colour per path.
 - `fromImage` takes `ImageData` (any `{ width, height, data }`), a canvas or an image. Bright or opaque pixels become points, with half of them on the outlines so the shape reads crisp.
 - `fromText` rasterises with the platform's canvas (DOM or `OffscreenCanvas`).
+
+### People: `figure()` and the crew
+
+```js
+AuroraField.registerCrew();   // crew:contractor|plumber|electrician|roofer|manager|realtor : line|lit, and crew:all
+const field = AuroraField.create(canvas, { blank: true, cycle: 0, initial: 'crew:roofer:line',
+  shapes: ['crew:roofer:line', 'crew:roofer:lit'], palette: 'ranger' });
+field.on('traced', (name) => {                       // the pen has finished the drawing
+  field.signal('head', 40, 6);                        // a signal runs through it
+  setTimeout(() => field.setShape(name.replace(':line', ':lit')), 650);   // and it fills into a body
+});
+```
+
+- **`figure({ pose, action, props, trace })`** returns `{ line, lit, anchors }`, two builders for one person.
+  - **Poses:** `stand`, `tablet`, `wrench`, `hammer`, `phone`, `keys`, `inspect`, or your own joint positions.
+  - **Props**, in the accent tone: `hardhat`, `tablet`, `wrench`, `pipe`, `toolbelt`, `tester`, `hammer`, `phone`, `clipboard`, `keys`, `yardsign`.
+  - **Joints:** every point belongs to one. The idle loop moves the joints, and `flow` carries their points with them, so the people are alive in real time.
+  - **Anchors:** `head`, `chest`, `hand`, `prop`, `feet`. Overlays can follow them with `field.anchors()`.
+- **`trace: { order, ms }`** works on any shape. A pen draws the shape in that order, undrawn points wait unseen at its tip, and the field emits `traced` when it's done. `field.trace()` replays it.
+- **`blank: true`** starts from an empty sky: particles are born unseen at the centre. `field.signal(anchor | [x, y, z], hops, count)` sends signals on demand.
+- **`flow(i, t, since)`** gets a third argument: the seconds since the shape arrived.
+- **`group([[builder, [x, y, z], scale]…])`** puts several shapes in one, like `crew:all`.
+- **In a worker:** pass `crew: true` to `create` or `offload` so the crew registers there too.
 
 ### Faces: `setFace`
 
