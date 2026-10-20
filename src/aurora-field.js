@@ -1,4 +1,4 @@
-/*! aurora-field v3.0.0 · MIT · https://github.com/mutaaf/aurora-field
+/*! aurora-field v3.1.0 · MIT · https://github.com/mutaaf/aurora-field
  * A particle field that assembles into shapes and morphs between them: a neural sphere
  * with travelling signals, a team of orbs, a stack of platforms, an armoured helm, a ranger
  * helmet, a crew of people a pen draws and light fills (figure(), registerCrew()) — or text,
@@ -17,7 +17,7 @@
   else root.AuroraField = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var VERSION = '3.0.0';
+  var VERSION = '3.1.0';
   var TAU = Math.PI * 2;
 
   var imul = Math.imul || function (a, b) {
@@ -489,7 +489,13 @@
     // one arm out front with a wand, the other on a hip
     spray: { elL: [-0.27, -0.33, 0.01], haL: [-0.14, -0.12, -0.05], elR: [0.27, -0.36, -0.07], haR: [0.37, -0.16, -0.16] },
     // a tray held up at the shoulder
-    tray: { elL: [-0.27, -0.43, -0.07], haL: [-0.21, -0.61, -0.19], head: [0.01, -0.8, 0] }
+    tray: { elL: [-0.27, -0.43, -0.07], haL: [-0.21, -0.61, -0.19], head: [0.01, -0.8, 0] },
+    // seated at a desk, hands on the keyboard
+    typing: { pelvis: [0, 0.22, 0.04], head: [0, -0.5, -0.06], elL: [-0.21, -0.06, -0.06], haL: [-0.1, 0.02, -0.3], elR: [0.21, -0.06, -0.06], haR: [0.1, 0.02, -0.3],
+      knL: [-0.095, 0.26, -0.4], anL: [-0.1, 0.69, -0.42], toL: [-0.11, 0.73, -0.51], knR: [0.095, 0.26, -0.4], anR: [0.1, 0.69, -0.42], toR: [0.11, 0.73, -0.51] },
+    // seated, leaning back a little, one hand at the chin: thinking out the prompt
+    prompting: { pelvis: [0, 0.22, 0.05], chest: [0, -0.2, 0.09], head: [0.02, -0.5, 0.06], elL: [-0.25, -0.1, -0.02], haL: [-0.07, -0.38, -0.1], elR: [0.21, -0.05, -0.04], haR: [0.1, 0.02, -0.3],
+      knL: [-0.095, 0.26, -0.4], anL: [-0.1, 0.69, -0.42], toL: [-0.11, 0.73, -0.51], knR: [0.095, 0.26, -0.4], anR: [0.1, 0.69, -0.42], toR: [0.11, 0.73, -0.51] }
   };
   // actions: the trade's own motion, as rotations of a joint's subtree about another joint
   function smooth01(a) { a = a < 0 ? 0 : a > 1 ? 1 : a; return a * a * (3 - 2 * a); }
@@ -507,7 +513,9 @@
     reach: [{ pivot: 'chest', joint: 'shR', axis: [0, 0, 1], amp: 0.035, rate: 1 }, { pivot: 'chest', joint: 'shL', axis: [0, 0, 1], amp: 0.035, rate: 1 }],
     push: [{ pivot: 'neck', joint: 'head', axis: [0, 1, 0], amp: 0.1, rate: 0.45 }, { pivot: 'chest', joint: 'shR', axis: [0, 1, 0], amp: 0.04, rate: 3.2 }, { pivot: 'chest', joint: 'shL', axis: [0, 1, 0], amp: 0.04, rate: 3.2 }],
     spray: [{ pivot: 'shR', joint: 'elR', axis: [0, 1, 0], amp: 0.32, rate: 1.4 }],
-    tray: [{ pivot: 'elL', joint: 'haL', axis: [1, 0, 0], amp: 0.05, rate: 2 }, { pivot: 'neck', joint: 'head', axis: [0, 1, 0], amp: 0.1, rate: 0.4 }]
+    tray: [{ pivot: 'elL', joint: 'haL', axis: [1, 0, 0], amp: 0.05, rate: 2 }, { pivot: 'neck', joint: 'head', axis: [0, 1, 0], amp: 0.1, rate: 0.4 }],
+    typing: [{ pivot: 'elR', joint: 'haR', axis: [1, 0, 0], amp: 0.07, rate: 11 }, { pivot: 'elL', joint: 'haL', axis: [1, 0, 0], amp: 0.07, rate: 11, phase: 1.7 }, { pivot: 'neck', joint: 'head', axis: [1, 0, 0], amp: 0.03, rate: 0.7 }],
+    prompting: [{ pivot: 'neck', joint: 'head', axis: [0, 1, 0], amp: 0.08, rate: 0.5 }, { pivot: 'elR', joint: 'haR', axis: [1, 0, 0], amp: 0.05, rate: 9, wave: 'burst', gate: 0.8 }]
   };
   function smooth01(a) { a = a < 0 ? 0 : a > 1 ? 1 : a; return a * a * (3 - 2 * a); }
   function wave(w, t) {
@@ -537,6 +545,7 @@
     var x = ax[0], y = ax[1], z = ax[2], c = Math.cos(a), s = Math.sin(a), C = 1 - c;
     return [c + x * x * C, x * y * C - z * s, x * z * C + y * s, y * x * C + z * s, c + y * y * C, y * z * C - x * s, z * x * C - y * s, z * y * C + x * s, c + z * z * C];
   }
+  function mul3(a, b) { var o = []; for (var r0 = 0; r0 < 3; r0++) for (var c0 = 0; c0 < 3; c0++) o.push(a[r0 * 3] * b[c0] + a[r0 * 3 + 1] * b[3 + c0] + a[r0 * 3 + 2] * b[6 + c0]); return o; }
   function mulMV(m, v) { return [m[0] * v[0] + m[1] * v[1] + m[2] * v[2], m[3] * v[0] + m[4] * v[1] + m[5] * v[2], m[6] * v[0] + m[7] * v[1] + m[8] * v[2]]; }
   function figRig(spec) {
     var J0 = [], j, k, pose = typeof spec.pose === 'string' ? FIG_POSES[spec.pose] || {} : spec.pose || {};
@@ -562,12 +571,13 @@
         JM[i] = n2;
       }
     }
-    function rot(pivot, root, ax, a) { rotAbout(JX[idx[pivot]].slice(), SUB[idx[root]], ax, a); }
+    var RY = spec.yaw ? rotM([0, 1, 0], spec.yaw) : null;   // a turned figure turns its motions with it
+    function rot(pivot, root, ax, a) { rotAbout(JX[idx[pivot]].slice(), SUB[idx[root]], RY ? mulMV(RY, ax) : ax, a); }
     function at(t) {
       if (t === ft) return; ft = t;
       for (var i = 0; i < FIG_J.length; i++) { JX[i] = J0[i].slice(); JM[i] = [1, 0, 0, 0, 1, 0, 0, 0, 1]; }
       var feet = [(J0[12][0] + J0[16][0]) / 2, (J0[12][1] + J0[16][1]) / 2, (J0[12][2] + J0[16][2]) / 2];
-      rotAbout(feet, SUB[0], [0, 0, 1], 0.012 * Math.sin(t * 0.5));              // a weight shift
+      rotAbout(feet, SUB[0], RY ? mulMV(RY, [0, 0, 1]) : [0, 0, 1], 0.012 * Math.sin(t * 0.5));              // a weight shift
       var br = 0.004 * Math.sin(t * 1.25), ch = SUB[1];                          // breathing
       for (i = 0; i < ch.length; i++) JX[ch[i]][1] -= br;
       if (act) act(t, rot); else rot('neck', 'head', [0, 1, 0], 0.1 * Math.sin(t * 0.33));
@@ -621,7 +631,14 @@
     hvacunit: { owner: 'pelvis', prims: [{ k: 'box', c: [0.5, 0.66, 0.04], h: [0.15, 0.22, 0.15] }, { k: 'ring', c: [0.5, 0.43, 0.04], r: [0.04, 0.11] }] },
     garagedoor: { owner: 'pelvis', prims: [{ k: 'box', c: [0.62, 0.42, 0.12], h: [0.24, 0.46, 0.01] }, { k: 'box', c: [0.62, 0.2, 0.11], h: [0.24, 0.004, 0.004] }, { k: 'box', c: [0.62, 0.42, 0.11], h: [0.24, 0.004, 0.004] }, { k: 'box', c: [0.62, 0.64, 0.11], h: [0.24, 0.004, 0.004] }] },
     tray: { owner: 'haL', prims: [{ k: 'ring', c: jd('haL', [0, -0.03, 0]), r: [0, 0.13], plane: [0, 1, -0.75] }, { k: 'ell', c: jd('haL', [0, -0.05, 0]), r: [0.065, 0.06, 0.065], half: true }, { k: 'cyl', a: jd('haL', [0, -0.11, 0]), b: jd('haL', [0, -0.13, 0]), r: 0.008 }] },
-    bullfloat: { owner: 'haR', prims: [POLE, { k: 'box', c: poleFoot(0.64, [0, 0.02, 0]), h: [0.17, 0.012, 0.05] }] }
+    bullfloat: { owner: 'haR', prims: [POLE, { k: 'box', c: poleFoot(0.64, [0, 0.02, 0]), h: [0.17, 0.012, 0.05] }] },
+    // the builder's desk: a top and legs in front of him, a keyboard under his hands, a monitor angled toward him, a chair
+    desk: { owner: 'pelvis', prims: [{ k: 'box', c: [0, 0.07, -0.36], h: [0.5, 0.016, 0.2] }, { k: 'cyl', a: [-0.46, 0.09, -0.48], b: [-0.46, 0.74, -0.48], r: 0.014 }, { k: 'cyl', a: [0.46, 0.09, -0.48], b: [0.46, 0.74, -0.48], r: 0.014 }] },
+    keyboard: { owner: 'pelvis', prims: [{ k: 'box', c: [0, 0.046, -0.33], h: [0.15, 0.006, 0.045] }] },
+    monitor: { owner: 'pelvis', prims: [{ k: 'box', c: [0.33, -0.17, -0.42], h: [0.2, 0.13, 0.008], tilt: [0, 1, 0, 0.75] }, { k: 'cyl', a: [0.33, -0.04, -0.42], b: [0.33, 0.055, -0.42], r: 0.012 }, { k: 'box', c: [0.33, 0.058, -0.42], h: [0.06, 0.004, 0.04] }] },
+    chair: { owner: 'pelvis', prims: [{ k: 'box', c: [0, 0.27, 0.05], h: [0.17, 0.018, 0.16] }, { k: 'box', c: [0, -0.05, 0.2], h: [0.16, 0.22, 0.016], tilt: [1, 0, 0, -0.12] }, { k: 'cyl', a: [0, 0.29, 0.05], b: [0, 0.68, 0.05], r: 0.016 }, { k: 'ring', c: [0, 0.7, 0.05], r: [0.02, 0.17], ez: 0.9 }] },
+    // an agent's sleek visor and earpiece: how you tell an agent from a person
+    visor: { owner: 'head', prims: [{ k: 'ring', c: jd('head', [0, -0.005, 0]), r: [0.084, 0.1], ex: 1, ez: 1.08, band: 0.03 }, { k: 'ell', c: jd('head', [0.09, 0.0, 0]), r: [0.012, 0.022, 0.022] }] }
   };
   function figProps(names, J, idx) {
     function joint(n) { var q = idx[n]; if (q == null) throw new Error('aurora-field: unknown joint "' + n + '"'); return J[q]; }
@@ -655,10 +672,12 @@
   }
   // the body as lit surfaces: [{ k, owner, …, area }], shared by the lit build and (as bones) the line build
   var FIG_TORSO = [[0.05, 0.128, 0.08], [-0.06, 0.142, 0.088], [-0.22, 0.114, 0.075], [-0.4, 0.148, 0.088], [-0.5, 0.166, 0.084], [-0.56, 0.156, 0.078], [-0.6, 0.122, 0.07], [-0.635, 0.066, 0.056]];
-  function figBody(J, idx) {
-    var B = [], g = function (n) { return J[idx[n]]; };
+  // the torso's profile moved to where the pelvis is (a seated figure sits 0.28 lower)
+  function torsoAt(J, idx) { var dy = J[idx.pelvis][1] + 0.06; return { dy: dy, z: J[idx.pelvis][2], prof: FIG_TORSO.map(function (r) { return [r[0] + dy, r[1], r[2]]; }) }; }
+  function figBody(J, idx, yaw) {
+    var B = [], g = function (n) { return J[idx[n]]; }, tor = torsoAt(J, idx);
     function limb(a, b, ra, rb) { B.push({ k: 'cyl', a: g(a), b: g(b), ra: ra, rb: rb, owner: b }); }
-    B.push({ k: 'loft', prof: FIG_TORSO, x: g('pelvis')[0], z: 0, owners: ['pelvis', 'chest'], split: -0.25 });
+    B.push({ k: 'loft', prof: tor.prof, x: g('pelvis')[0], z: tor.z, yaw: yaw || 0, owners: ['pelvis', 'chest'], split: -0.25 + tor.dy });
     B.push({ k: 'cyl', a: v3(g('neck'), [0, 0.03, 0], 1), b: v3(g('head'), [0, 0.06, 0], 1), ra: 0.036, rb: 0.034, owner: 'neck' });
     B.push({ k: 'ell', c: g('head'), r: [0.082, 0.108, 0.094], owner: 'head', chin: true });
     limb('shL', 'elL', 0.043, 0.036); limb('elL', 'haL', 0.034, 0.025); limb('shR', 'elR', 0.043, 0.036); limb('elR', 'haR', 0.034, 0.025);
@@ -727,7 +746,17 @@
     }
     var lo = 0; while (lo < p.cdf.length - 2 && p.cdf[lo + 1][0] < u) lo++;
     var A0 = p.cdf[lo], A1 = p.cdf[lo + 1], y = A0[1] + (A1[1] - A0[1]) * ((u - A0[0]) / ((A1[0] - A0[0]) || 1)), wd2 = loftAt(p.prof, y);
-    return [[p.x + wd2[0] * c, y, p.z + wd2[1] * s], vnorm([c / wd2[0], 0, s / wd2[1]])];
+    var lx = wd2[0] * c, lz = wd2[1] * s, nx = c / wd2[0], nz = s / wd2[1];
+    if (p.yaw) { var cy = Math.cos(p.yaw), sy = Math.sin(p.yaw), rx = cy * lx + sy * lz, rz = -sy * lx + cy * lz, qx = cy * nx + sy * nz, qz = -sy * nx + cy * nz; lx = rx; lz = rz; nx = qx; nz = qz; }
+    return [[p.x + lx, y, p.z + lz], vnorm([nx, 0, nz])];
+  }
+  // a surfel no wider than the thing it paints: thin legs, rails and plates stay crisp, not blobs
+  function thinCap(p) {
+    if (p.k === 'cyl') return 2.2 * Math.max(p.ra, p.rb) + 0.006;
+    if (p.k === 'box') return 2 * Math.min(p.h[0], p.h[1], p.h[2]) + 0.012;
+    if (p.k === 'ring') return (p.band || (p.r[1] - p.r[0])) * 1.5 + 0.006;
+    if (p.k === 'ell') return Math.min(p.r[0], p.r[1], p.r[2]) * 1.4;
+    return 1;
   }
   function primOwner(p, pt) { return p.owners ? (pt[1] > p.split ? p.owners[0] : p.owners[1]) : p.owner; }
 
@@ -879,12 +908,24 @@
   function figure(spec) {
     if (typeof spec === 'string') { if (!TRADES[spec]) throw new Error('aurora-field: unknown trade "' + spec + '"'); spec = TRADES[spec]; }
     spec = spec || {};
-    var rig = figRig(spec), J = rig.J0, idx = rig.idx, props = figProps(spec.props, J, idx), body = figBody(J, idx);
+    var rig = figRig(spec), J = rig.J0, idx = rig.idx, props = figProps(spec.props, J, idx);
+    // yaw: turn the whole figure (joints and props) about the vertical, e.g. three-quarters to a desk
+    if (spec.yaw) {
+      var RY = rotM([0, 1, 0], spec.yaw), tv = function (v) { return mulMV(RY, v); };
+      for (var jj = 0; jj < J.length; jj++) { var tj = tv(J[jj]); J[jj][0] = tj[0]; J[jj][1] = tj[1]; J[jj][2] = tj[2]; }
+      props.forEach(function (pr) { pr.prims.forEach(function (q) {
+        if (q.a) q.a = tv(q.a); if (q.b) q.b = tv(q.b); if (q.c) q.c = tv(q.c);
+        if (q.along) q.along = tv(q.along); if (q.plane) q.plane = tv(q.plane);
+        if (q.k === 'box' && !q.along) q.m = q.m ? mul3(RY, q.m) : RY;
+        if (q.k === 'ring' && !q.plane) q.plane = tv([0, 1, 0]);
+      }); });
+    }
+    var body = figBody(J, idx, spec.yaw || 0);
     // the outline, built once and shared: the line's silhouette and the lit body's rim are the same points
     var outline = null, RIM = 0.24;
     function getOutline() { return outline || (outline = figOutline(body, props, idx)); }
     var anchors = { head: v3(J[idx.head], [0, -0.17, 0], 1), chest: v3(J[idx.chest], [0, 0.04, -0.1], 1), hand: J[idx.haR].slice(), feet: [0, 0.9, 0] };
-    if (props.length) { var pp0 = null; for (var q0 = 0; q0 < props.length; q0++) if (props[q0].name !== 'hardhat') { pp0 = props[q0]; break; } var c0 = (pp0 || props[0]).prims[0]; anchors.prop = (c0.c || v3(c0.a, vsub(c0.b, c0.a), 0.5)).slice(); }
+    if (props.length) { var pp0 = null; for (var q0 = 0; q0 < props.length; q0++) if (['hardhat', 'cap', 'visor'].indexOf(props[q0].name) < 0) { pp0 = props[q0]; break; } var c0 = (pp0 || props[0]).prims[0]; anchors.prop = (c0.c || v3(c0.a, vsub(c0.b, c0.a), 0.5)).slice(); }
     // flow: every point rides its joint (position and rotation), offsets kept from the rest pose
     function rider(n, OWN0, LOC) {
       var OUT = [0, 0, 0];
@@ -948,10 +989,10 @@
       var g = function (nm) { return J[idx[nm]]; };
       function ringOn(c, e1, e2, ra, rb, owner, from, to) { var P = []; from = from || 0; to = to == null ? TAU : to; for (var q = 0; q <= 40; q++) { var a = from + (to - from) * q / 40; P.push(v3(v3(c, e1, Math.cos(a) * ra), e2, Math.sin(a) * rb)); } seams.push({ P: P, owner: owner, cen: c }); }
       function limbRing(a, b, u, rad, owner) { var d = vnorm(vsub(g(b), g(a))), e = basis(d), L = vlen(vsub(g(b), g(a))); ringOn(v3(g(a), d, L * u), e[0], e[1], rad, rad, owner); }
-      var wa = loftAt(FIG_TORSO, -0.1), nk = loftAt(FIG_TORSO, -0.6);
-      ringOn([0, -0.1, 0], [1, 0, 0], [0, 0, 1], wa[0] * 1.03, wa[1] * 1.03, 'pelvis');                     // the waist
-      ringOn([0, -0.6, 0], [1, 0, 0], [0, 0, 1], nk[0] * 1.04, nk[1] * 1.04, 'chest');                      // the collar
-      seams.push({ P: [[0, -0.6, -nk[1] * 1.03], [0, -0.4, -0.09], [0, -0.22, -0.078], [0, -0.1, -wa[1] * 1.03]], owner: 'chest', n: [0, 0, -1] });   // down the front
+      var tor = torsoAt(J, idx), ty = tor.dy, tz = tor.z, wa = loftAt(tor.prof, -0.1 + ty), nk = loftAt(tor.prof, -0.6 + ty);
+      ringOn([0, -0.1 + ty, tz], [1, 0, 0], [0, 0, 1], wa[0] * 1.03, wa[1] * 1.03, 'pelvis');                     // the waist
+      ringOn([0, -0.6 + ty, tz], [1, 0, 0], [0, 0, 1], nk[0] * 1.04, nk[1] * 1.04, 'chest');                      // the collar
+      seams.push({ P: [[0, -0.6 + ty, tz - nk[1] * 1.03], [0, -0.4 + ty, tz - 0.09], [0, -0.22 + ty, tz - 0.078], [0, -0.1 + ty, tz - wa[1] * 1.03]], owner: 'chest', n: [0, 0, -1] });   // down the front
       var hd = g('head');
       ringOn(v3(hd, [0, -0.005, 0], 1), [1, 0, 0], [0, 0, -1], 0.084, 0.096, 'head', -1.1, 1.1);           // a visor line across the face
       limbRing('elL', 'haL', 0.86, 0.028, 'haL'); limbRing('elR', 'haR', 0.86, 0.028, 'haR');
@@ -975,7 +1016,10 @@
           var P2 = body[b2];
           if (P2.k === 'cyl') { var d2 = vsub(P2.b, P2.a), L2 = vlen(d2), u2 = Math.max(0, Math.min(1, ((q[0] - P2.a[0]) * d2[0] + (q[1] - P2.a[1]) * d2[1] + (q[2] - P2.a[2]) * d2[2]) / (L2 * L2))); if (vlen(vsub(q, v3(P2.a, d2, u2))) < P2.ra + (P2.rb - P2.ra) * u2 - sh) return true; }
           else if (P2.k === 'ell') { var ex = (q[0] - P2.c[0]) / (P2.r[0] - sh), ey = (q[1] - P2.c[1]) / (P2.r[1] - sh), ez = (q[2] - P2.c[2]) / (P2.r[2] - sh); if (ex * ex + ey * ey + ez * ez < 1) return true; }
-          else if (P2.k === 'loft' && q[1] < P2.prof[0][0] && q[1] > P2.prof[P2.prof.length - 1][0]) { var wd = loftAt(P2.prof, q[1]), lx = (q[0] - P2.x) / (wd[0] - sh), lz = (q[2] - P2.z) / (wd[1] - sh); if (lx * lx + lz * lz < 1) return true; }
+          else if (P2.k === 'loft' && q[1] < P2.prof[0][0] && q[1] > P2.prof[P2.prof.length - 1][0]) {
+            var wd = loftAt(P2.prof, q[1]), dx0 = q[0] - P2.x, dz0 = q[2] - P2.z, cyw = Math.cos(P2.yaw || 0), syw = Math.sin(P2.yaw || 0);
+            var lx = (cyw * dx0 - syw * dz0) / (wd[0] - sh), lz = (syw * dx0 + cyw * dz0) / (wd[1] - sh); if (lx * lx + lz * lz < 1) return true;
+          }
         }
         return false;
       }
@@ -996,7 +1040,7 @@
         }
         for (q = 0; q < list.length && count > 0; q++) {
           if (!vis[q]) continue;
-          var p = list[q], c = q === list.length - 1 ? count - (pts.length - start) : Math.round(count * vis[q] / (vtot || 1)), w = Math.sqrt(vis[q] / Math.max(1, c));
+          var p = list[q], c = q === list.length - 1 ? count - (pts.length - start) : Math.round(count * vis[q] / (vtot || 1)), w = Math.min(Math.sqrt(vis[q] / Math.max(1, c)), thinCap(p));
           if (pts.length - start + c > count) c = count - (pts.length - start);
           for (z = 0, got = 0; got < c && z < c * 6; z++) {
             var s = primPoint(p, r, z);
@@ -1050,20 +1094,31 @@
 
   // group: several shapes in one, each scaled and placed ([builder, [x, y, z], scale]…); points
   // are shared out by weight, and pairs, bright, anchors and flow are carried over
-  function group(parts) {
+  // group: several shapes in one, each scaled and placed ([builder, [x, y, z], scale, weight?]…);
+  // points are shared out by weight (default: evenly, otherwise by weight × scale²), and pairs,
+  // bright, anchors and flow are carried over. A part whose shape draws no edges (a lit body)
+  // keeps its pairs out of the group. opts.links: [[from, to]…] drawn as threads between points
+  // or anchors ('0.prop' is part 0's prop anchor).
+  function group(parts, opts) {
+    opts = opts || {};
     return function (n, r) {
-      var pts = [], nrm = [], al = [], sf = [], tone = [], pairs = [], bright = [], anchors = {}, flows = [], base = 0, any = { n: false, a: false, s: false };
-      for (var k = 0; k < parts.length; k++) {
-        var cnt = k === parts.length - 1 ? n - base : Math.floor(n / parts.length), sh = parts[k][0](cnt, r), at = parts[k][1], sc = parts[k][2], i;
+      var pts = [], nrm = [], al = [], sf = [], tone = [], pairs = [], bright = [], anchors = {}, flows = [], base = 0, any = { n: false, a: false, s: false }, flags = {};
+      var wsum = 0, k; for (k = 0; k < parts.length; k++) wsum += parts[k][3] != null ? parts[k][3] : 1;
+      for (k = 0; k < parts.length; k++) {
+        var wk = parts[k][3] != null ? parts[k][3] : 1, cnt = k === parts.length - 1 ? n - base : Math.floor(n * wk / wsum), sh = parts[k][0](cnt, r), at = parts[k][1], sc = parts[k][2], i;
         for (i = 0; i < cnt; i++) { var p = sh.points[i]; pts.push([at[0] + p[0] * sc, at[1] + p[1] * sc, at[2] + p[2] * sc]); nrm.push(sh.normals ? sh.normals[i] : [0, 0, -1]); al.push(sh.alpha ? sh.alpha[i] : 1); sf.push(sh.surfel ? sh.surfel[i] * sc : 0); tone.push(sh.tone ? sh.tone[i] : 0); }
         if (sh.normals) any.n = true; if (sh.alpha) any.a = true; if (sh.surfel) any.s = true;
-        if (sh.pairs) for (i = 0; i < sh.pairs.length; i++) pairs.push([sh.pairs[i][0] + base, sh.pairs[i][1] + base]);
+        if (sh.still) flags.still = true; if (sh.surfelFlat) { flags.surfelFlat = true; flags.surfelAlpha = sh.surfelAlpha; }
+        if (sh.pairs && sh.edges !== false) for (i = 0; i < sh.pairs.length; i++) pairs.push([sh.pairs[i][0] + base, sh.pairs[i][1] + base]);
         if (sh.bright) for (i = 0; i < sh.bright.length; i++) bright.push(sh.bright[i] + base);
         if (sh.anchors) for (var an in sh.anchors) { var q = sh.anchors[an]; anchors[k + '.' + an] = [at[0] + q[0] * sc, at[1] + q[1] * sc, at[2] + q[2] * sc]; }
         flows.push([base, cnt, sh.flow || null, at, sc]); base += cnt;
       }
+      for (var nm in opts.anchors || {}) anchors[nm] = opts.anchors[nm];
+      var links = (opts.links || []).map(function (L) { return [typeof L[0] === 'string' ? anchors[L[0]] : L[0], typeof L[1] === 'string' ? anchors[L[1]] : L[1]]; }).filter(function (L) { return L[0] && L[1]; });
       var OUT = [0, 0, 0];
       return { points: pts, normals: any.n ? nrm : null, alpha: any.a ? al : null, surfel: any.s ? sf : null, tone: tone, pairs: pairs, bright: bright, anchors: anchors, facing: true, kick: 0.2,
+        links: links.length ? links : undefined, linkTone: links.length ? links.map(function () { return 0; }) : undefined, still: flags.still, surfelFlat: flags.surfelFlat, surfelAlpha: flags.surfelAlpha,
         flow: function (i, t, since) {
           for (var k2 = 0; k2 < flows.length; k2++) { var F = flows[k2]; if (i < F[0] + F[1]) { if (!F[2]) return null; var v = F[2](i - F[0], t, since); if (!v) return null; OUT[0] = F[3][0] + v[0] * F[4]; OUT[1] = F[3][1] + v[1] * F[4]; OUT[2] = F[3][2] + v[2] * F[4]; return OUT; } }
           return null;
@@ -1115,14 +1170,52 @@
     return CREW_NAMES.slice();
   }
   // a lineup of trades, lit, in a shallow arc
-  function crewGroup(names) {
-    var parts = [], k = names.length;
+  // with: { builder: true } puts the builder at his desk front and centre, the crew in an arc behind him
+  function crewGroup(names, withOpts) {
+    var parts = [], k = names.length, b = withOpts && withOpts.builder;
     for (var i = 0; i < k; i++) {
       var f = figure(TRADES[names[i]] || names[i]), x = k > 1 ? -1 + i * 2 / (k - 1) : 0, a = k > 1 ? (i - (k - 1) / 2) / ((k - 1) / 2) : 0;
-      parts.push([f.lit, [x, 0.12, 0.28 * a * a], Math.min(0.5, 2.4 / (k + 0.4))]);
+      parts.push(b ? [f.lit, [x * 1.05, -0.08, 0.42 + 0.12 * a * a], Math.min(0.42, 2.1 / (k + 0.4)), 1] : [f.lit, [x, 0.12, 0.28 * a * a], Math.min(0.5, 2.4 / (k + 0.4))]);
     }
+    if (b) { registerBuilder(); parts.unshift([builderFigure('prompting').lit, [0.02, 0.36, -0.22], 0.56, 2.2]); }
     return group(parts);
   }
+  // the builder: the person behind the agents, at a desk. Agents: small figures in visors, each
+  // doing one job. builder:typing|prompting:line|lit, and builder:agents:<job+job…> (the builder
+  // with his agents fanned out, threads running from his screen to each of them).
+  var BUILDER_PROPS = ['monitor', 'keyboard', 'desk', 'chair'];
+  var AGENTS = {
+    answer: { pose: 'phone', props: ['visor', 'phone'], label: 'Answering calls' },
+    estimate: { pose: 'tablet', props: ['visor', 'tablet'], label: 'Writing estimates' },
+    review: { pose: 'inspect', props: ['visor', 'clipboard'], label: 'Requesting reviews' },
+    schedule: { pose: 'tablet', props: ['visor', 'clipboard'], label: 'Booking the calendar' },
+    followup: { pose: 'phone', props: ['visor', 'phone'], label: 'Following up leads' },
+    analyze: { pose: 'inspect', props: ['visor', 'tablet'], label: 'Analyzing deals' }
+  };
+  var builders = {};
+  function builderFigure(pose) { return builders[pose] || (builders[pose] = figure({ pose: pose, props: BUILDER_PROPS, trace: 2600, yaw: -0.6 })); }
+  function agentFigure(job) { var a = AGENTS[job]; if (!a) throw new Error('aurora-field: unknown agent "' + job + '"'); return builders['agent:' + job] || (builders['agent:' + job] = figure({ pose: a.pose, props: a.props, trace: 900, yaw: 0.35 })); }
+  function builderGroup(jobs) {
+    var parts = [[builderFigure('prompting').lit, [-0.42, 0.08, 0.05], 0.78, 3]], links = [], k = jobs.length;
+    for (var i = 0; i < k; i++) {
+      var a = k > 1 ? i / (k - 1) : 0.5, x = 0.28 + a * 0.72, y = -0.05 + Math.abs(a - 0.5) * 0.22, z = 0.12 - Math.abs(a - 0.5) * 0.3;
+      parts.push([agentFigure(jobs[i]).line, [x, y, z], 0.42, 1]);
+      links.push(['0.prop', (i + 1) + '.chest']);
+    }
+    return group(parts, { links: links });
+  }
+  function registerBuilder(jobs) {
+    if (!SHAPES['builder:typing:line']) {
+      register('builder:typing:line', function (n, r) { return builderFigure('typing').line(n, r); });
+      register('builder:typing:lit', function (n, r) { return builderFigure('typing').lit(n, r); });
+      register('builder:prompting:lit', function (n, r) { return builderFigure('prompting').lit(n, r); });
+    }
+    if (!jobs) return null;
+    var nm = 'builder:agents:' + jobs.join('+');
+    if (!SHAPES[nm]) register(nm, builderGroup(jobs));
+    return nm;
+  }
+
   // plugins: add vocabulary and shapes without touching the engine.
   //   AuroraField.use({ poses: {…}, props: {…}, actions: {…}, trades: {…}, palettes: {…}, shapes: { name: build | data }, beats: {…} })
   var BEATS = {};
@@ -1139,7 +1232,7 @@
     return api0;
   }
   // what the vocabulary holds right now (for validation, editors and AI schemas)
-  function vocab() { return { poses: Object.keys(FIG_POSES), props: Object.keys(PROPS), actions: Object.keys(ACTIONS), trades: Object.keys(TRADES), palettes: Object.keys(PALETTES), joints: FIG_J.slice() }; }
+  function vocab() { return { poses: Object.keys(FIG_POSES), props: Object.keys(PROPS), actions: Object.keys(ACTIONS), trades: Object.keys(TRADES), agents: Object.keys(AGENTS), palettes: Object.keys(PALETTES), joints: FIG_J.slice() }; }
   var api0 = null;
 
   // ---- shape factories: point lists, SVG paths, text and images become shapes ----
@@ -2410,7 +2503,8 @@
   //         fill?: { from?, ms? }, caption?: { who?, did, metric?: { to, from?, prefix?, suffix?, ms? } }, hold?: ms },
   //       { crew: ['contractor', …] | true, caption?, hold? } ] }
   var ANCHORS = ['head', 'chest', 'hand', 'prop', 'feet'];
-  var LIMITS = { beats: 12, crew: 8, who: 32, did: 64, moment: 48, ms: 20000 };
+  var LIMITS = { beats: 12, crew: 8, who: 32, did: 64, moment: 48, prompt: 72, ms: 20000 };
+  var BUILDER_BEATS = ['typing', 'prompting', 'agents'];
   function isObj(o) { return o && typeof o === 'object' && !Array.isArray(o); }
   function present(v) { return v !== undefined && v !== null; }
   function validate(sb, opts) {
@@ -2449,8 +2543,18 @@
     else for (i = 0; i < sb.beats.length; i++) {
       var b = sb.beats[i], p = 'beats[' + i + ']';
       if (!isObj(b)) { err(p, 'must be an object'); continue; }
-      if (present(b.trade) === present(b.crew)) { err(p, 'needs exactly one of trade or crew'); continue; }
-      if (present(b.trade)) {
+      var isBuilder = present(b.builder) && !present(b.crew);   // crew beats may say builder: true (the builder joins the lineup)
+      var kinds = (present(b.trade) ? 1 : 0) + (present(b.crew) ? 1 : 0) + (isBuilder ? 1 : 0);
+      if (present(b.crew) && present(b.builder) && b.builder !== true && b.builder !== false) err(p + '.builder', 'on a crew beat, builder is true or false');
+      if (kinds !== 1) { err(p, 'needs exactly one of trade, crew or builder'); continue; }
+      if (isBuilder) {
+        if (BUILDER_BEATS.indexOf(b.builder) < 0) err(p + '.builder', 'must be one of ' + BUILDER_BEATS.join(', '));
+        if (present(b.prompt)) { if (!isObj(b.prompt)) err(p + '.prompt', 'must be { text }'); else { text(p + '.prompt.text', b.prompt.text, LIMITS.prompt); ms(p + '.prompt.ms', b.prompt.ms); } }
+        if (b.builder === 'agents') {
+          if (!Array.isArray(b.agents) || !b.agents.length || b.agents.length > 4) err(p + '.agents', 'needs 1…4 agents');
+          else b.agents.forEach(function (a, k) { if (V.agents.indexOf(a) < 0) err(p + '.agents[' + k + ']', 'unknown agent "' + a + '" (known: ' + V.agents.join(', ') + ')'); });
+        }
+      } else if (present(b.trade)) {
         trade(p + '.trade', b.trade);
         if (present(b.draw)) ms(p + '.draw.ms', b.draw.ms);
         if (present(b.moment)) { text(p + '.moment.text', b.moment.text, LIMITS.moment); ms(p + '.moment.ms', b.moment.ms); if (present(b.moment.at) && ANCHORS.indexOf(b.moment.at) < 0) err(p + '.moment.at', 'must be one of ' + ANCHORS.join(', ')); }
@@ -2479,8 +2583,9 @@
     var anchor = { type: 'string', enum: ANCHORS }, trade = { type: 'string', enum: V.trades };
     var caption = obj({ who: str(LIMITS.who), did: str(LIMITS.did), metric: obj({ to: num, from: num, prefix: str(8), suffix: str(12), ms: msS }, ['to']) }, ['did']);
     var tradeBeat = obj({ trade: trade, moment: obj({ text: str(LIMITS.moment), at: anchor, ms: msS }, ['text']), ai: obj({ ms: msS, text: str(LIMITS.moment) }), fill: obj({ from: anchor, ms: msS }), caption: caption, hold: msS }, ['trade']);
-    var crewBeat = obj({ crew: { type: 'array', items: trade, minItems: 1, maxItems: LIMITS.crew }, caption: caption, hold: msS }, ['crew']);
-    return obj({ version: { type: 'number', enum: [1] }, loop: { type: 'boolean' }, beats: { type: 'array', minItems: 1, maxItems: LIMITS.beats, items: { anyOf: [tradeBeat, crewBeat] } } }, ['version', 'beats']);
+    var crewBeat = obj({ crew: { type: 'array', items: trade, minItems: 1, maxItems: LIMITS.crew }, builder: { type: 'boolean' }, caption: caption, hold: msS }, ['crew']);
+    var builderBeat = obj({ builder: { type: 'string', enum: BUILDER_BEATS }, prompt: obj({ text: str(LIMITS.prompt), code: { type: 'boolean' }, ms: msS }, ['text']), agents: { type: 'array', items: { type: 'string', enum: V.agents }, minItems: 1, maxItems: 4 }, caption: caption, hold: msS }, ['builder']);
+    return obj({ version: { type: 'number', enum: [1] }, loop: { type: 'boolean' }, beats: { type: 'array', minItems: 1, maxItems: LIMITS.beats, items: { anyOf: [tradeBeat, crewBeat, builderBeat] } } }, ['version', 'beats']);
   }
 
   var STAGE_CSS = '.af-hud{position:absolute;inset:0;pointer-events:none;font:500 12px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--af-ink,#f4efe6)}' +
@@ -2496,7 +2601,13 @@
     '.af-caption .af-did{margin-top:4px;letter-spacing:.06em;text-transform:uppercase}' +
     '.af-caption .af-metric{display:block;margin-top:2px;font-size:22px;letter-spacing:0;color:var(--af-accent,#7be3c3)}' +
     '.af-crewline{left:50%!important;top:auto!important;bottom:10px;transform:translateX(-50%)!important;letter-spacing:.14em;text-transform:uppercase;font-size:10px;opacity:0}' +
-    '@media (prefers-reduced-motion:reduce){.af-moment i{animation:none}.af-orb{transition:none}}';
+    '.af-prompt{min-width:200px;max-width:300px;padding:9px 12px 10px;border:1px solid rgba(123,227,195,.28);border-radius:4px;background:rgba(8,12,13,.82);backdrop-filter:blur(6px);font-size:12px;color:var(--af-accent,#7be3c3);white-space:pre-wrap;word-break:break-word}' +
+    '.af-prompt:before{content:attr(data-head);display:block;margin-bottom:5px;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--af-ink,#f4efe6);opacity:.45}' +
+    '.af-prompt b{display:inline-block;width:7px;height:13px;margin-left:2px;vertical-align:-2px;background:currentColor;animation:af-blink 1s steps(1) infinite}' +
+    '@keyframes af-blink{50%{opacity:0}}' +
+    '.af-chip{padding:3px 8px;border:1px solid rgba(123,227,195,.35);border-radius:999px;background:rgba(8,12,13,.7);color:var(--af-accent,#7be3c3);font-size:10px;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}' +
+    '.af-orb:after{content:attr(data-label);position:absolute;left:20px;top:-2px;white-space:nowrap;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--af-accent,#7be3c3)}' +
+    '@media (prefers-reduced-motion:reduce){.af-moment i,.af-prompt b{animation:none}.af-orb{transition:none}}';
   var cssDone = false;
 
   function stage(canvas, sb, opts) {
@@ -2515,14 +2626,18 @@
       if (typeof t === 'string') { registerCrew(t); return t; }
       var name = 'inline' + (++inline); TRADES[name] = t; registerCrew(name); return name;
     }
-    function groupKey(list) {
-      var keys = (list === true ? CREW_NAMES : list).map(tradeKey), nm = 'crew:group:' + keys.join('+');
-      if (!SHAPES[nm]) register(nm, crewGroup(keys));
+    function groupKey(list, withBuilder) {
+      var keys = (list === true ? CREW_NAMES : list).map(tradeKey), nm = 'crew:group:' + (withBuilder ? 'builder+' : '') + keys.join('+');
+      if (!SHAPES[nm]) register(nm, crewGroup(keys, { builder: withBuilder }));
       return nm;
     }
     function prepare(b0) {
       var names = [];
-      b0.beats.forEach(function (b) { if (present(b.trade)) { b._k = tradeKey(b.trade); names.push('crew:' + b._k + ':line', 'crew:' + b._k + ':lit'); } else { b._g = groupKey(b.crew); names.push(b._g); } });
+      b0.beats.forEach(function (b) {
+        if (present(b.builder) && !present(b.crew)) { registerBuilder(); if (b.builder === 'agents') { b._g = registerBuilder(b.agents); names.push(b._g); } else names.push('builder:typing:line', 'builder:typing:lit', 'builder:prompting:lit'); }
+        else if (present(b.trade)) { b._k = tradeKey(b.trade); names.push('crew:' + b._k + ':line', 'crew:' + b._k + ':lit'); }
+        else { b._g = groupKey(b.crew, b.builder === true); names.push(b._g); }
+      });
       return names;
     }
     var names = prepare(board), all = names.slice();
@@ -2543,11 +2658,24 @@
       hud = doc.createElement('div'); hud.className = 'af-hud'; hud.setAttribute('aria-hidden', 'true');
       if (win && win.getComputedStyle(host).position === 'static') host.style.position = 'relative';
       host.appendChild(hud);
-      ['moment', 'orb', 'caption', 'crewline'].forEach(function (k) { var d = doc.createElement('div'); d.className = 'af-' + k; hud.appendChild(d); el[k] = d; });
+      ['moment', 'orb', 'caption', 'crewline', 'prompt'].forEach(function (k) { var d = doc.createElement('div'); d.className = 'af-' + k; hud.appendChild(d); el[k] = d; });
+      el.chips = [];
     }
     function show(k, on) { if (el[k]) el[k].className = 'af-' + k + (on ? ' af-on' : ''); emit('overlay', { el: k, on: !!on }); }
     function place(k, x, y) { if (el[k]) el[k].style.transform = 'translate3d(' + Math.round(x) + 'px,' + Math.round(y) + 'px,0)'; }
-    var metric = null;
+    var metric = null, typing = null;
+    // the prompt: a terminal over the builder's screen that types itself out
+    function typeOut(text, head, ms) {
+      typing = { text: text, t0: now, per: Math.max(14, (ms || text.length * 38) / Math.max(1, text.length)), n: -1 };
+      if (el.prompt) el.prompt.setAttribute('data-head', head);
+      show('prompt', true); emit('prompt', { text: text });
+      return typing.per * text.length;
+    }
+    function chips(labels) {
+      if (headless) { emit('chips', labels); return; }
+      el.chips.forEach(function (c) { if (c.parentNode) c.parentNode.removeChild(c); }); el.chips = [];
+      labels.forEach(function (lb) { var c = doc.createElement('div'); c.className = 'af-chip af-on'; c.textContent = lb; c.style.position = 'absolute'; c.style.left = '0'; c.style.top = '0'; hud.appendChild(c); el.chips.push(c); });
+    }
     function setCaption(c) {
       if (!c) { show('caption', false); return; }
       if (el.caption) el.caption.innerHTML = '<span class="af-who"></span><span class="af-did"></span>' + (c.metric ? '<span class="af-metric"></span>' : '');
@@ -2561,25 +2689,37 @@
       Q.sort(function (a, b) { return a.t - b.t; });
       while (Q.length && Q[0].t <= now) Q.shift().fn();
       if (headless) return;
-      var W = host.clientWidth, c = anchor('chest');
-      if (c) {
+      var W = host.clientWidth, H = host.clientHeight, lowCap = beat && present(beat.builder) && !present(beat.crew), c = lowCap ? null : anchor('chest');
+      if (lowCap) place('caption', 12, Math.max(8, H - (el.caption.offsetHeight || 54) - 14));   // builder beats: the caption sits low, clear of the screen and the agents
+      else if (c) {
         var cap = el.caption, x = Math.min(W - (cap.offsetWidth || 200) - 8, Math.max(8, c.x + W * 0.12));
         place('caption', x, Math.max(8, c.y - 24));
       }
       if (beat && beat.moment) { var m = anchor(beat.moment.at || 'prop'); if (m) place('moment', m.x + 10, m.y - 6); }
+      var scr = anchor('prop') || anchor('0.prop');
+      if (scr && el.prompt) place('prompt', Math.min(W - (el.prompt.offsetWidth || 220) - 8, Math.max(8, scr.x - (el.prompt.offsetWidth || 220) * 0.2)), Math.max(8, scr.y - (el.prompt.offsetHeight || 60) - 40));
+      for (var ci = 0; ci < el.chips.length; ci++) {
+        var ah = field.anchors()[(ci + 1) + '.head'], cw = el.chips[ci].offsetWidth || 110;
+        if (ah) el.chips[ci].style.transform = 'translate3d(' + Math.round(Math.min(W - cw - 6, Math.max(6, ah.x - cw / 2))) + 'px,' + Math.round(ah.y - 30 - (ci % 2) * 24) + 'px,0)';   // staggered, inside the stage
+      }
+      if (typing && el.prompt) {
+        var nch = Math.min(typing.text.length, Math.floor((now - typing.t0) / typing.per));
+        if (nch !== typing.n) { typing.n = nch; el.prompt.innerHTML = ''; el.prompt.appendChild(doc.createTextNode(typing.text.slice(0, nch))); el.prompt.appendChild(doc.createElement('b')); }
+      }
       if (metric && el.caption) {
         var mm = metric.m, k = Math.min(1, (now - metric.t0) / (mm.ms || 900)), e = 1 - Math.pow(1 - k, 3), v = (mm.from || 0) + (mm.to - (mm.from || 0)) * e;
         var out = el.caption.querySelector('.af-metric'); if (out) out.textContent = (mm.prefix || '') + (Math.abs(mm.to) >= 10 ? Math.round(v) : v.toFixed(1)) + (mm.suffix || '');
       }
     });
-    field.on('traced', function (nm) { if (beat && nm === shapeName && phase === 'draw') afterDraw(); });
+    field.on('traced', function (nm) { if (!beat || nm !== shapeName || phase !== 'draw') return; if (present(beat.builder) && !present(beat.crew)) { if (builderDone) builderDone(); } else afterDraw(); });
 
     function go(i) {
       seq++; Q.length = 0;
       if (pending) { board = pending; pending = null; prepare(board); emit('load', board); i = 0; }
       if (i >= board.beats.length) { if (board.loop === false) return; i = 0; emit('loop'); }
       idx = i; beat = board.beats[i]; emit('beat', { index: i, beat: beat });
-      show('moment', false); show('orb', false); show('crewline', false); setCaption(null);
+      show('moment', false); show('orb', false); show('crewline', false); show('prompt', false); typing = null; chips([]); setCaption(null);
+      if (present(beat.builder) && !present(beat.crew)) return builderBeat(beat);
       if (present(beat.crew)) {
         phase = 'crew'; emit('phase', { index: i, phase: phase });
         shapeName = beat._g; field.setShape(shapeName, { pin: 1e9, arrive: { from: [0, 0.2, 0], ms: 1400 } }).signal(undefined, 30, 10);
@@ -2602,7 +2742,7 @@
       at(b.moment ? (b.moment.ms || 1400) : 0, function () {
         phase = 'ai'; emit('phase', { index: idx, phase: phase });
         var dur = (b.ai && b.ai.ms) || 900, m = anchor((b.moment && b.moment.at) || 'prop'), h = anchor('head');
-        if (el.orb && m) { place('orb', 20, 20); show('orb', true); at(30, function () { place('orb', m.x, m.y); }); at(dur * 0.6, function () { if (h) place('orb', h.x, h.y); }); }
+        if (el.orb && m) { el.orb.setAttribute('data-label', (b.ai && b.ai.text) || 'AI agent'); place('orb', 20, 20); show('orb', true); at(30, function () { place('orb', m.x, m.y); }); at(dur * 0.6, function () { if (h) place('orb', h.x, h.y); }); }
         field.signal('head', 40, 6);
         at(dur, function () {
           phase = 'fill'; emit('phase', { index: idx, phase: phase });
@@ -2615,6 +2755,43 @@
       });
     }
     function next() { if (focused) return; go(idx + 1); }
+    // builder beats: typing (drawn by the pen, then lit, code on the screen), prompting (the prompt
+    // types itself and an agent leaves the screen), agents (the agents at work, threads to the screen)
+    function builderBeat(b) {
+      var hold = b.hold || 3200;
+      phase = b.builder; emit('phase', { index: idx, phase: phase });
+      if (b.builder === 'typing') {
+        if (still) { shapeName = 'builder:typing:lit'; field.setShape(shapeName, { pin: 1e9 }); setCaption(b.caption); return; }
+        shapeName = 'builder:typing:line'; field.setShape(shapeName, { pin: 1e9 }); field.trace(); phase = 'draw';
+        var lit = function () {
+          if (phase !== 'draw') return; phase = 'typing';
+          shapeName = 'builder:typing:lit'; field.setShape(shapeName, { pin: 1e9, arrive: { from: 'prop', ms: 1100 } });
+          var dur = b.prompt ? typeOut(b.prompt.text, b.prompt.code === false ? 'prompt' : 'editor', b.prompt.ms) : 0;
+          at(600, function () { setCaption(b.caption); });
+          at(Math.max(dur + 900, 1100 + hold), next);
+        };
+        builderDone = lit;
+        return at(3600, lit);
+      }
+      if (b.builder === 'prompting') {
+        shapeName = 'builder:prompting:lit'; field.setShape(shapeName, { pin: 1e9, arrive: { from: 'chest', ms: 700 } });
+        var d2 = b.prompt ? typeOut('> ' + b.prompt.text, 'prompt', b.prompt.ms) : 0;
+        return at(d2 + 500, function () {
+          phase = 'ai'; emit('phase', { index: idx, phase: 'ai' });
+          var sc = anchor('prop'), W2 = host.clientWidth;
+          if (el.orb && sc) { el.orb.setAttribute('data-label', 'AI agent'); place('orb', sc.x, sc.y); show('orb', true); at(40, function () { place('orb', W2 * 0.82, sc.y - 60); }); }
+          field.signal('prop', 30, 8);
+          at(500, function () { setCaption(b.caption); });
+          at(900 + hold, next);
+        });
+      }
+      // agents
+      shapeName = b._g; field.setShape(shapeName, { pin: 1e9, arrive: { from: '0.prop', ms: 1500 } });
+      at(1300, function () { chips(b.agents.map(function (a) { return (AGENTS[a] && AGENTS[a].label) || a; })); for (var k2 = 1; k2 <= b.agents.length; k2++) field.signal(k2 + '.chest', 20, 3); });
+      at(1700, function () { setCaption(b.caption); });
+      return at(1500 + hold, next);
+    }
+    var builderDone = null;
 
     var api = {
       field: field,
@@ -2649,7 +2826,7 @@
     version: VERSION, create: create, register: register, build: build, shapes: function () { return ORDER.slice(); }, defaults: DEFAULTS,
     palettes: PALETTES, armour: armour, offload: offload, serve: serve, fromPoints: fromPoints, fromSVG: fromSVG, fromImage: fromImage, fromText: fromText, parsePath: parsePath,
     figure: figure, group: group, registerCrew: registerCrew, crew: CREW_NAMES.slice(), poses: Object.keys(FIG_POSES),
-    use: use, vocab: vocab, crewGroup: crewGroup, stage: stage, validate: validate, schema: schema, trades: function () { return Object.keys(TRADES); }
+    use: use, vocab: vocab, crewGroup: crewGroup, stage: stage, validate: validate, schema: schema, registerBuilder: registerBuilder, agents: function () { return Object.keys(AGENTS); }, trades: function () { return Object.keys(TRADES); }
   };
   return api0;
 });

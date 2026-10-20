@@ -39,7 +39,7 @@ if (process.argv.includes('--budget')) {
   const { gzipSync } = await import('node:zlib');
   const { readFileSync } = await import('node:fs');
   // frame cost is relative to the lit helm on the same machine (CI runners are slower than laptops); sizes are absolute
-  const BUDGET = { 'lit figure frame ÷ lit helm frame @2800': 1.25, 'create() ms (crew field)': 8, 'min.js gzip KB': 45 };   // the whole bundle: engine, people (21 trades) and the stage
+  const BUDGET = { 'lit figure frame ÷ lit helm frame @2800': 1.25, 'create() ms (crew field)': 8, 'min.js gzip KB': 48 };   // the whole bundle: engine, people (21 trades, the builder and agents) and the stage
   const lit = rows.find(r => r.renderer === 'webgl' && r.shape === 'crew:contractor:lit' && r.nodes === 2800), helm = rows.find(r => r.renderer === 'webgl' && r.shape === 'helm' && r.nodes === 2800);
   let best = Infinity;
   for (let k = 0; k < 5; k++) { const e = env('gl'); const t0 = process.hrtime.bigint(); const f = AF.create(e.canvas, { seed: 1, count: 2800, crew: true, shapes: AF.crew.flatMap(t => ['crew:' + t + ':line', 'crew:' + t + ':lit']), initial: 'crew:contractor:line', cycle: 0 }); best = Math.min(best, Number(process.hrtime.bigint() - t0) / 1e6); f.destroy(); }
