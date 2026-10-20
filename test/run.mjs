@@ -547,6 +547,23 @@ test('3.1: the builder at his desk, his agents, and the builder beats on a stage
   st.destroy();
 });
 
+test('3.2: a missed beat: no AI comes, the pen takes the drawing back, then the same moment is caught', () => {
+  const sb = JSON.parse(readFileSync(new URL('../examples/missed-then-caught.json', import.meta.url), 'utf8'));
+  assert.deepEqual(AF.validate(sb), { ok: true, errors: [] });
+  const bad = AF.validate({ version: 1, beats: [{ trade: 'roofer', missed: 'yes' }, { trade: 'roofer', missed: { text: 'x'.repeat(60) }, ai: {} }] });
+  assert.ok(bad.errors.length >= 3, bad.errors.join(' | '));
+  assert.ok(AF.schema({ strict: true }).properties.beats.items.anyOf[0].properties.missed, 'the schema knows missed');
+  const env = stubEnv({ gl: true }), seen = [], untraced = [];
+  const st = AF.stage(env.canvas, sb, { clock: 'manual', count: 900, headless: true });
+  st.on('phase', p => seen.push(p.index + ':' + p.phase));
+  st.field.on('untraced', n => untraced.push(n));
+  for (let k = 0; k < 120; k++) st.advance(500);
+  for (const want of ['0:draw', '0:moment', '0:missed', '1:typing', '4:ai', '4:fill', '5:crew']) assert.ok(seen.includes(want), 'saw ' + want + ' in ' + seen.join(','));
+  assert.ok(!seen.includes('0:ai') && !seen.includes('0:fill'), 'no AI on the missed beat');
+  assert.ok(untraced.includes('crew:roofer:line'), 'the pen took the drawing back');
+  st.destroy();
+});
+
 test('create: refuses a missing canvas', () => {
   assert.throws(() => AF.create(null), /canvas/);
 });

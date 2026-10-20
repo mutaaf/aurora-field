@@ -79,6 +79,18 @@ In order:
 
 See `examples/builder-story.json`.
 
+### The miss, then the catch (3.2)
+
+Tell the "before" first. A trade beat with `missed` plays the moment, and nobody comes: the label turns to `missed.text`, and the pen runs back over the drawing and takes it with it.
+
+```js
+{ trade: 'roofer', moment: { text: '9:47 PM · missed call', at: 'hand' }, missed: { text: 'No answer · went to voicemail' }, caption: { who: 'Roofer', did: 'Missed call · the job went elsewhere' } },
+// … the builder briefs his agents …
+{ trade: 'roofer', moment: { text: '9:47 PM · missed call', at: 'hand' }, ai: { text: 'Agent · answering' }, caption: { who: 'Roofer', did: 'Call answered · job booked' } }
+```
+
+`field.untrace(ms)` is the same effect on any traced shape. See `examples/missed-then-caught.json`.
+
 ### React: `aurora-field/react`
 
 ```jsx

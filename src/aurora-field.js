@@ -1,4 +1,4 @@
-/*! aurora-field v3.1.2 · MIT · https://github.com/mutaaf/aurora-field
+/*! aurora-field v3.2.0 · MIT · https://github.com/mutaaf/aurora-field
  * A particle field that assembles into shapes and morphs between them: a neural sphere
  * with travelling signals, a team of orbs, a stack of platforms, an armoured helm, a ranger
  * helmet, a crew of people a pen draws and light fills (figure(), registerCrew()) — or text,
@@ -17,7 +17,7 @@
   else root.AuroraField = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var VERSION = '3.1.2';
+  var VERSION = '3.2.0';
   var TAU = Math.PI * 2;
 
   var imul = Math.imul || function (a, b) {
@@ -1573,7 +1573,7 @@
 
     if (!names.length) throw new Error('aurora-field: no shapes');
     if (o.initial && !S[o.initial]) throw new Error('aurora-field: initial shape "' + o.initial + '" is not in shapes');
-    var shape = o.initial || names[0], autoAt = 0, pinnedUntil = 0, born = 0, introDone = false, shapeAt = 0, traced = null, arr = null, HELD = new Uint8Array(N);
+    var shape = o.initial || names[0], autoAt = 0, pinnedUntil = 0, born = 0, introDone = false, shapeAt = 0, traced = null, untr = null, arr = null, HELD = new Uint8Array(N);
     ensure(shape); S[shape].w = 1;
     for (i = 0; i < N; i++) TONE[i] = S[shape].tone[TI[i]];
     if (S[shape].al) for (i = 0; i < N; i++) AW[i] = S[shape].al[TI[i]];
@@ -2031,6 +2031,11 @@
       if (tr && !reduced) {
         var lin = since * 1000 / cur.trMs;
         prog = lin >= 1 ? lin : def.trace.ease === 'linear' ? lin : (1 - Math.cos(Math.PI * lin)) / 2;   // a hand eases in and out
+        if (untr && untr.shape === shape) {   // untrace(): the pen runs backwards and takes the drawing with it
+          var ul = (tn - untr.at) / untr.ms;
+          prog = ul >= 1 ? 0 : (1 + Math.cos(Math.PI * ul)) / 2;
+          if (ul >= 1 && !untr.done) { untr.done = true; emit('untraced', shape); }
+        }
         if (prog < 1) {
           trOn = true; pen = cur.tri[Math.min(N - 1, Math.max(0, Math.floor(prog * N)))];
           var pf = def.flow ? def.flow(pen, flowT, since) : null, pv = [pf ? pf[0] : T[pen * 3], pf ? pf[1] : T[pen * 3 + 1], pf ? pf[2] : T[pen * 3 + 2]];
@@ -2146,7 +2151,7 @@
           park = !visOn || VIS[n] < 0.05;   // unseen: ride the pen exactly, so it's already there when drawn
           // not drawn yet: wait in a small knot at the pen; only the next stretch shows, as its bright tip
           tx = T[pen * 3] + 0.025 * BC1[n]; ty = T[pen * 3 + 1] + 0.025 * BS2[n]; tz = T[pen * 3 + 2] + 0.025 * BC3[n];
-          vt = tr[p] - prog < 0.004 && Math.abs(X[n] - tx) + Math.abs(Y[n] - ty) + Math.abs(Z[n] - tz) < 0.12 ? 1 : 0;   // the tip shows once it has caught up with the pen
+          vt = tr[p] - prog < 0.004 && !(untr && untr.done) && Math.abs(X[n] - tx) + Math.abs(Y[n] - ty) + Math.abs(Z[n] - tz) < 0.12 ? 1 : 0;   // the tip shows once it has caught up with the pen
         } else if (trOn && VIS[n] < 0.05) park = true;   // just drawn and still unseen: it appears in place, right behind the pen
         var om = W[n] * (introDone ? 1 : 0.55), damp = 1.5 * om;
         var ex = tx - X[n], ey = ty - Y[n], ez = tz - Z[n];
@@ -2252,7 +2257,7 @@
         var ams = Math.max(1, +av.ms || 900); for (q2 = 0; q2 < N; q2++) Dl[q2] = Dl[q2] / mx2 * ams;
         arr = { at: now(), ms: ams, D: Dl };
       }
-      shape = name; shapeAt = now(); traced = null; kick += S[name].def.kick || 0.6; sig.length = 0; arrived = false;
+      shape = name; shapeAt = now(); traced = null; untr = null; kick += S[name].def.kick || 0.6; sig.length = 0; arrived = false;
       for (var nm2 in S) S[nm2].dlOn = false;
       if (reduced) { for (var nm in S) S[nm].w = nm === name ? 1 : 0; snap(name); draw(0); }
       emit('shape', name);
@@ -2379,7 +2384,9 @@
         return api;
       },
       // replay the current shape's trace: the pen draws it again from the start
-      trace: function () { shapeAt = now(); traced = null; return api; },
+      trace: function () { shapeAt = now(); traced = null; untr = null; return api; },
+      // the reverse: the pen runs back over the drawing and takes it with it (a traced shape only); emits 'untraced'
+      untrace: function (ms) { if (S[shape].tr && !reduced) untr = { shape: shape, at: now(), ms: Math.max(1, +ms || 1600) }; return api; },
       // send signals from a point of the current shape (an anchor name or [x, y, z]; default: anywhere)
       signal: function (at, hops, count) {
         var a = typeof at === 'string' ? (S[shape].def.anchors || {})[at] : at, T0 = S[shape].T, adj0 = S[shape].adj, best = -1, bd = 1e9, q;
@@ -2463,7 +2470,7 @@
       off: function (n, fn) { var l = EV[n]; if (l) for (var q = l.length - 1; q >= 0; q--) if (!fn || l[q] === fn) l.splice(q, 1); return api; },
       destroy: function () { call('destroy', []); for (var q = 0; q < listeners.length; q++) listeners[q][0].removeEventListener(listeners[q][1], listeners[q][2]); if (ro) ro.disconnect(); setTimeout(function () { worker.terminate(); }, 50); }
     };
-    var M = ['setShape', 'next', 'play', 'pause', 'setPose', 'set', 'pointer', 'trace', 'signal', 'prepare'];
+    var M = ['setShape', 'next', 'play', 'pause', 'setPose', 'set', 'pointer', 'trace', 'untrace', 'signal', 'prepare'];
     for (k = 0; k < M.length; k++) (function (m) { api[m] = function () { call(m, Array.prototype.slice.call(arguments)); return api; }; })(M[k]);
     return api;
   }
@@ -2477,7 +2484,7 @@
         for (var nm in data) register(nm, data[nm]);
         delete opt.shapeData;
         field = create(m.canvas, opt);
-        ['shape', 'stats', 'spinout', 'settled', 'traced'].forEach(function (ev) { field.on(ev, function (d) { scope.postMessage({ type: 'event', name: ev, data: d }); }); });
+        ['shape', 'stats', 'spinout', 'settled', 'traced', 'untraced'].forEach(function (ev) { field.on(ev, function (d) { scope.postMessage({ type: 'event', name: ev, data: d }); }); });
         // overlays on the main thread follow the field: anchors and the view, about 30 times a second
         var lastPose = 0;
         field.on('frame', function (t) { if (t - lastPose < 33) return; lastPose = t; scope.postMessage({ type: 'event', name: 'pose', data: { anchors: field.anchors(), view: field.view() } }); });
@@ -2501,6 +2508,7 @@
   //   { version: 1, palette?, light?, loop?: true, beats: [
   //       { trade: 'roofer' | { pose, props, action }, draw?: { ms }, moment?: { text, at?, ms? }, ai?: { ms?, text? },
   //         fill?: { from?, ms? }, caption?: { who?, did, metric?: { to, from?, prefix?, suffix?, ms? } }, hold?: ms },
+  //       { trade, moment, missed: { text?, ms? }, caption? }   the "before": no AI comes, and the pen takes the drawing back,
   //       { crew: ['contractor', …] | true, caption?, hold? } ] }
   var ANCHORS = ['head', 'chest', 'hand', 'prop', 'feet'];
   var LIMITS = { beats: 12, crew: 8, who: 32, did: 64, moment: 48, prompt: 72, ms: 20000 };
@@ -2559,6 +2567,11 @@
         if (present(b.draw)) ms(p + '.draw.ms', b.draw.ms);
         if (present(b.moment)) { text(p + '.moment.text', b.moment.text, LIMITS.moment); ms(p + '.moment.ms', b.moment.ms); if (present(b.moment.at) && ANCHORS.indexOf(b.moment.at) < 0) err(p + '.moment.at', 'must be one of ' + ANCHORS.join(', ')); }
         if (present(b.ai)) { ms(p + '.ai.ms', b.ai.ms); text(p + '.ai.text', b.ai.text, LIMITS.moment); }
+        if (present(b.missed)) {
+          if (!isObj(b.missed)) err(p + '.missed', 'must be { text?, ms? }');
+          else { text(p + '.missed.text', b.missed.text, LIMITS.moment); ms(p + '.missed.ms', b.missed.ms); }
+          if (present(b.ai) || present(b.fill)) err(p + '.missed', 'a missed beat has no ai or fill');
+        }
         if (present(b.fill)) { ms(p + '.fill.ms', b.fill.ms); if (present(b.fill.from) && ANCHORS.indexOf(b.fill.from) < 0) err(p + '.fill.from', 'must be one of ' + ANCHORS.join(', ')); }
       } else if (b.crew !== true) {
         if (!Array.isArray(b.crew) || !b.crew.length || b.crew.length > LIMITS.crew) err(p + '.crew', 'must be true or 1…' + LIMITS.crew + ' trades');
@@ -2582,7 +2595,7 @@
     var str = function (max) { return { type: 'string', maxLength: max }; }, num = { type: 'number' }, msS = { type: 'number', minimum: 0, maximum: LIMITS.ms };
     var anchor = { type: 'string', enum: ANCHORS }, trade = { type: 'string', enum: V.trades };
     var caption = obj({ who: str(LIMITS.who), did: str(LIMITS.did), metric: obj({ to: num, from: num, prefix: str(8), suffix: str(12), ms: msS }, ['to']) }, ['did']);
-    var tradeBeat = obj({ trade: trade, moment: obj({ text: str(LIMITS.moment), at: anchor, ms: msS }, ['text']), ai: obj({ ms: msS, text: str(LIMITS.moment) }), fill: obj({ from: anchor, ms: msS }), caption: caption, hold: msS }, ['trade']);
+    var tradeBeat = obj({ trade: trade, moment: obj({ text: str(LIMITS.moment), at: anchor, ms: msS }, ['text']), ai: obj({ ms: msS, text: str(LIMITS.moment) }), fill: obj({ from: anchor, ms: msS }), missed: obj({ text: str(LIMITS.moment), ms: msS }), caption: caption, hold: msS }, ['trade']);
     var crewBeat = obj({ crew: { type: 'array', items: trade, minItems: 1, maxItems: LIMITS.crew }, builder: { type: 'boolean' }, caption: caption, hold: msS }, ['crew']);
     var builderBeat = obj({ builder: { type: 'string', enum: BUILDER_BEATS }, prompt: obj({ text: str(LIMITS.prompt), code: { type: 'boolean' }, ms: msS }, ['text']), agents: { type: 'array', items: { type: 'string', enum: V.agents }, minItems: 1, maxItems: 4 }, caption: caption, hold: msS }, ['builder']);
     return obj({ version: { type: 'number', enum: [1] }, loop: { type: 'boolean' }, beats: { type: 'array', minItems: 1, maxItems: LIMITS.beats, items: { anyOf: [tradeBeat, crewBeat, builderBeat] } } }, ['version', 'beats']);
@@ -2606,6 +2619,8 @@
     '.af-prompt b{display:inline-block;width:7px;height:13px;margin-left:2px;vertical-align:-2px;background:currentColor;animation:af-blink 1s steps(1) infinite}' +
     '@keyframes af-blink{50%{opacity:0}}' +
     '.af-chip{padding:3px 8px;border:1px solid rgba(123,227,195,.35);border-radius:999px;background:rgba(8,12,13,.7);color:var(--af-accent,#7be3c3);font-size:10px;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}' +
+    '.af-moment.af-gone{color:var(--af-lost,#8d8a86)}.af-moment.af-gone i{animation:none;border-style:dashed}.af-moment.af-gone span{text-decoration:line-through;text-decoration-thickness:1px}' +
+    '.af-caption.af-lost{border-color:rgba(255,181,71,.22)}.af-caption.af-lost .af-who:before{background:var(--af-alert,#ffb547);box-shadow:0 0 8px var(--af-alert,#ffb547)}' +
     '.af-orb:after{content:attr(data-label);position:absolute;left:20px;top:-2px;white-space:nowrap;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--af-accent,#7be3c3)}' +
     '@media (prefers-reduced-motion:reduce){.af-moment i,.af-prompt b{animation:none}.af-orb{transition:none}}';
   var cssDone = false;
@@ -2661,7 +2676,8 @@
       ['moment', 'orb', 'caption', 'crewline', 'prompt'].forEach(function (k) { var d = doc.createElement('div'); d.className = 'af-' + k; hud.appendChild(d); el[k] = d; });
       el.chips = [];
     }
-    function show(k, on) { if (el[k]) el[k].className = 'af-' + k + (on ? ' af-on' : ''); emit('overlay', { el: k, on: !!on }); }
+    var mods = {};   // extra classes per overlay: the moment once it's gone, the caption of a loss
+    function show(k, on) { if (el[k]) el[k].className = 'af-' + k + (mods[k] ? ' ' + mods[k] : '') + (on ? ' af-on' : ''); emit('overlay', { el: k, on: !!on }); }
     function place(k, x, y) { if (el[k]) el[k].style.transform = 'translate3d(' + Math.round(x) + 'px,' + Math.round(y) + 'px,0)'; }
     var metric = null, typing = null;
     // the prompt: a terminal over the builder's screen that types itself out
@@ -2684,8 +2700,11 @@
       show('caption', true); emit('caption', c);
     }
     function anchor(name) { var a = field.anchors(); return a[name] || a.chest || null; }
+    var lastT = -1;
     field.on('frame', function (t) {
-      now = t;
+      // the story's own clock: it stops while the field is paused (pause(), a hidden tab, scrolled away)
+      // and picks up where it left off, instead of firing every beat it missed at once
+      now += lastT < 0 ? 0 : Math.max(0, Math.min(100, t - lastT)); lastT = t;
       Q.sort(function (a, b) { return a.t - b.t; });
       while (Q.length && Q[0].t <= now) Q.shift().fn();
       if (headless) return;
@@ -2695,7 +2714,10 @@
         var cap = el.caption, x = Math.min(W - (cap.offsetWidth || 200) - 8, Math.max(8, c.x + W * 0.12));
         place('caption', x, Math.max(8, c.y - 24));
       }
-      if (beat && beat.moment) { var m = anchor(beat.moment.at || 'prop'); if (m) place('moment', m.x + 10, m.y - 6); }
+      if (beat && beat.moment) {   // right of its anchor; flipped to the left when it would run off the stage
+        var m = anchor(beat.moment.at || 'prop'), mw = el.moment.offsetWidth || 160;
+        if (m) place('moment', m.x + 10 + mw > W - 8 ? Math.max(8, m.x - 10 - mw) : m.x + 10, m.y - 6);
+      }
       var scr = anchor('prop') || anchor('0.prop'), hd = field.anchors().head || field.anchors()['0.head'];
       if (scr && el.prompt) {   // the prompt floats above the builder's head, toward his screen
         var pw = el.prompt.offsetWidth || 220, ph2 = el.prompt.offsetHeight || 60, top = Math.min(scr.y, hd ? hd.y : scr.y);
@@ -2726,8 +2748,9 @@
       seq++; Q.length = 0;
       if (pending) { board = pending; pending = null; prepare(board); emit('load', board); i = 0; }
       if (i >= board.beats.length) { if (board.loop === false) return; i = 0; emit('loop'); }
+      if (still) for (var sk = 0; sk < board.beats.length && board.beats[i].missed; sk++) i = (i + 1) % board.beats.length;   // reduced motion holds one beat: never the loss
       idx = i; beat = board.beats[i]; emit('beat', { index: i, beat: beat });
-      show('moment', false); show('orb', false); show('crewline', false); show('prompt', false); typing = null; chips([]); setCaption(null);
+      mods = {}; show('moment', false); show('orb', false); show('crewline', false); show('prompt', false); typing = null; chips([]); setCaption(null);
       fit(present(beat.crew) || beat.builder === 'agents');
       if (present(beat.builder) && !present(beat.crew)) return builderBeat(beat);
       if (present(beat.crew)) {
@@ -2749,6 +2772,7 @@
         if (el.moment) el.moment.innerHTML = '<i></i><span></span>', el.moment.querySelector('span').textContent = b.moment.text;
         show('moment', true);
       }
+      if (b.missed) return at(b.moment ? (b.moment.ms || 1400) : 0, function () { missed(b); });
       at(b.moment ? (b.moment.ms || 1400) : 0, function () {
         phase = 'ai'; emit('phase', { index: idx, phase: phase });
         var dur = (b.ai && b.ai.ms) || 900, m = anchor((b.moment && b.moment.at) || 'prop'), h = anchor('head');
@@ -2763,6 +2787,16 @@
           at(((b.fill && b.fill.ms) || 1100) + (b.hold || 3600), next);
         });
       });
+    }
+    // the "before": the moment rings out, nobody comes, and the pen runs back over the drawing
+    function missed(b) {
+      var ums = b.missed.ms || 1800;
+      phase = 'missed'; emit('phase', { index: idx, phase: phase, text: b.missed.text });
+      if (b.missed.text && el.moment) el.moment.querySelector('span').textContent = b.missed.text;
+      mods.moment = 'af-gone'; show('moment', !!b.moment);
+      at(500, function () { field.untrace(ums); });
+      at(500 + ums * 0.55, function () { mods.caption = 'af-lost'; setCaption(b.caption); });
+      at(500 + ums + (b.hold || 2400), next);
     }
     function next() { if (focused) return; go(idx + 1); }
     // builder beats: typing (drawn by the pen, then lit, code on the screen), prompting (the prompt

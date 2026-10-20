@@ -134,13 +134,15 @@ export interface Field {
   setFace(face: Partial<Record<FaceChannel, number>> | null): Field;
   /** Replay the current shape's trace: the pen draws it again from a blank. */
   trace(): Field;
+  /** The pen runs back over the current traced shape and takes the drawing with it; emits 'untraced'. */
+  untrace(ms?: number): Field;
   /** Send signals along the current shape's pairs, from an anchor name or a shape-space point (default: anywhere). */
   signal(at?: string | Vec3, hops?: number, count?: number): Field;
   /** Change options live (palette, autonomy, cycle, pin, depth, quality, fpsFloor, maxDpr, radius, rotation, interactive, autoPause; headless sizes). */
   set(options: Partial<Options>): Field;
   /** Input without DOM events: workers, game loops, other platforms. */
   pointer(type: 'move' | 'down' | 'up' | 'leave' | 'pulse', x?: number, y?: number): Field;
-  on(event: 'shape' | 'settled' | 'traced', fn: (name: string) => void): Field;
+  on(event: 'shape' | 'settled' | 'traced' | 'untraced', fn: (name: string) => void): Field;
   on(event: 'stats', fn: (s: { fps: number; nodes: number; quality: number }) => void): Field;
   on(event: 'spinout' | 'frame', fn: (t?: number) => void): Field;
   off(event: string, fn?: (...a: any[]) => void): Field;
@@ -227,7 +229,9 @@ export function agents(): AgentJob[];
 
 export type Anchor = 'head' | 'chest' | 'hand' | 'prop' | 'feet';
 export interface Caption { who?: string; did: string; metric?: { to: number; from?: number; prefix?: string; suffix?: string; ms?: number } }
-export interface TradeBeat { trade: CrewName | FigureSpec; draw?: { ms?: number }; moment?: { text: string; at?: Anchor; ms?: number }; ai?: { ms?: number; text?: string }; fill?: { from?: Anchor; ms?: number }; caption?: Caption; hold?: number }
+export interface TradeBeat { trade: CrewName | FigureSpec; draw?: { ms?: number }; moment?: { text: string; at?: Anchor; ms?: number }; ai?: { ms?: number; text?: string }; fill?: { from?: Anchor; ms?: number };
+  /** The "before": no AI comes; the moment turns to `text` (e.g. "No answer · went to voicemail") and the pen takes the drawing back over `ms`. Not with ai or fill. */
+  missed?: { text?: string; ms?: number }; caption?: Caption; hold?: number }
 /** with builder: true, the builder sits at his desk front and centre of the lineup */
 export interface CrewBeat { crew: CrewName[] | true; builder?: boolean; caption?: Caption; hold?: number }
 export type AgentJob = 'answer' | 'estimate' | 'review' | 'schedule' | 'followup' | 'analyze' | (string & {});
@@ -246,7 +250,7 @@ export interface StageOptions extends Pick<Options, 'container' | 'stage' | 'cou
   text?: (value: string, path: string) => string | null | undefined;
 }
 export interface StageBeatEvent { index: number; beat: TradeBeat | CrewBeat | BuilderBeat }
-export interface StagePhaseEvent { index: number; phase: 'draw' | 'moment' | 'ai' | 'fill' | 'caption' | 'crew' | 'hold' | 'typing' | 'prompting' | 'agents'; text?: string }
+export interface StagePhaseEvent { index: number; phase: 'draw' | 'moment' | 'missed' | 'ai' | 'fill' | 'caption' | 'crew' | 'hold' | 'typing' | 'prompting' | 'agents'; text?: string }
 export interface Stage {
   readonly field: Field; readonly storyboard: Storyboard; readonly index: number; readonly phase: string;
   /** Swap in a storyboard at the next beat; returns the validation (an invalid board is refused, the old one plays on). */

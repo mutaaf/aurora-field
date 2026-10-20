@@ -1,5 +1,14 @@
 # Changelog
 
+## 3.2.0 — 2026-10-20
+- **The miss, before the catch.** A trade beat can take `missed: { text?, ms? }`: the moment rings out, no AI comes, the moment's label turns to `text` (struck through), and the pen runs back over the drawing and takes it with it. Then the loss gets its caption. Play the same moment again later, caught, and the story has a before and after.
+  - `field.untrace(ms)` runs the pen backwards over the current traced shape, and the field emits `untraced` when it's done (worker mode too).
+  - New phase `missed`; the HUD styles `.af-moment.af-gone` and `.af-caption.af-lost` (`--af-lost`).
+  - With reduced motion the stage holds one beat, and never a missed one.
+- **A story clock that pauses.** The stage keeps its own time: it stops while the field is paused (`pause()`, a hidden tab, scrolled out of view) and picks up where it left off, instead of firing every beat it missed at once.
+- The moment's label flips to the left of its anchor when it would run off the stage.
+- `validate()` and `schema()` know `missed` (a missed beat has no `ai` or `fill`). See `examples/missed-then-caught.json`.
+
 ## 3.1.2 — 2026-10-20
 - Agent chips sit on fixed rows above the agents' highest head, so labels never overlap.
 
