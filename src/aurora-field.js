@@ -1,4 +1,4 @@
-/*! aurora-field v3.1.0 · MIT · https://github.com/mutaaf/aurora-field
+/*! aurora-field v3.1.1 · MIT · https://github.com/mutaaf/aurora-field
  * A particle field that assembles into shapes and morphs between them: a neural sphere
  * with travelling signals, a team of orbs, a stack of platforms, an armoured helm, a ranger
  * helmet, a crew of people a pen draws and light fills (figure(), registerCrew()) — or text,
@@ -17,7 +17,7 @@
   else root.AuroraField = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var VERSION = '3.1.0';
+  var VERSION = '3.1.1';
   var TAU = Math.PI * 2;
 
   var imul = Math.imul || function (a, b) {
@@ -2696,11 +2696,14 @@
         place('caption', x, Math.max(8, c.y - 24));
       }
       if (beat && beat.moment) { var m = anchor(beat.moment.at || 'prop'); if (m) place('moment', m.x + 10, m.y - 6); }
-      var scr = anchor('prop') || anchor('0.prop');
-      if (scr && el.prompt) place('prompt', Math.min(W - (el.prompt.offsetWidth || 220) - 8, Math.max(8, scr.x - (el.prompt.offsetWidth || 220) * 0.2)), Math.max(8, scr.y - (el.prompt.offsetHeight || 60) - 40));
+      var scr = anchor('prop') || anchor('0.prop'), hd = field.anchors().head || field.anchors()['0.head'];
+      if (scr && el.prompt) {   // the prompt floats above the builder's head, toward his screen
+        var pw = el.prompt.offsetWidth || 220, ph2 = el.prompt.offsetHeight || 60, top = Math.min(scr.y, hd ? hd.y : scr.y);
+        place('prompt', Math.min(W - pw - 8, Math.max(8, (hd ? (hd.x + scr.x) / 2 : scr.x) - pw / 2)), Math.max(8, top - ph2 - 14));
+      }
       for (var ci = 0; ci < el.chips.length; ci++) {
         var ah = field.anchors()[(ci + 1) + '.head'], cw = el.chips[ci].offsetWidth || 110;
-        if (ah) el.chips[ci].style.transform = 'translate3d(' + Math.round(Math.min(W - cw - 6, Math.max(6, ah.x - cw / 2))) + 'px,' + Math.round(ah.y - 30 - (ci % 2) * 24) + 'px,0)';   // staggered, inside the stage
+        if (ah) el.chips[ci].style.transform = 'translate3d(' + Math.round(Math.min(W - cw - 6, Math.max(6, ah.x - cw / 2))) + 'px,' + Math.round(ah.y - 30 - ci * 24) + 'px,0)';   // a row each, inside the stage
       }
       if (typing && el.prompt) {
         var nch = Math.min(typing.text.length, Math.floor((now - typing.t0) / typing.per));
@@ -2713,12 +2716,15 @@
     });
     field.on('traced', function (nm) { if (!beat || nm !== shapeName || phase !== 'draw') return; if (present(beat.builder) && !present(beat.crew)) { if (builderDone) builderDone(); } else afterDraw(); });
 
+    // a lineup (the agents, the crew) is wider than one person: it gets opts.groupRadius when given
+    function fit(isGroup) { if (opts.groupRadius && opts.radius) field.set({ radius: isGroup ? opts.groupRadius : opts.radius }); }
     function go(i) {
       seq++; Q.length = 0;
       if (pending) { board = pending; pending = null; prepare(board); emit('load', board); i = 0; }
       if (i >= board.beats.length) { if (board.loop === false) return; i = 0; emit('loop'); }
       idx = i; beat = board.beats[i]; emit('beat', { index: i, beat: beat });
       show('moment', false); show('orb', false); show('crewline', false); show('prompt', false); typing = null; chips([]); setCaption(null);
+      fit(present(beat.crew) || beat.builder === 'agents');
       if (present(beat.builder) && !present(beat.crew)) return builderBeat(beat);
       if (present(beat.crew)) {
         phase = 'crew'; emit('phase', { index: i, phase: phase });

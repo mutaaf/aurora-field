@@ -236,6 +236,8 @@ export interface BuilderBeat { builder: 'typing' | 'prompting' | 'agents'; promp
 /** A story as data: trades drawn, the moment it went wrong, the AI, the fill, the outcome; then the crew. */
 export interface Storyboard { version: 1; loop?: boolean; palette?: PaletteName | Partial<Palette>; light?: Partial<LightRig>; beats: Array<TradeBeat | CrewBeat | BuilderBeat> }
 export interface StageOptions extends Pick<Options, 'container' | 'stage' | 'count' | 'radius' | 'depth' | 'interactive' | 'quality' | 'renderer' | 'reducedMotion' | 'clock' | 'maxDpr' | 'seed' | 'stars' | 'palette' | 'light'> {
+  /** Radius for lineups (agents, crew) when it differs from `radius`, which then sizes single figures. */
+  groupRadius?: (stageWidth: number, stageHeight: number) => number;
   /** No DOM overlay: listen to 'phase', 'caption' and 'overlay' events and draw your own. */
   headless?: boolean;
   /** false: don't inject the default HUD styles (.af-hud, .af-caption, .af-moment, .af-orb). */

@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.1.1 — 2026-10-20
+- **Stage layout:**
+  - `groupRadius` sizes lineups (the agents, the crew) separately from single figures, so wide scenes fit the stage.
+  - Agent chips stack in rows.
+  - The prompt floats above the builder's head.
+
 ## 3.1.0 — 2026-10-20
 - **The builder, and his agents.** A new storyline: the person behind the AI.
   - `builder` beats on the stage: `typing` (the pen draws him at his desk, he fills with light, and code types out over his screen), `prompting` (a prompt types itself and an AI agent leaves the screen) and `agents` (his agents step out of the screen, each labelled with its job, threads running from his screen to each of them).
