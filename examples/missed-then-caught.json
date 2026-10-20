@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "loop": true,
+  "beats": [
+    { "trade": "roofer", "moment": { "text": "9:47 PM · missed call", "at": "hand" }, "missed": { "text": "No answer · went to voicemail" }, "caption": { "who": "Roofer", "did": "Missed call · the job went elsewhere" } },
+    { "builder": "typing", "prompt": { "text": "agents.run('answer-calls', { after: '6pm' })", "code": true }, "caption": { "who": "The builder", "did": "Custom AI systems · built end to end" } },
+    { "builder": "prompting", "prompt": { "text": "answer every missed call and book the job" } },
+    { "builder": "agents", "agents": ["answer", "estimate", "review"] },
+    { "trade": "roofer", "moment": { "text": "9:47 PM · missed call", "at": "hand" }, "ai": { "text": "Agent · answering" }, "caption": { "who": "Roofer", "did": "Call answered · job booked" } },
+    { "crew": true, "builder": true, "caption": { "did": "Your whole crew · on autopilot" } }
+  ]
+}
