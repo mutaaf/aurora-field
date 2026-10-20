@@ -2624,13 +2624,14 @@ const module = { exports: {} };
   // every label sits on a plate (--af-plate) that hides the lines behind it, and stage() keeps the
   // labels off the drawing; the moment's ring stays on its anchor, with a leader line to its label
   var STAGE_CSS = '.af-hud{position:absolute;inset:0;pointer-events:none;font:500 12px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--af-ink,#f4efe6)}' +
-    '.af-hud>*{position:absolute;left:0;top:0;opacity:0;translate:0 5px;transition:opacity .45s ease,translate .5s cubic-bezier(.2,.7,.2,1);will-change:transform}' +
+    '.af-hud>*{position:absolute;left:0;top:0;opacity:0;translate:0 5px;transition:opacity .45s,translate .5s cubic-bezier(.2,.7,.2,1),color .5s;will-change:transform}' +
     '.af-hud .af-on{opacity:1;translate:0 0}' +
-    '.af-moment{display:flex;align-items:center;gap:8px;padding:5px 11px 5px 9px;border:1px solid rgba(255,181,71,.32);border-radius:999px;background:var(--af-plate,rgba(9,11,13,.9));backdrop-filter:blur(6px);white-space:nowrap;color:var(--af-alert,#ffb547);text-transform:uppercase;letter-spacing:.12em;font-size:11px;transition:opacity .45s ease,translate .5s cubic-bezier(.2,.7,.2,1),color .5s ease,border-color .5s ease}' +
+    '.af-moment,.af-ping,.af-lead{color:var(--af-alert,#ffb547)}.af-hud .af-gone{color:var(--af-lost,#8d8a86)}.af-hud .af-handled{color:var(--af-accent,#7be3c3)}' +
+    '.af-moment{display:flex;align-items:center;gap:8px;padding:5px 11px 5px 9px;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:var(--af-plate,rgba(9,11,13,.9));backdrop-filter:blur(6px);white-space:nowrap;text-transform:uppercase;letter-spacing:.12em;font-size:11px}' +
     '.af-moment i{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}' +
-    '.af-ping{width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;border:2px solid var(--af-alert,#ffb547);color:var(--af-alert,#ffb547);translate:0 0;animation:af-ping 1.1s ease-out infinite}' +
+    '.af-ping{width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;border:2px solid;translate:0 0;animation:af-ping 1.1s ease-out infinite}' +
     '@keyframes af-ping{0%{box-shadow:0 0 0 0 currentColor}100%{box-shadow:0 0 0 14px transparent}}' +
-    '.af-lead{height:1px;transform-origin:0 0;translate:0 0;background:var(--af-alert,#ffb547)}.af-hud .af-lead.af-on{opacity:.45}' +
+    '.af-lead{height:1px;transform-origin:0 0;translate:0 0;background:currentColor}.af-hud .af-lead.af-on{opacity:.45}' +
     '.af-orb{width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;translate:0 0;background:radial-gradient(circle,#fff 0,var(--af-accent,#7be3c3) 40%,transparent 72%);box-shadow:0 0 22px 6px var(--af-accent,#7be3c3);transition:opacity .4s ease,transform .7s cubic-bezier(.2,.7,.2,1)}' +
     '.af-caption{min-width:180px;max-width:260px;padding:9px 12px;border:1px solid rgba(255,255,255,.12);border-radius:3px;background:var(--af-plate,rgba(9,11,13,.9));backdrop-filter:blur(6px)}' +
     '.af-caption .af-who{display:flex;align-items:center;gap:7px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;opacity:.6}' +
@@ -2643,10 +2644,8 @@ const module = { exports: {} };
     '.af-prompt b{display:inline-block;width:7px;height:13px;margin-left:2px;vertical-align:-2px;background:currentColor;animation:af-blink 1s steps(1) infinite}' +
     '@keyframes af-blink{50%{opacity:0}}' +
     '.af-chip{padding:3px 8px;border:1px solid rgba(123,227,195,.35);border-radius:999px;background:var(--af-plate,rgba(9,11,13,.9));color:var(--af-accent,#7be3c3);font-size:10px;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}' +
-    '.af-moment.af-gone{color:var(--af-lost,#8d8a86);border-color:rgba(141,138,134,.3)}.af-moment.af-gone i{background:transparent;border:1px dashed currentColor}.af-moment.af-gone span{text-decoration:line-through;text-decoration-thickness:1px}' +
-    '.af-ping.af-gone{animation:none;border-style:dashed;border-color:var(--af-lost,#8d8a86)}.af-lead.af-gone{background:var(--af-lost,#8d8a86)}' +
-    '.af-moment.af-handled{color:var(--af-accent,#7be3c3);border-color:rgba(123,227,195,.35)}' +
-    '.af-ping.af-handled{animation:none;border-color:var(--af-accent,#7be3c3);background:var(--af-accent,#7be3c3);box-shadow:0 0 12px var(--af-accent,#7be3c3)}.af-lead.af-handled{background:var(--af-accent,#7be3c3)}' +
+    '.af-gone i{background:none;border:1px dashed}.af-gone span{text-decoration:line-through}.af-ping.af-gone{animation:none;border-style:dashed}' +
+    '.af-ping.af-handled{animation:none;background:currentColor;box-shadow:0 0 12px currentColor}' +
     '.af-caption.af-lost{border-color:rgba(255,181,71,.22)}.af-caption.af-lost .af-who:before{background:var(--af-alert,#ffb547);box-shadow:0 0 8px var(--af-alert,#ffb547)}' +
     '.af-orb:after{content:attr(data-label);position:absolute;left:20px;top:-4px;padding:2px 8px;border:1px solid rgba(123,227,195,.3);border-radius:999px;background:var(--af-plate,rgba(9,11,13,.9));white-space:nowrap;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--af-accent,#7be3c3)}' +
     '.af-orb.af-left:after{left:auto;right:20px}.af-orb.af-below:after{left:50%;top:20px;transform:translateX(-50%)}' +
@@ -2724,20 +2723,15 @@ const module = { exports: {} };
       return a;
     }
     function settle(k, w, h, cands, taken, W, H) {
-      var rs = [], area = [], tight = [], best = -1, i, soft = rawBox ? [rawBox].concat(taken.slice(1)) : taken;
+      var soft = rawBox ? [rawBox].concat(taken.slice(1)) : taken, best = -1, bs = 1e18, out = null, i, r, a, sc;
       for (i = 0; i < cands.length; i++) {
-        var r = { x: Math.max(6, Math.min(W - w - 6, cands[i][0])), y: Math.max(6, Math.min(H - h - 6, cands[i][1])), w: w, h: h };
-        rs.push(r); area.push(covered(r, taken)); tight.push(covered(r, soft));
+        r = { x: Math.max(6, Math.min(W - w - 6, cands[i][0])), y: Math.max(6, Math.min(H - h - 6, cands[i][1])), w: w, h: h };
+        a = covered(r, taken); sc = a ? (covered(r, soft) ? 2e9 + a : 1e9) : 0;   // clear, then clear of the figure itself, then least covered
+        if (i === spots[k] && sc < 2e9 && a <= w * h * 0.04) sc = -1;              // the spot it had, while it still (nearly) fits
+        if (sc < bs) { bs = sc; best = i; out = r; }
       }
-      var keep = spots[k];
-      if (keep != null && keep < rs.length && area[keep] <= w * h * 0.04 && !tight[keep]) best = keep;
-      else {
-        for (i = 0; i < rs.length && best < 0; i++) if (!area[i]) best = i;
-        for (i = 0; i < rs.length && best < 0; i++) if (!tight[i]) best = i;
-        if (best < 0) { best = 0; for (i = 1; i < rs.length; i++) if (area[i] < area[best]) best = i; }
-      }
-      spots[k] = best; taken.push(rs[best]);
-      return rs[best];
+      spots[k] = best; taken.push(out);
+      return out;
     }
     var metric = null, typing = null;
     // the prompt: a terminal over the builder's screen that types itself out
