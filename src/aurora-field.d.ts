@@ -126,6 +126,8 @@ export interface Field {
   project(p: Vec3): { x: number; y: number; z: number };
   /** The current shape's anchors, projected. */
   anchors(): Record<string, { x: number; y: number; z: number }>;
+  /** Where the current shape sits on screen, in CSS px (its points, less a few strays), so overlays can keep off the drawing. */
+  bounds(): { x: number; y: number; w: number; h: number } | null;
   /** Current orientation (radians), shape radius and centre (CSS px). */
   view(): { yaw: number; pitch: number; roll: number; radius: number; x: number; y: number };
   /** Drive facing shapes from a tracked head; null releases. */
@@ -169,7 +171,7 @@ export interface ArmourSpec {
 }
 export type OffloadedField = Pick<Field, 'setShape' | 'next' | 'play' | 'pause' | 'setPose' | 'set' | 'pointer' | 'trace' | 'signal' | 'prepare' | 'on' | 'off' | 'destroy'> & { readonly shape: string | null; offloaded: true; worker: Worker; stats(): { fps: number; nodes: number; quality: number } | null;
   /** The latest anchors and view from the worker (~30×/s), for overlays on the main thread. */
-  anchors(): Record<string, { x: number; y: number; z: number }>; view(): { yaw: number; pitch: number; roll: number; radius: number; x: number; y: number } | null };
+  anchors(): Record<string, { x: number; y: number; z: number }>; bounds(): { x: number; y: number; w: number; h: number } | null; view(): { yaw: number; pitch: number; roll: number; radius: number; x: number; y: number } | null };
 
 export const version: string;
 export function create(canvas: HTMLCanvasElement | OffscreenCanvas, options?: Options): Field;
@@ -229,7 +231,7 @@ export function agents(): AgentJob[];
 
 export type Anchor = 'head' | 'chest' | 'hand' | 'prop' | 'feet';
 export interface Caption { who?: string; did: string; metric?: { to: number; from?: number; prefix?: string; suffix?: string; ms?: number } }
-export interface TradeBeat { trade: CrewName | FigureSpec; draw?: { ms?: number }; moment?: { text: string; at?: Anchor; ms?: number }; ai?: { ms?: number; text?: string }; fill?: { from?: Anchor; ms?: number };
+export interface TradeBeat { trade: CrewName | FigureSpec; draw?: { ms?: number }; moment?: { text: string; /** what the moment becomes once the AI reaches it (e.g. "9:47 PM · answered") */ then?: string; at?: Anchor; ms?: number }; ai?: { ms?: number; text?: string }; fill?: { from?: Anchor; ms?: number };
   /** The "before": no AI comes; the moment turns to `text` (e.g. "No answer · went to voicemail") and the pen takes the drawing back over `ms`. Not with ai or fill. */
   missed?: { text?: string; ms?: number }; caption?: Caption; hold?: number }
 /** with builder: true, the builder sits at his desk front and centre of the lineup */
@@ -266,6 +268,8 @@ export interface Stage {
   on(event: 'overlay', fn: (e: { el: string; on: boolean }) => void): Stage;
   on(event: 'prompt', fn: (e: { text: string }) => void): Stage;
   on(event: 'chips', fn: (labels: string[]) => void): Stage;
+  /** The AI reached the moment and it turned to moment.then. */
+  on(event: 'handled', fn: (e: { index: number; text: string }) => void): Stage;
   on(event: 'load' | 'loop', fn: (a?: unknown) => void): Stage;
   off(event: string, fn?: (...a: any[]) => void): Stage;
   destroy(): void;

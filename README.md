@@ -2,7 +2,7 @@
 
 A WebGL particle field (with a canvas-2D fallback) that assembles into **lit, solid shapes** and morphs between them. It ships with a neural sphere with signals travelling its synapses, a team of orbs, a stack of platforms with traffic streaming through, an armoured helm and a ranger helmet that are lit like real objects and wear your expressions through the camera. You can also give it **text, SVG paths, images or point clouds**, or draw **your own helmet** with `armour()`. It has two-tone pop-culture palettes, and options change live. It runs in a page, as a `<aurora-field>` web component, headless on an `OffscreenCanvas`, or in a **Web Worker**, off the main thread. Drag to spin it, move through it to part it, click to send a shockwave.
 
-**[Open the studio →](https://mutaaf.github.io/aurora-field/)** (shape it, light it, drive it with your face, export a PNG or a clip, share a link) · seen on [mutaafaziz.com](https://mutaafaziz.com)
+**[Open the studio →](https://mutaaf.github.io/aurora-field/)** (shape it, light it, drive it with your face, export a PNG or a clip, share a link, or [make a story from a sentence](https://mutaaf.github.io/aurora-field/?make=1) with your own Claude or OpenAI key) · seen on [mutaafaziz.com](https://mutaafaziz.com)
 
 ![aurora-field: the helm in Mark III red and gold, lit from the upper left, beside the ranger in white and gold with a black visor](docs/preview.jpg)
 
@@ -48,15 +48,22 @@ A pen of light draws a roofer on a blank canvas. A missed call pulses at his han
 ### Stories as data: `stage()`, `validate()`, `schema()`
 
 - **A storyboard is JSON.** `{ version: 1, beats: [...] }`. A beat is one of two kinds:
-  - **A trade:** `trade`, plus optional `draw`, `moment` (`{ text, at, ms }`), `ai`, `fill` (`{ from, ms }`), `caption` (`{ who, did, metric: { to, suffix } }`) and `hold`.
+  - **A trade:** `trade`, plus optional `draw`, `moment` (`{ text, then, at, ms }`: `then` is what it becomes once the AI handles it), `ai`, `fill` (`{ from, ms }`), `caption` (`{ who, did, metric: { to, suffix } }`) and `hold`.
   - **The crew:** `crew` (a list of trades, or `true`), with `caption` and `hold`.
 - **`AuroraField.validate(board, { text })`** checks a board against today's vocabulary and limits. Pass `text` to add house style rules. Use it on anything that came from a server, an editor or an AI.
 - **`AuroraField.schema({ strict: true })`** is the JSON Schema, with the trades as an enum. It's in the shape OpenAI structured outputs accept, so a model can write boards directly.
-- **`AuroraField.stage(canvas, board, opts)`** plays a board and draws the HUD: the moment's pulse, the AI orb, and a caption with a count-up. Restyle it through `.af-hud`, `.af-caption`, `.af-moment` and `.af-orb`, or pass `headless: true` and listen to `phase` and `caption` events.
+- **`AuroraField.stage(canvas, board, opts)`** plays a board and draws the HUD: the moment's pulse, the AI orb, and a caption with a count-up. Every label sits on a plate and is laid out around the drawing (`field.bounds()`), never on top of its lines. Restyle it through `.af-hud`, `.af-caption`, `.af-moment`, `.af-ping`, `.af-lead`, `.af-orb` and `--af-plate`, or pass `headless: true` and listen to `phase`, `caption` and `handled` events.
 - **The stage API:**
   - `stage.load(board)` swaps a story in at the next beat. An invalid board is refused, and the old one plays on.
   - `stage.focus('plumber')` shows one trade and holds it. Use it on hover.
   - With `clock: 'manual'` and `stage.advance(ms)`, you can render or test frame by frame.
+
+### Make a story from a sentence (studio, 3.3)
+
+Open the studio and press **make a story** (or `M`, or go to `?make=1`):
+1. Say what should happen ("a realtor gets a lead at 11 PM and an agent drafts the offer").
+2. Paste a Claude or OpenAI key. The studio tells which one it is, keeps it in your browser, and sends it only to that provider.
+3. Press **Make it**. The story is checked with `validate()`, fixed by the model if it doesn't fit, and plays. Change it in words, or open the JSON underneath to copy or publish it.
 
 ### The builder and his agents (3.1)
 

@@ -1,4 +1,4 @@
-/*! aurora-field v3.2.0 · MIT · https://github.com/mutaaf/aurora-field
+/*! aurora-field v3.3.0 · MIT · https://github.com/mutaaf/aurora-field
  * A particle field that assembles into shapes and morphs between them: a neural sphere
  * with travelling signals, a team of orbs, a stack of platforms, an armoured helm, a ranger
  * helmet, a crew of people a pen draws and light fills (figure(), registerCrew()) — or text,
@@ -17,7 +17,7 @@
   else root.AuroraField = factory();
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
-  var VERSION = '3.2.0';
+  var VERSION = '3.3.0';
   var TAU = Math.PI * 2;
 
   var imul = Math.imul || function (a, b) {
@@ -1686,6 +1686,21 @@
       var kk = D / (D + z); out[0] = cx + (x * c3 - y * s3) * R * kk; out[1] = cy + (x * s3 + y * c3) * R * kk; out[2] = z;
       return out;
     }
+    // the current shape's box on screen, in CSS px: its target points, sampled and projected, from
+    // trimmed by a few stray points at each end so one doesn't stretch it (cached for a frame)
+    var boxAt = -1, boxOf = null, boxVal = null;
+    function byNum(a, b) { return a - b; }
+    function shapeBox() {
+      var sh = S[shape], T0 = sh && sh.T, t = now();
+      if (!T0) return null;
+      if (boxOf === shape && t - boxAt >= 0 && t - boxAt < 30) return boxVal;
+      var step = Math.max(1, Math.floor(N / 400)), xs = [], ys = [], q = [0, 0, 0], i;
+      for (i = 0; i < N; i += step) { proj3([T0[i * 3], T0[i * 3 + 1], T0[i * 3 + 2]], q); xs.push(q[0]); ys.push(q[1]); }
+      xs.sort(byNum); ys.sort(byNum);
+      var lo = Math.floor(xs.length * 0.004), hi = Math.max(lo, Math.ceil(xs.length * 0.996) - 1);
+      boxAt = t; boxOf = shape; boxVal = { x: xs[lo], y: ys[lo], w: xs[hi] - xs[lo], h: ys[hi] - ys[lo] };
+      return boxVal;
+    }
     function draw(t) { projectAll(); if (GLR) GLR.draw(t); else draw2D(t); }
     function draw2D(t) {
       var pal = o.palette, k, j, p, n;
@@ -2327,6 +2342,8 @@
       project: function (p) { var q = proj3(p, [0, 0, 0]); return { x: q[0], y: q[1], z: q[2] }; },
       // the current shape's named anchors (a shape may declare anchors: { name: [x, y, z] }), projected
       anchors: function () { var a = S[shape].def.anchors, res = {}; if (a) for (var k in a) res[k] = api.project(a[k]); return res; },
+      // where the current shape sits on screen: { x, y, w, h } in CSS px, so overlays can keep off the drawing
+      bounds: function () { var b = shapeBox(); return b ? { x: b.x, y: b.y, w: b.w, h: b.h } : null; },
       // the field's current orientation in radians, and the shape radius in CSS px
       view: function () { var y = rotY % TAU; if (y > Math.PI) y -= TAU; if (y < -Math.PI) y += TAU; return { yaw: y, pitch: rotX, roll: rotZ, radius: R, x: cx, y: cy }; },
       // drive input without DOM events (workers, game loops, other platforms): type is
@@ -2466,6 +2483,7 @@
       // the last anchors and view the worker sent (about 30 times a second), for overlays
       anchors: function () { return last.pose ? last.pose.anchors : {}; },
       view: function () { return last.pose ? last.pose.view : null; },
+      bounds: function () { return last.pose ? last.pose.bounds : null; },
       on: function (n, fn) { (EV[n] || (EV[n] = [])).push(fn); return api; },
       off: function (n, fn) { var l = EV[n]; if (l) for (var q = l.length - 1; q >= 0; q--) if (!fn || l[q] === fn) l.splice(q, 1); return api; },
       destroy: function () { call('destroy', []); for (var q = 0; q < listeners.length; q++) listeners[q][0].removeEventListener(listeners[q][1], listeners[q][2]); if (ro) ro.disconnect(); setTimeout(function () { worker.terminate(); }, 50); }
@@ -2487,7 +2505,7 @@
         ['shape', 'stats', 'spinout', 'settled', 'traced', 'untraced'].forEach(function (ev) { field.on(ev, function (d) { scope.postMessage({ type: 'event', name: ev, data: d }); }); });
         // overlays on the main thread follow the field: anchors and the view, about 30 times a second
         var lastPose = 0;
-        field.on('frame', function (t) { if (t - lastPose < 33) return; lastPose = t; scope.postMessage({ type: 'event', name: 'pose', data: { anchors: field.anchors(), view: field.view() } }); });
+        field.on('frame', function (t) { if (t - lastPose < 33) return; lastPose = t; scope.postMessage({ type: 'event', name: 'pose', data: { anchors: field.anchors(), view: field.view(), bounds: field.bounds() } }); });
         scope.postMessage({ type: 'event', name: 'ready', data: { shape: field.shape, renderer: field.stats().renderer } });
       } else if (m.type === 'call' && field && typeof field[m.method] === 'function') field[m.method].apply(field, m.args || []);
     };
@@ -2506,7 +2524,7 @@
   // A storyboard is JSON (validate() checks it, schema() describes it), so it can come from a
   // server, an editor or an AI and change while the page is open: load() swaps it at the next beat.
   //   { version: 1, palette?, light?, loop?: true, beats: [
-  //       { trade: 'roofer' | { pose, props, action }, draw?: { ms }, moment?: { text, at?, ms? }, ai?: { ms?, text? },
+  //       { trade: 'roofer' | { pose, props, action }, draw?: { ms }, moment?: { text, then?, at?, ms? }, ai?: { ms?, text? },
   //         fill?: { from?, ms? }, caption?: { who?, did, metric?: { to, from?, prefix?, suffix?, ms? } }, hold?: ms },
   //       { trade, moment, missed: { text?, ms? }, caption? }   the "before": no AI comes, and the pen takes the drawing back,
   //       { crew: ['contractor', …] | true, caption?, hold? } ] }
@@ -2565,7 +2583,7 @@
       } else if (present(b.trade)) {
         trade(p + '.trade', b.trade);
         if (present(b.draw)) ms(p + '.draw.ms', b.draw.ms);
-        if (present(b.moment)) { text(p + '.moment.text', b.moment.text, LIMITS.moment); ms(p + '.moment.ms', b.moment.ms); if (present(b.moment.at) && ANCHORS.indexOf(b.moment.at) < 0) err(p + '.moment.at', 'must be one of ' + ANCHORS.join(', ')); }
+        if (present(b.moment)) { text(p + '.moment.text', b.moment.text, LIMITS.moment); text(p + '.moment.then', b.moment.then, LIMITS.moment); ms(p + '.moment.ms', b.moment.ms); if (present(b.moment.at) && ANCHORS.indexOf(b.moment.at) < 0) err(p + '.moment.at', 'must be one of ' + ANCHORS.join(', ')); }
         if (present(b.ai)) { ms(p + '.ai.ms', b.ai.ms); text(p + '.ai.text', b.ai.text, LIMITS.moment); }
         if (present(b.missed)) {
           if (!isObj(b.missed)) err(p + '.missed', 'must be { text?, ms? }');
@@ -2595,34 +2613,41 @@
     var str = function (max) { return { type: 'string', maxLength: max }; }, num = { type: 'number' }, msS = { type: 'number', minimum: 0, maximum: LIMITS.ms };
     var anchor = { type: 'string', enum: ANCHORS }, trade = { type: 'string', enum: V.trades };
     var caption = obj({ who: str(LIMITS.who), did: str(LIMITS.did), metric: obj({ to: num, from: num, prefix: str(8), suffix: str(12), ms: msS }, ['to']) }, ['did']);
-    var tradeBeat = obj({ trade: trade, moment: obj({ text: str(LIMITS.moment), at: anchor, ms: msS }, ['text']), ai: obj({ ms: msS, text: str(LIMITS.moment) }), fill: obj({ from: anchor, ms: msS }), missed: obj({ text: str(LIMITS.moment), ms: msS }), caption: caption, hold: msS }, ['trade']);
+    var tradeBeat = obj({ trade: trade, moment: obj({ text: str(LIMITS.moment), then: str(LIMITS.moment), at: anchor, ms: msS }, ['text']), ai: obj({ ms: msS, text: str(LIMITS.moment) }), fill: obj({ from: anchor, ms: msS }), missed: obj({ text: str(LIMITS.moment), ms: msS }), caption: caption, hold: msS }, ['trade']);
     var crewBeat = obj({ crew: { type: 'array', items: trade, minItems: 1, maxItems: LIMITS.crew }, builder: { type: 'boolean' }, caption: caption, hold: msS }, ['crew']);
     var builderBeat = obj({ builder: { type: 'string', enum: BUILDER_BEATS }, prompt: obj({ text: str(LIMITS.prompt), code: { type: 'boolean' }, ms: msS }, ['text']), agents: { type: 'array', items: { type: 'string', enum: V.agents }, minItems: 1, maxItems: 4 }, caption: caption, hold: msS }, ['builder']);
     return obj({ version: { type: 'number', enum: [1] }, loop: { type: 'boolean' }, beats: { type: 'array', minItems: 1, maxItems: LIMITS.beats, items: { anyOf: [tradeBeat, crewBeat, builderBeat] } } }, ['version', 'beats']);
   }
 
+  // every label sits on a plate (--af-plate) that hides the lines behind it, and stage() keeps the
+  // labels off the drawing; the moment's ring stays on its anchor, with a leader line to its label
   var STAGE_CSS = '.af-hud{position:absolute;inset:0;pointer-events:none;font:500 12px/1.35 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--af-ink,#f4efe6)}' +
-    '.af-hud>*{position:absolute;left:0;top:0;opacity:0;transition:opacity .45s ease;will-change:transform}' +
-    '.af-hud .af-on{opacity:1}' +
-    '.af-moment{display:flex;align-items:center;gap:8px;white-space:nowrap;color:var(--af-alert,#ffb547);text-transform:uppercase;letter-spacing:.12em;font-size:11px}' +
-    '.af-moment i{width:12px;height:12px;border-radius:50%;border:2px solid currentColor;flex:none;animation:af-ping 1.1s ease-out infinite}' +
+    '.af-hud>*{position:absolute;left:0;top:0;opacity:0;translate:0 5px;transition:opacity .45s,translate .5s cubic-bezier(.2,.7,.2,1),color .5s;will-change:transform}' +
+    '.af-hud .af-on{opacity:1;translate:0 0}' +
+    '.af-moment,.af-ping,.af-lead{color:var(--af-alert,#ffb547)}.af-hud .af-gone{color:var(--af-lost,#8d8a86)}.af-hud .af-handled{color:var(--af-accent,#7be3c3)}' +
+    '.af-moment{display:flex;align-items:center;gap:8px;padding:5px 11px 5px 9px;border:1px solid rgba(255,255,255,.14);border-radius:999px;background:var(--af-plate,rgba(9,11,13,.9));backdrop-filter:blur(6px);white-space:nowrap;text-transform:uppercase;letter-spacing:.12em;font-size:11px}' +
+    '.af-moment i{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}' +
+    '.af-ping{width:12px;height:12px;margin:-6px 0 0 -6px;border-radius:50%;border:2px solid;translate:0 0;animation:af-ping 1.1s ease-out infinite}' +
     '@keyframes af-ping{0%{box-shadow:0 0 0 0 currentColor}100%{box-shadow:0 0 0 14px transparent}}' +
-    '.af-orb{width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:radial-gradient(circle,#fff 0,var(--af-accent,#7be3c3) 40%,transparent 72%);box-shadow:0 0 22px 6px var(--af-accent,#7be3c3);transition:opacity .4s ease,transform .7s cubic-bezier(.2,.7,.2,1)}' +
-    '.af-caption{min-width:180px;max-width:260px;padding:9px 12px;border:1px solid rgba(255,255,255,.12);border-radius:3px;background:rgba(11,11,13,.72);backdrop-filter:blur(6px)}' +
+    '.af-lead{height:1px;transform-origin:0 0;translate:0 0;background:currentColor}.af-hud .af-lead.af-on{opacity:.45}' +
+    '.af-orb{width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;translate:0 0;background:radial-gradient(circle,#fff 0,var(--af-accent,#7be3c3) 40%,transparent 72%);box-shadow:0 0 22px 6px var(--af-accent,#7be3c3);transition:opacity .4s ease,transform .7s cubic-bezier(.2,.7,.2,1)}' +
+    '.af-caption{min-width:180px;max-width:260px;padding:9px 12px;border:1px solid rgba(255,255,255,.12);border-radius:3px;background:var(--af-plate,rgba(9,11,13,.9));backdrop-filter:blur(6px)}' +
     '.af-caption .af-who{display:flex;align-items:center;gap:7px;font-size:10px;letter-spacing:.14em;text-transform:uppercase;opacity:.6}' +
     '.af-caption .af-who:before{content:"";width:6px;height:6px;border-radius:50%;background:var(--af-accent,#7be3c3);box-shadow:0 0 8px var(--af-accent,#7be3c3)}' +
-    '.af-caption .af-did{margin-top:4px;letter-spacing:.06em;text-transform:uppercase}' +
+    '.af-caption .af-did{display:block;margin-top:4px;letter-spacing:.06em;text-transform:uppercase}' +
     '.af-caption .af-metric{display:block;margin-top:2px;font-size:22px;letter-spacing:0;color:var(--af-accent,#7be3c3)}' +
-    '.af-crewline{left:50%!important;top:auto!important;bottom:10px;transform:translateX(-50%)!important;letter-spacing:.14em;text-transform:uppercase;font-size:10px;opacity:0}' +
-    '.af-prompt{min-width:200px;max-width:300px;padding:9px 12px 10px;border:1px solid rgba(123,227,195,.28);border-radius:4px;background:rgba(8,12,13,.82);backdrop-filter:blur(6px);font-size:12px;color:var(--af-accent,#7be3c3);white-space:pre-wrap;word-break:break-word}' +
+    '.af-crewline{left:50%!important;top:auto!important;bottom:10px;transform:translateX(-50%)!important;padding:5px 12px;border:1px solid rgba(255,255,255,.1);border-radius:999px;background:var(--af-plate,rgba(9,11,13,.9));letter-spacing:.14em;text-transform:uppercase;font-size:10px;white-space:nowrap;opacity:0}' +
+    '.af-prompt{min-width:200px;max-width:300px;padding:9px 12px 10px;border:1px solid rgba(123,227,195,.28);border-radius:4px;background:var(--af-plate,rgba(9,11,13,.9));backdrop-filter:blur(6px);font-size:12px;color:var(--af-accent,#7be3c3);white-space:pre-wrap;word-break:break-word}' +
     '.af-prompt:before{content:attr(data-head);display:block;margin-bottom:5px;font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--af-ink,#f4efe6);opacity:.45}' +
     '.af-prompt b{display:inline-block;width:7px;height:13px;margin-left:2px;vertical-align:-2px;background:currentColor;animation:af-blink 1s steps(1) infinite}' +
     '@keyframes af-blink{50%{opacity:0}}' +
-    '.af-chip{padding:3px 8px;border:1px solid rgba(123,227,195,.35);border-radius:999px;background:rgba(8,12,13,.7);color:var(--af-accent,#7be3c3);font-size:10px;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}' +
-    '.af-moment.af-gone{color:var(--af-lost,#8d8a86)}.af-moment.af-gone i{animation:none;border-style:dashed}.af-moment.af-gone span{text-decoration:line-through;text-decoration-thickness:1px}' +
+    '.af-chip{padding:3px 8px;border:1px solid rgba(123,227,195,.35);border-radius:999px;background:var(--af-plate,rgba(9,11,13,.9));color:var(--af-accent,#7be3c3);font-size:10px;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}' +
+    '.af-gone i{background:none;border:1px dashed}.af-gone span{text-decoration:line-through}.af-ping.af-gone{animation:none;border-style:dashed}' +
+    '.af-ping.af-handled{animation:none;background:currentColor;box-shadow:0 0 12px currentColor}' +
     '.af-caption.af-lost{border-color:rgba(255,181,71,.22)}.af-caption.af-lost .af-who:before{background:var(--af-alert,#ffb547);box-shadow:0 0 8px var(--af-alert,#ffb547)}' +
-    '.af-orb:after{content:attr(data-label);position:absolute;left:20px;top:-2px;white-space:nowrap;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--af-accent,#7be3c3)}' +
-    '@media (prefers-reduced-motion:reduce){.af-moment i,.af-prompt b{animation:none}.af-orb{transition:none}}';
+    '.af-orb:after{content:attr(data-label);position:absolute;left:20px;top:-4px;padding:2px 8px;border:1px solid rgba(123,227,195,.3);border-radius:999px;background:var(--af-plate,rgba(9,11,13,.9));white-space:nowrap;font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--af-accent,#7be3c3)}' +
+    '.af-orb.af-left:after{left:auto;right:20px}.af-orb.af-below:after{left:50%;top:20px;transform:translateX(-50%)}' +
+    '@media (prefers-reduced-motion:reduce){.af-ping,.af-prompt b{animation:none}.af-orb{transition:none}.af-hud>*{translate:none}}';
   var cssDone = false;
 
   function stage(canvas, sb, opts) {
@@ -2673,12 +2698,39 @@
       hud = doc.createElement('div'); hud.className = 'af-hud'; hud.setAttribute('aria-hidden', 'true');
       if (win && win.getComputedStyle(host).position === 'static') host.style.position = 'relative';
       host.appendChild(hud);
-      ['moment', 'orb', 'caption', 'crewline', 'prompt'].forEach(function (k) { var d = doc.createElement('div'); d.className = 'af-' + k; hud.appendChild(d); el[k] = d; });
+      ['lead', 'ping', 'moment', 'orb', 'caption', 'crewline', 'prompt'].forEach(function (k) { var d = doc.createElement('div'); d.className = 'af-' + k; hud.appendChild(d); el[k] = d; });
       el.chips = [];
     }
     var mods = {};   // extra classes per overlay: the moment once it's gone, the caption of a loss
     function show(k, on) { if (el[k]) el[k].className = 'af-' + k + (mods[k] ? ' ' + mods[k] : '') + (on ? ' af-on' : ''); emit('overlay', { el: k, on: !!on }); }
-    function place(k, x, y) { if (el[k]) el[k].style.transform = 'translate3d(' + Math.round(x) + 'px,' + Math.round(y) + 'px,0)'; }
+    var orbAt = null;
+    function place(k, x, y) { if (k === 'orb') orbAt = [x, y]; if (el[k]) el[k].style.transform = 'translate3d(' + Math.round(x) + 'px,' + Math.round(y) + 'px,0)'; }
+    // the moment is three pieces: the ring on its anchor, the label, and a leader line between them
+    function moment(on, mod) {
+      if (mod !== undefined) mods.moment = mods.ping = mods.lead = mod;
+      show('moment', on); if (el.ping) { show('ping', on); show('lead', on); }
+    }
+    // text never sits on the drawing: each label takes the first spot, in its order of preference, that
+    // is on the stage and clear of the figure's box and the labels placed before it, and keeps that spot
+    // through the beat while it still (nearly) fits; next best is a spot that only grazes the margin
+    // around the figure (clear of the figure itself); last, the one that covers least
+    var spots = {}, rawBox = null;
+    function covered(r, rs) {
+      var a = 0;
+      for (var i = 0; i < rs.length; i++) { var o = rs[i], dx = Math.min(r.x + r.w, o.x + o.w) - Math.max(r.x, o.x), dy = Math.min(r.y + r.h, o.y + o.h) - Math.max(r.y, o.y); if (dx > 0 && dy > 0) a += dx * dy; }
+      return a;
+    }
+    function settle(k, w, h, cands, taken, W, H) {
+      var soft = rawBox ? [rawBox].concat(taken.slice(1)) : taken, best = -1, bs = 1e18, out = null, i, r, a, sc;
+      for (i = 0; i < cands.length; i++) {
+        r = { x: Math.max(6, Math.min(W - w - 6, cands[i][0])), y: Math.max(6, Math.min(H - h - 6, cands[i][1])), w: w, h: h };
+        a = covered(r, taken); sc = a ? (covered(r, soft) ? 2e9 + a : 1e9) : 0;   // clear, then clear of the figure itself, then least covered
+        if (i === spots[k] && sc < 2e9 && a <= w * h * 0.04) sc = -1;              // the spot it had, while it still (nearly) fits
+        if (sc < bs) { bs = sc; best = i; out = r; }
+      }
+      spots[k] = best; taken.push(out);
+      return out;
+    }
     var metric = null, typing = null;
     // the prompt: a terminal over the builder's screen that types itself out
     function typeOut(text, head, ms) {
@@ -2708,28 +2760,53 @@
       Q.sort(function (a, b) { return a.t - b.t; });
       while (Q.length && Q[0].t <= now) Q.shift().fn();
       if (headless) return;
-      var W = host.clientWidth, H = host.clientHeight, lowCap = beat && present(beat.builder) && !present(beat.crew), c = lowCap ? null : anchor('chest');
-      if (lowCap) place('caption', 12, Math.max(8, H - (el.caption.offsetHeight || 54) - 14));   // builder beats: the caption sits low, clear of the screen and the agents
-      else if (c) {
-        var cap = el.caption, x = Math.min(W - (cap.offsetWidth || 200) - 8, Math.max(8, c.x + W * 0.12));
-        place('caption', x, Math.max(8, c.y - 24));
-      }
-      if (beat && beat.moment) {   // right of its anchor; flipped to the left when it would run off the stage
-        var m = anchor(beat.moment.at || 'prop'), mw = el.moment.offsetWidth || 160;
-        if (m) place('moment', m.x + 10 + mw > W - 8 ? Math.max(8, m.x - 10 - mw) : m.x + 10, m.y - 6);
-      }
-      var scr = anchor('prop') || anchor('0.prop'), hd = field.anchors().head || field.anchors()['0.head'];
-      if (scr && el.prompt) {   // the prompt floats above the builder's head, toward his screen
-        var pw = el.prompt.offsetWidth || 220, ph2 = el.prompt.offsetHeight || 60, top = Math.min(scr.y, hd ? hd.y : scr.y);
-        place('prompt', Math.min(W - pw - 8, Math.max(8, (hd ? (hd.x + scr.x) / 2 : scr.x) - pw / 2)), Math.max(8, top - ph2 - 14));
-      }
-      if (el.chips.length) {   // one row per agent, stacked above the highest head, each over its own agent
-        var AN = field.anchors(), topY = 1e9;
+      var W = host.clientWidth, H = host.clientHeight, lowCap = beat && present(beat.builder) && !present(beat.crew), AN = field.anchors(), taken = [];
+      var B = field.bounds ? field.bounds() : null;
+      rawBox = B;
+      if (B) { B = { x: B.x - 14, y: B.y - 12, w: B.w + 28, h: B.h + 24 }; taken.push(B); }
+      else B = { x: W * 0.5, y: H * 0.5, w: 0, h: 0 };
+      var bx = B.x + B.w / 2, r;
+      if (el.chips.length) {   // one row per agent, stacked above the box, each over its own agent
+        var topY = 1e9;
         for (var ci = 0; ci < el.chips.length; ci++) { var a0 = AN[(ci + 1) + '.head']; if (a0) topY = Math.min(topY, a0.y); }
+        var base = Math.min(topY - 34, B.y - 26);
         for (ci = 0; ci < el.chips.length; ci++) {
-          var ah = AN[(ci + 1) + '.head'], cw = el.chips[ci].offsetWidth || 110;
-          if (ah) el.chips[ci].style.transform = 'translate3d(' + Math.round(Math.min(W - cw - 6, Math.max(6, ah.x - cw / 2))) + 'px,' + Math.round(topY - 34 - (el.chips.length - 1 - ci) * 28) + 'px,0)';
+          var ah = AN[(ci + 1) + '.head'], cw = el.chips[ci].offsetWidth || 110, cx0 = ah ? Math.min(W - cw - 6, Math.max(6, ah.x - cw / 2)) : 6, cy0 = Math.max(6, base - (el.chips.length - 1 - ci) * 28);
+          el.chips[ci].style.transform = 'translate3d(' + Math.round(cx0) + 'px,' + Math.round(cy0) + 'px,0)';
+          taken.push({ x: cx0, y: cy0, w: cw, h: 22 });
         }
+      }
+      var scr = AN.prop || AN['0.prop'], hd = AN.head || AN['0.head'];
+      if (scr && el.prompt && /af-on/.test(el.prompt.className)) {   // the prompt floats above the builder, toward his screen
+        var pw = el.prompt.offsetWidth || 220, ph2 = el.prompt.offsetHeight || 60, pcx = (hd ? (hd.x + scr.x) / 2 : scr.x) - pw / 2;
+        r = settle('prompt', pw, ph2, [[pcx, B.y - ph2 - 8], [B.x + B.w + 8, B.y], [B.x - pw - 8, B.y], [pcx, Math.min(scr.y, hd ? hd.y : scr.y) - ph2 - 14]], taken, W, H);
+        place('prompt', r.x, r.y);
+      }
+      if (beat && beat.moment && /af-on/.test(el.moment.className)) {   // first pick, being tied to a point: the label beside the box on the anchor's side, a leader to the ring
+        var m = anchor(beat.moment.at || 'prop'), mw = el.moment.offsetWidth || 160, mh = el.moment.offsetHeight || 26;
+        if (m) {
+          var right = [B.x + B.w + 8, m.y - mh / 2], left = [B.x - mw - 8, m.y - mh / 2];
+          r = settle('moment', mw, mh, (m.x >= bx ? [right, left] : [left, right]).concat([[m.x - mw / 2, B.y - mh - 8], [m.x - mw / 2, B.y + B.h + 8], [6, 6], [W - mw - 6, 6]]), taken, W, H);
+          place('moment', r.x, r.y); place('ping', m.x, m.y);
+          var lx = Math.max(r.x, Math.min(r.x + mw, m.x)), ly = Math.max(r.y, Math.min(r.y + mh, m.y)), dx = lx - m.x, dy = ly - m.y, len = Math.sqrt(dx * dx + dy * dy);
+          if (el.lead) {
+            el.lead.style.visibility = len > 18 ? '' : 'hidden';
+            el.lead.style.width = Math.max(0, len - 9) + 'px';
+            el.lead.style.transform = 'translate3d(' + (m.x + dx / len * 9 || m.x) + 'px,' + (m.y + dy / len * 9 || m.y) + 'px,0) rotate(' + Math.atan2(dy, dx) + 'rad)';
+          }
+        }
+      }
+      if (el.caption && /af-on/.test(el.caption.className)) {
+        var cap = el.caption, kw = cap.offsetWidth || 200, kh = cap.offsetHeight || 54, c = AN.chest, ay = c ? c.y - 24 : B.y;
+        var sides = [[B.x + B.w + 8, ay], [B.x - kw - 8, ay], [bx - kw / 2, B.y - kh - 8], [bx - kw / 2, B.y + B.h + 8], [6, 6], [W - kw - 6, 6], [6, H - kh - 6], [W - kw - 6, H - kh - 6]];
+        // builder beats: the caption sits low, clear of the screen and the agents
+        r = settle('caption', kw, kh, lowCap ? [[12, H - kh - 14], [W - kw - 12, H - kh - 14], [bx - kw / 2, B.y + B.h + 8]].concat(sides) : sides, taken, W, H);
+        place('caption', r.x, r.y);
+      }
+      if (el.orb && orbAt) {   // the orb's label points away from the figure; under the orb when neither side has room
+        var lw = ((el.orb.getAttribute('data-label') || '').length * 7.6) + 40, roomL = orbAt[0] - 8, roomR = W - orbAt[0] - 8;
+        var fitsL = roomL >= lw, fitsR = roomR >= lw, side = orbAt[0] < bx ? (fitsL ? 'af-left' : fitsR ? '' : 'af-below') : (fitsR ? '' : fitsL ? 'af-left' : 'af-below');
+        if (side !== (mods.orb || '')) { mods.orb = side; show('orb', /af-on/.test(el.orb.className)); }
       }
       if (typing && el.prompt) {
         var nch = Math.min(typing.text.length, Math.floor((now - typing.t0) / typing.per));
@@ -2750,7 +2827,7 @@
       if (i >= board.beats.length) { if (board.loop === false) return; i = 0; emit('loop'); }
       if (still) for (var sk = 0; sk < board.beats.length && board.beats[i].missed; sk++) i = (i + 1) % board.beats.length;   // reduced motion holds one beat: never the loss
       idx = i; beat = board.beats[i]; emit('beat', { index: i, beat: beat });
-      mods = {}; show('moment', false); show('orb', false); show('crewline', false); show('prompt', false); typing = null; chips([]); setCaption(null);
+      mods = {}; spots = {}; orbAt = null; moment(false); show('orb', false); show('crewline', false); show('prompt', false); typing = null; chips([]); setCaption(null);
       fit(present(beat.crew) || beat.builder === 'agents');
       if (present(beat.builder) && !present(beat.crew)) return builderBeat(beat);
       if (present(beat.crew)) {
@@ -2770,17 +2847,19 @@
       if (b.moment) {
         emit('phase', { index: idx, phase: phase, text: b.moment.text });
         if (el.moment) el.moment.innerHTML = '<i></i><span></span>', el.moment.querySelector('span').textContent = b.moment.text;
-        show('moment', true);
+        moment(true);
       }
       if (b.missed) return at(b.moment ? (b.moment.ms || 1400) : 0, function () { missed(b); });
       at(b.moment ? (b.moment.ms || 1400) : 0, function () {
         phase = 'ai'; emit('phase', { index: idx, phase: phase });
         var dur = (b.ai && b.ai.ms) || 900, m = anchor((b.moment && b.moment.at) || 'prop'), h = anchor('head');
         if (el.orb && m) { el.orb.setAttribute('data-label', (b.ai && b.ai.text) || 'AI agent'); place('orb', 20, 20); show('orb', true); at(30, function () { place('orb', m.x, m.y); }); at(dur * 0.6, function () { if (h) place('orb', h.x, h.y); }); }
+        // the AI reaches the moment: it turns from the alarm to handled (moment.then), before the light fills in
+        if (b.moment && b.moment.then) at(dur * 0.45, function () { if (el.moment) el.moment.querySelector('span').textContent = b.moment.then; moment(true, 'af-handled'); emit('handled', { index: idx, text: b.moment.then }); });
         field.signal('head', 40, 6);
         at(dur, function () {
           phase = 'fill'; emit('phase', { index: idx, phase: phase });
-          show('moment', false); show('orb', false);
+          moment(false); show('orb', false);
           shapeName = 'crew:' + b._k + ':lit';
           field.setShape(shapeName, { pin: 1e9, arrive: { from: (b.fill && b.fill.from) || 'chest', ms: (b.fill && b.fill.ms) || 1100 } }).signal('chest', 30, 8);
           at(((b.fill && b.fill.ms) || 1100) * 0.6, function () { phase = 'caption'; emit('phase', { index: idx, phase: phase }); setCaption(b.caption); });
@@ -2793,7 +2872,7 @@
       var ums = b.missed.ms || 1800;
       phase = 'missed'; emit('phase', { index: idx, phase: phase, text: b.missed.text });
       if (b.missed.text && el.moment) el.moment.querySelector('span').textContent = b.missed.text;
-      mods.moment = 'af-gone'; show('moment', !!b.moment);
+      moment(!!b.moment, 'af-gone');
       at(500, function () { field.untrace(ums); });
       at(500 + ums * 0.55, function () { mods.caption = 'af-lost'; setCaption(b.caption); });
       at(500 + ums + (b.hold || 2400), next);

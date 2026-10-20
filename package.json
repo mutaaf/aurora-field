@@ -1,6 +1,6 @@
 {
   "name": "aurora-field",
-  "version": "3.2.0",
+  "version": "3.3.0",
   "description": "A zero-dependency WebGL particle field: lit, solid shapes that morph; people drawn by a pen of light then lit; storyboards as JSON on a stage; React. Text, SVG, images, rigged helmets, a web component, worker mode.",
   "main": "src/aurora-field.js",
   "browser": "src/aurora-field.js",
