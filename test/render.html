@@ -18,6 +18,7 @@
     var o = { clock: 'manual', crew: true, seed: 7, cycle: 0, stars: 30, count: 5600, palette: PAL, light: LIGHT, autonomy: 0.45, interactive: false, autoPause: false, container: stage };
     for (var k in c.opts || {}) o[k] = c.opts[k];
     if (typeof o.radius === 'number') { var rv = o.radius; o.radius = function () { return rv; }; }
+    if (o.builder) { AF.registerBuilder(o.builder === true ? null : o.builder); delete o.builder; }
     o.shapes = c.shapes; o.initial = c.steps[0][0];
     var f = AF.create(cv, o);
     for (var i = 0; i < c.steps.length; i++) {

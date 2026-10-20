@@ -1,7 +1,7 @@
 <!doctype html><html><head><meta charset="utf-8"><style>html,body{margin:0;background:#0b0b0d}#s{position:relative;width:560px;height:620px}#s canvas{position:absolute;inset:0;width:100%;height:100%}</style></head>
 <body><div id="s"><canvas id="c"></canvas></div><script src="../src/aurora-field.js"></script><script>
 // drives a stage on a manual clock for screenshots: window.go(ms) advances it
-fetch('../examples/missed-moment.json').then(function (r) { return r.json(); }).then(function (sb) {
+fetch('../examples/' + (new URLSearchParams(location.search).get('board') || 'missed-moment') + '.json').then(function (r) { return r.json(); }).then(function (sb) {
   window.LOG = [];
   window.ST = AuroraField.stage(document.getElementById('c'), sb, { clock: 'manual', count: 5600, interactive: false, radius: function () { return 230; } });
   ST.on('phase', function (p) { LOG.push(p.index + ':' + p.phase); });

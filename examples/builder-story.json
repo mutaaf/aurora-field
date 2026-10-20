@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "loop": true,
+  "beats": [
+    {
+      "builder": "typing",
+      "prompt": {
+        "text": "agents.run('answer-calls', { after: '6pm' })",
+        "code": true
+      },
+      "caption": {
+        "who": "The builder",
+        "did": "Writing the system"
+      },
+      "hold": 2600
+    },
+    {
+      "builder": "prompting",
+      "prompt": {
+        "text": "answer every missed call and book the job"
+      },
+      "caption": {
+        "who": "The builder",
+        "did": "Prompting the agents"
+      },
+      "hold": 1800
+    },
+    {
+      "builder": "agents",
+      "agents": [
+        "answer",
+        "estimate",
+        "review"
+      ],
+      "caption": {
+        "who": "The agents",
+        "did": "On it, around the clock"
+      },
+      "hold": 3400
+    },
+    {
+      "trade": "roofer",
+      "moment": {
+        "text": "9:47 PM · missed call",
+        "at": "hand"
+      },
+      "ai": {
+        "text": "Agent · answering"
+      },
+      "caption": {
+        "who": "Roofer",
+        "did": "Call answered · job booked"
+      }
+    },
+    {
+      "trade": "plumber",
+      "moment": {
+        "text": "Sat 7:12 AM · voicemail",
+        "at": "prop"
+      },
+      "ai": {
+        "text": "Agent · estimating"
+      },
+      "caption": {
+        "who": "Plumber",
+        "did": "Estimate sent · under an hour"
+      }
+    },
+    {
+      "crew": true,
+      "builder": true,
+      "caption": {
+        "did": "Your whole crew · on autopilot"
+      },
+      "hold": 5000
+    }
+  ]
+}

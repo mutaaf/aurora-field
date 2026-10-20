@@ -27,6 +27,14 @@ const SHEETS = {
   close: { cols: 3, cells: ['contractor', 'roofer', 'realtor'].map(t => ({ label: `${t} · lit close`, shapes: [lit(t)], steps: [[lit(t), 2600]], opts: { radius: 220 } })) },
   // every trade in the vocabulary: drawn, then lit
   trades: { cols: 6, cells: ['contractor', 'plumber', 'electrician', 'roofer', 'manager', 'realtor', 'hvac', 'painter', 'landscaper', 'cleaner', 'pest', 'pool', 'restoration', 'mover', 'solar', 'window', 'garagedoor', 'arborist', 'fencer', 'concrete', 'host'].filter(t => !ONLY || ONLY.includes(t)).flatMap(t => [{ label: t + ' · drawn', shapes: [line(t)], steps: [[line(t), 3200]], opts: { blank: true, stars: 0 } }, { label: t + ' · lit', shapes: [lit(t)], steps: [[lit(t), 2600]], opts: { stars: 0 } }]) },
+  // the builder at his desk: drawn, lit, prompting, and with his agents
+  builder: { cols: 3, cells: [
+    { label: 'builder · pen 50%', shapes: ['builder:typing:line'], steps: [['builder:typing:line', 1300]], opts: { blank: true, builder: true } },
+    { label: 'builder · drawn', shapes: ['builder:typing:line'], steps: [['builder:typing:line', 3400]], opts: { blank: true, builder: true } },
+    { label: 'builder · typing, lit', shapes: ['builder:typing:lit'], steps: [['builder:typing:lit', 2600]], opts: { builder: true } },
+    { label: 'builder · prompting', shapes: ['builder:prompting:lit'], steps: [['builder:prompting:lit', 2600]], opts: { builder: true } },
+    { label: 'builder · agents at work', shapes: ['builder:agents:answer+estimate+review'], steps: [['builder:agents:answer+estimate+review', 3000]], opts: { builder: ['answer', 'estimate', 'review'] } }
+  ] },
   // the crew, the 2D fallback, reduced motion
   crew: { cols: 3, cells: [
     { label: 'crew:all', shapes: ['crew:all'], steps: [['crew:all', 3000]] },

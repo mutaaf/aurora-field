@@ -200,6 +200,8 @@ export interface ActionTerm { pivot: string; joint: string; axis: Vec3; amp: num
 export interface FigureSpec {
   /** A named pose, or joint positions (pelvis, chest, neck, head, shL/elL/haL, shR/elR/haR, hipL/knL/anL/toL, hipR/knR/anR/toR) in a ~1.8-tall box, y down, facing −z. */
   pose?: PoseName | Record<string, Vec3>;
+  /** Turn the whole figure about the vertical (radians), e.g. three-quarters to a desk. */
+  yaw?: number;
   /** The idle action: a name (defaults to the pose's own) or terms as data. */
   action?: string | ActionTerm[];
   props?: Array<PropName | PropDef>;
@@ -218,14 +220,21 @@ export function trades(): CrewName[];
 export interface Plugin { poses?: Record<string, Record<string, Vec3>>; props?: Record<string, PropDef>; actions?: Record<string, ActionTerm[]>; trades?: Record<string, FigureSpec>; palettes?: Record<string, Partial<Palette>>; shapes?: Record<string, ShapeBuilder | ShapeData>; beats?: Record<string, unknown> }
 /** Add vocabulary and shapes without touching the engine. Chainable. */
 export function use(plugin: Plugin): typeof AuroraField;
-export function vocab(): { poses: string[]; props: string[]; actions: string[]; trades: string[]; palettes: string[]; joints: string[] };
+export function vocab(): { poses: string[]; props: string[]; actions: string[]; trades: string[]; agents: string[]; palettes: string[]; joints: string[] };
+/** Register builder:typing|prompting:line|lit and, given jobs, builder:agents:<job+job…>; returns that name. */
+export function registerBuilder(jobs?: AgentJob[]): string | null;
+export function agents(): AgentJob[];
 
 export type Anchor = 'head' | 'chest' | 'hand' | 'prop' | 'feet';
 export interface Caption { who?: string; did: string; metric?: { to: number; from?: number; prefix?: string; suffix?: string; ms?: number } }
 export interface TradeBeat { trade: CrewName | FigureSpec; draw?: { ms?: number }; moment?: { text: string; at?: Anchor; ms?: number }; ai?: { ms?: number; text?: string }; fill?: { from?: Anchor; ms?: number }; caption?: Caption; hold?: number }
-export interface CrewBeat { crew: CrewName[] | true; caption?: Caption; hold?: number }
+/** with builder: true, the builder sits at his desk front and centre of the lineup */
+export interface CrewBeat { crew: CrewName[] | true; builder?: boolean; caption?: Caption; hold?: number }
+export type AgentJob = 'answer' | 'estimate' | 'review' | 'schedule' | 'followup' | 'analyze' | (string & {});
+/** The person behind the agents: typing (drawn by the pen, then lit, with code typing on his screen), prompting (a prompt types itself, an agent leaves the screen), agents (his agents at work, threads from his screen). */
+export interface BuilderBeat { builder: 'typing' | 'prompting' | 'agents'; prompt?: { text: string; code?: boolean; ms?: number }; agents?: AgentJob[]; caption?: Caption; hold?: number }
 /** A story as data: trades drawn, the moment it went wrong, the AI, the fill, the outcome; then the crew. */
-export interface Storyboard { version: 1; loop?: boolean; palette?: PaletteName | Partial<Palette>; light?: Partial<LightRig>; beats: Array<TradeBeat | CrewBeat> }
+export interface Storyboard { version: 1; loop?: boolean; palette?: PaletteName | Partial<Palette>; light?: Partial<LightRig>; beats: Array<TradeBeat | CrewBeat | BuilderBeat> }
 export interface StageOptions extends Pick<Options, 'container' | 'stage' | 'count' | 'radius' | 'depth' | 'interactive' | 'quality' | 'renderer' | 'reducedMotion' | 'clock' | 'maxDpr' | 'seed' | 'stars' | 'palette' | 'light'> {
   /** No DOM overlay: listen to 'phase', 'caption' and 'overlay' events and draw your own. */
   headless?: boolean;
@@ -234,8 +243,8 @@ export interface StageOptions extends Pick<Options, 'container' | 'stage' | 'cou
   /** Extra text rules for validate(), e.g. house style; return a message to refuse. */
   text?: (value: string, path: string) => string | null | undefined;
 }
-export interface StageBeatEvent { index: number; beat: TradeBeat | CrewBeat }
-export interface StagePhaseEvent { index: number; phase: 'draw' | 'moment' | 'ai' | 'fill' | 'caption' | 'crew' | 'hold'; text?: string }
+export interface StageBeatEvent { index: number; beat: TradeBeat | CrewBeat | BuilderBeat }
+export interface StagePhaseEvent { index: number; phase: 'draw' | 'moment' | 'ai' | 'fill' | 'caption' | 'crew' | 'hold' | 'typing' | 'prompting' | 'agents'; text?: string }
 export interface Stage {
   readonly field: Field; readonly storyboard: Storyboard; readonly index: number; readonly phase: string;
   /** Swap in a storyboard at the next beat; returns the validation (an invalid board is refused, the old one plays on). */
@@ -249,6 +258,8 @@ export interface Stage {
   on(event: 'phase', fn: (e: StagePhaseEvent) => void): Stage;
   on(event: 'caption', fn: (c: Caption) => void): Stage;
   on(event: 'overlay', fn: (e: { el: string; on: boolean }) => void): Stage;
+  on(event: 'prompt', fn: (e: { text: string }) => void): Stage;
+  on(event: 'chips', fn: (labels: string[]) => void): Stage;
   on(event: 'load' | 'loop', fn: (a?: unknown) => void): Stage;
   off(event: string, fn?: (...a: any[]) => void): Stage;
   destroy(): void;
@@ -269,7 +280,7 @@ declare const AuroraField: {
   armour: typeof armour; offload: typeof offload; serve: typeof serve; fromPoints: typeof fromPoints; fromSVG: typeof fromSVG;
   fromImage: typeof fromImage; fromText: typeof fromText; parsePath: typeof parsePath;
   figure: typeof figure; group: typeof group; registerCrew: typeof registerCrew; crew: typeof crew; poses: typeof poses;
-  use: typeof use; vocab: typeof vocab; crewGroup: typeof crewGroup; trades: typeof trades; stage: typeof stage; validate: typeof validate; schema: typeof schema;
+  use: typeof use; vocab: typeof vocab; crewGroup: typeof crewGroup; trades: typeof trades; stage: typeof stage; validate: typeof validate; schema: typeof schema; registerBuilder: typeof registerBuilder; agents: typeof agents;
 };
 export default AuroraField;
 declare global { interface Window { AuroraField: typeof AuroraField } }

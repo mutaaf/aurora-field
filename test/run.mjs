@@ -523,6 +523,30 @@ test('3.0: storyboards validate, describe themselves, and play on a stage', () =
   st.destroy();
 });
 
+test('3.1: the builder at his desk, his agents, and the builder beats on a stage', () => {
+  AF.registerBuilder(['answer', 'estimate']);
+  for (const nm of ['builder:typing:line', 'builder:typing:lit', 'builder:prompting:lit', 'builder:agents:answer+estimate']) {
+    const s = AF.build(nm, 1500, 3); assert.equal(s.points.length, 1500, nm);
+    for (const p of s.points) for (const c of p) assert.ok(Number.isFinite(c) && Math.abs(c) <= 1.3, nm + ' ' + c);
+  }
+  const g = AF.build('builder:agents:answer+estimate', 1500, 3);
+  assert.equal(g.links.length, 2, 'a thread from the screen to each agent'); assert.ok(g.anchors['0.prop'] && g.anchors['2.head']);
+  const seated = AF.build('builder:typing:lit', 1500, 3), feet = Math.max(...seated.points.map(p => p[1]));
+  assert.ok(feet < 0.85, 'seated: the body sits lower than a standing one');
+  const sb = JSON.parse(readFileSync(new URL('../examples/builder-story.json', import.meta.url), 'utf8'));
+  assert.deepEqual(AF.validate(sb), { ok: true, errors: [] });
+  const bad = AF.validate({ version: 1, beats: [{ builder: 'dancing' }, { builder: 'agents', agents: ['astronaut'] }, { builder: 'agents' }, { crew: true, builder: 'yes' }] });
+  assert.ok(bad.errors.length >= 4, bad.errors.join(' | '));
+  const env = stubEnv({ gl: true }), seen = [], prompts = [], chips = [];
+  const st = AF.stage(env.canvas, sb, { clock: 'manual', count: 900, headless: true });
+  st.on('phase', p => seen.push(p.index + ':' + p.phase)).on('prompt', p => prompts.push(p.text)).on('chips', c => chips.push(c));
+  for (let k = 0; k < 140; k++) st.advance(500);
+  for (const want of ['0:typing', '1:prompting', '1:ai', '2:agents', '3:fill', '5:crew']) assert.ok(seen.includes(want), 'saw ' + want + ' in ' + seen.join(','));
+  assert.ok(prompts.some(t => t.startsWith('> answer every missed call')), 'the prompt types out');
+  assert.deepEqual(chips.find(c => c.length), ['Answering calls', 'Writing estimates', 'Requesting reviews']);
+  st.destroy();
+});
+
 test('create: refuses a missing canvas', () => {
   assert.throws(() => AF.create(null), /canvas/);
 });

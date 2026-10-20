@@ -1,5 +1,21 @@
 # Changelog
 
+## 3.1.0 — 2026-10-20
+- **The builder, and his agents.** A new storyline: the person behind the AI.
+  - `builder` beats on the stage: `typing` (the pen draws him at his desk, he fills with light, and code types out over his screen), `prompting` (a prompt types itself and an AI agent leaves the screen) and `agents` (his agents step out of the screen, each labelled with its job, threads running from his screen to each of them).
+  - Crew beats take `builder: true`: he sits at his desk front and centre while the crew stands lit behind him.
+  - Trade beats label the AI orb (`ai.text`, e.g. "Agent · answering").
+- **New vocabulary:**
+  - Seated poses `typing` and `prompting` (the torso now follows the pelvis), with typing and thinking motions.
+  - Props `desk`, `keyboard`, `monitor`, `chair` and `visor`.
+  - Agent jobs `answer`, `estimate`, `review`, `schedule`, `followup` and `analyze`.
+  - `registerBuilder(jobs)`, `agents()`, `vocab().agents`.
+- **`figure({ yaw })`** turns a figure three-quarters. Joints, props, motions and the torso all turn with it, and the outline is drawn from the turned view.
+- **Group improvements:** `group(parts, { links, anchors })` draws threads between anchors. Parts take a weight, and lit parts keep their edges out of the group.
+- **Crisper props:** surfels are capped at a primitive's thickness, so thin legs, rails and plates stay crisp.
+- **New HUD:** a prompt terminal (`.af-prompt`) and agent chips (`.af-chip`). Headless stages emit `prompt` and `chips` events.
+- **Bundle budget:** now 48 KB gzipped, up from 45 (45.5 today with the builder and agents).
+
 ## 3.0.0 — 2026-10-19
 - **Stories as data.**
   - `stage(canvas, board, opts)` plays a storyboard. Each trade beat runs the pen's drawing, the moment it went wrong (a pulse at an anchor), an AI orb, light spreading from the chest, and a caption with a count-up. Crew beats line up a lit crew.

@@ -58,6 +58,27 @@ A pen of light draws a roofer on a blank canvas. A missed call pulses at his han
   - `stage.focus('plumber')` shows one trade and holds it. Use it on hover.
   - With `clock: 'manual'` and `stage.advance(ms)`, you can render or test frame by frame.
 
+### The builder and his agents (3.1)
+
+A story can start with the person behind the AI:
+
+```js
+{ builder: 'typing', prompt: { text: "agents.run('answer-calls')", code: true }, caption: { who: 'The builder', did: 'Writing the system' } },
+{ builder: 'prompting', prompt: { text: 'answer every missed call and book the job' } },
+{ builder: 'agents', agents: ['answer', 'estimate', 'review'] },
+{ trade: 'roofer', moment: { text: '9:47 PM · missed call', at: 'hand' }, ai: { text: 'Agent · answering' }, caption: { did: 'Call answered · job booked' } },
+{ crew: true, builder: true, caption: { did: 'Your whole crew · on autopilot' } }
+```
+
+In order:
+1. The pen draws him at his desk, three-quarters on, and code types out over his screen.
+2. His prompt types itself, and an agent leaves the screen.
+3. His agents step out to work, each labelled with its job.
+4. They catch the roofer's missed call.
+5. He sits front and centre while the crew stands lit behind him.
+
+See `examples/builder-story.json`.
+
 ### React: `aurora-field/react`
 
 ```jsx
