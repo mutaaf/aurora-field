@@ -1,5 +1,16 @@
 # Changelog
 
+## 3.3.0 — 2026-10-19
+- **Text never sits under the lines.** The stage lays its labels out around the drawing instead of on it:
+  - `field.bounds()` gives the current shape's box on screen, in CSS px (worker mode too).
+  - Each label takes the first spot that is on the stage and clear of the figure and of the labels already placed: the caption beside the figure (or above, or below), the moment beside it on its anchor's side, the prompt above the builder. A label keeps its spot through the beat while it still fits.
+  - Every label sits on a plate (`--af-plate`) that hides whatever is behind it, the orb's label included, and the orb's label points away from the figure.
+  - The moment is now three pieces: a ring on its anchor (`.af-ping`), the label (`.af-moment`), and a leader line between them (`.af-lead`).
+  - Labels ease in with a short rise as well as a fade.
+- **The moment turns to handled.** `moment.then` is what the moment becomes once the AI reaches it (e.g. "9:47 PM · answered"). The label and its ring turn from the alarm colour to the accent (`.af-handled`), and the stage emits `handled`. With `missed`, a story can show the same moment three ways: ringing, lost, handled.
+- **The studio makes stories from a sentence, with your own key.** Press *make a story* (or `M`). Say what should happen, and paste a Claude or OpenAI key: the studio tells which one it is, keeps it in your browser, and sends it only to that provider. The story is checked with `validate()`, repaired by the model if it doesn't fit, and plays. Then you can change it in words ("faster", "add a painter"), and the JSON, copy and publish tools are still underneath.
+- Studio: the top bar's snapshot, record and link buttons take clicks again.
+
 ## 3.2.0 — 2026-10-20
 - **The miss, before the catch.** A trade beat can take `missed: { text?, ms? }`: the moment rings out, no AI comes, the moment's label turns to `text` (struck through), and the pen runs back over the drawing and takes it with it. Then the loss gets its caption. Play the same moment again later, caught, and the story has a before and after.
   - `field.untrace(ms)` runs the pen backwards over the current traced shape, and the field emits `untraced` when it's done (worker mode too).

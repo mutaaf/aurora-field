@@ -34,6 +34,7 @@
   .top a{color:var(--dim);text-decoration:none}
   .top a:hover{color:var(--aurora)}
   .pill{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:8px;min-height:32px;padding:0 12px;border-radius:999px;font:11.5px var(--mono);letter-spacing:.06em;color:var(--dim);box-shadow:inset 0 0 0 1px #263036;background:rgba(8,11,13,.5);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);transition:color .2s,box-shadow .2s}
+  .top .pill{pointer-events:auto}   /* all:unset above would inherit the bar's pointer-events:none */
   .pill:hover{color:var(--ink);box-shadow:inset 0 0 0 1px #45515A}
   .pill:focus-visible{outline:2px solid var(--aurora);outline-offset:2px}
   .pill[aria-pressed="true"]{color:var(--night);background:var(--aurora);box-shadow:none}
@@ -135,6 +136,7 @@
 <header class="top">
   <b>aurora-field</b><span class="hide-s"><span id="ver">v—</span> · MIT · 0 deps</span>
   <span class="sp"></span>
+  <button class="pill make" id="makeopen" title="Describe a story, and it plays (M)">✦<span class="pl"> make a story</span></button>
   <button class="pill" id="snap" title="Save a PNG (S)" aria-label="Snapshot">◎<span class="pl"> snapshot</span></button>
   <button class="pill" id="rec" title="Record a clip (R)" aria-label="Record"><span class="rec"></span><span id="recl" class="pl">record</span></button>
   <button class="pill" id="share" title="Copy a link to exactly this" aria-label="Copy link">⧉<span class="pl"> link</span></button>
@@ -146,7 +148,7 @@
   <p class="lede">A particle field that becomes lit, solid armour that turns to face you and wears your expressions, a neural sphere, or anything you give it: a word, an SVG, an image. WebGL with a canvas-2D fallback, one file, zero dependencies.</p>
 </div>
 
-<div class="foot" aria-live="polite"><span id="stats">— nodes · — fps</span><span class="keys"><kbd>←</kbd><kbd>→</kbd> shapes · <kbd>P</kbd> palette · <kbd>L</kbd> light · <kbd>H</kbd> hide · <kbd>?</kbd> more</span></div>
+<div class="foot" aria-live="polite"><span id="stats">— nodes · — fps</span><span class="keys"><kbd>M</kbd> make a story · <kbd>←</kbd><kbd>→</kbd> shapes · <kbd>P</kbd> palette · <kbd>L</kbd> light · <kbd>H</kbd> hide · <kbd>?</kbd> more</span></div>
 
 <aside class="dock" id="dock" aria-label="Studio controls">
   <div class="dock-h" id="dockh"><span>studio</span><span id="dockst">drag · part · pulse</span></div>
@@ -160,7 +162,7 @@
       <div class="row" id="crew" role="group" aria-label="Crew"></div>
       <div class="row"><button class="chip" id="enlighten" aria-pressed="false">loop the crew</button><button class="chip" id="redraw">draw again</button></div>
       <p class="note">A pen draws each worker on a blank canvas, then a signal reaches them and they fill into a lit body (figure(), registerCrew()).</p>
-      <div class="row"><button class="chip" id="sbopen">storyboard editor</button></div>
+      <div class="row"><button class="chip" id="sbopen" aria-pressed="false">✦ make a story</button></div>
     </div></details>
 
     <details open><summary>look</summary><div class="sec">
@@ -211,19 +213,91 @@
     <dt>F</dt><dd>perform: the helmet acts out expressions</dd>
     <dt>space</dt><dd>pause / play</dd>
     <dt>S · R</dt><dd>snapshot PNG · record a clip</dd>
+    <dt>M</dt><dd>make a story: describe it, and it plays</dd>
     <dt>H</dt><dd>hide the interface</dd>
     <dt>drag · click</dt><dd>spin it · send a shockwave</dd>
   </dl>
 </div></div>
 <div class="toast" id="toast"></div>
-<style>#sb[hidden]{display:none!important}@media (max-width:760px){#sb{grid-template-columns:1fr!important;overflow:auto}}</style>
-<div id="sb" role="dialog" aria-modal="true" aria-label="Storyboard editor" hidden style="position:fixed;inset:0;z-index:50;background:rgba(5,7,8,.94);display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px;padding:16px">
-  <div id="sbstage" style="position:relative;min-height:60vh;border:1px solid rgba(255,255,255,.08);border-radius:6px;overflow:hidden"><canvas id="sbcanvas" style="position:absolute;inset:0;width:100%;height:100%"></canvas></div>
-  <div style="display:grid;grid-template-rows:auto 1fr auto auto;gap:10px;min-width:0">
-    <div class="row"><button class="chip" id="sbplay">play</button><button class="chip" id="sbcopy">copy JSON</button><button class="chip" id="sbclose">close</button></div>
-    <textarea id="sbjson" spellcheck="false" aria-label="Storyboard JSON" style="width:100%;min-height:40vh;resize:vertical;background:#0b0f12;color:#dfe8e4;border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:10px;font:12px/1.5 ui-monospace,Menlo,monospace"></textarea>
-    <pre id="sberr" style="margin:0;white-space:pre-wrap;font:11px/1.5 ui-monospace,Menlo,monospace;color:#ffb547"></pre>
-    <form id="sbpub" class="row" style="gap:6px"><input id="sburl" placeholder="publish to (e.g. https://cto.digitalcraftai.com/api/scene)" style="flex:1;min-width:0" aria-label="Publish endpoint"><input id="sbtok" type="password" placeholder="token" style="width:120px" aria-label="Publish token"><button class="chip" type="submit">publish</button></form>
+<style>
+  #sb[hidden],.mk [hidden]{display:none!important}
+  #sb{position:fixed;inset:0;z-index:50;display:grid;grid-template-columns:minmax(0,1.25fr) minmax(320px,.75fr);gap:16px;padding:16px;background:rgba(5,7,8,.95);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+  #sbstage{position:relative;min-height:60vh;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:radial-gradient(90% 70% at 50% 40%,#0f171b,#07090a 70%)}
+  #sbstage canvas{position:absolute;inset:0;width:100%;height:100%}
+  .mk{display:flex;flex-direction:column;gap:14px;min-width:0;overflow:auto;padding:4px 2px 8px}
+  .mk-h{display:flex;align-items:center;justify-content:space-between}
+  .mk-h h2{margin:0;font:500 22px var(--sans);letter-spacing:-.01em}
+  .mk-h h2 em{font-style:normal;color:var(--aurora)}
+  .mk label.big{display:block;font:11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin-bottom:8px}
+  .mk textarea.ask{all:unset;box-sizing:border-box;display:block;width:100%;min-height:104px;padding:14px 16px;border-radius:10px;font:16px/1.5 var(--sans);color:var(--ink);background:#0b1013;box-shadow:inset 0 0 0 1px #263036;white-space:pre-wrap}
+  .mk textarea.ask:focus-visible,.mk input.key:focus-visible{box-shadow:inset 0 0 0 1px var(--aurora)}
+  .mk .ideas{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+  .mk .ideas .chip{min-height:28px;font-size:12px}
+  .keybox{padding:14px;border-radius:10px;background:#0b1013;box-shadow:inset 0 0 0 1px #263036}
+  .keybox .k{display:flex;gap:8px;align-items:center}
+  .mk input.key{all:unset;box-sizing:border-box;flex:1;min-width:0;min-height:42px;padding:0 14px;border-radius:8px;font:14px var(--mono);color:var(--ink);background:#070a0c;box-shadow:inset 0 0 0 1px #263036}
+  .badge{white-space:nowrap;font:11.5px var(--mono);color:var(--faint)}
+  .badge.ok{color:var(--aurora)} .badge.bad{color:#ffb547}
+  .keybox p{margin:10px 0 0;font:12.5px/1.55 var(--sans);color:var(--dim)}
+  .keybox a{color:var(--aurora)}
+  .keybox .saved{display:flex;justify-content:space-between;align-items:center;font:13px var(--sans);color:var(--dim)}
+  .keybox .saved b{color:var(--ink);font-weight:500}
+  .linky{all:unset;cursor:pointer;font:12.5px var(--sans);color:var(--aurora)}
+  .linky:focus-visible{outline:2px solid var(--aurora);outline-offset:2px}
+  .go{all:unset;box-sizing:border-box;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;width:100%;min-height:54px;border-radius:12px;font:600 17px var(--sans);color:var(--night);background:var(--aurora);box-shadow:0 10px 40px -12px rgba(123,227,195,.7);transition:transform .15s,filter .2s}
+  .go:hover{filter:brightness(1.08)} .go:active{transform:scale(.99)}
+  .go:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+  .go[disabled]{cursor:progress;filter:saturate(.4) brightness(.8)}
+  .go .spin{width:16px;height:16px;border-radius:50%;border:2px solid rgba(8,11,13,.3);border-top-color:var(--night);animation:spin .8s linear infinite;display:none}
+  .go[disabled] .spin{display:block}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .mkst{min-height:20px;margin:0;font:13px/1.5 var(--sans);color:var(--dim)}
+  .mkst.err{color:#ffb547} .mkst.ok{color:var(--aurora)}
+  .tweak{display:flex;gap:6px}
+  .tweak input{all:unset;box-sizing:border-box;flex:1;min-width:0;min-height:38px;padding:0 14px;border-radius:999px;font:14px var(--sans);color:var(--ink);box-shadow:inset 0 0 0 1px #263036}
+  .tweak input:focus-visible{box-shadow:inset 0 0 0 1px var(--aurora)}
+  .mk details{border:0}
+  .mk details summary{padding:6px 0}
+  #sbjson{width:100%;min-height:30vh;resize:vertical;background:#0b0f12;color:#dfe8e4;border:1px solid rgba(255,255,255,.1);border-radius:6px;padding:10px;font:12px/1.5 ui-monospace,Menlo,monospace}
+  #sberr{margin:0;white-space:pre-wrap;font:11px/1.5 ui-monospace,Menlo,monospace;color:#ffb547}
+  #sbpub input{all:unset;box-sizing:border-box;min-height:32px;padding:0 10px;border-radius:6px;font:12px var(--mono);color:var(--ink);box-shadow:inset 0 0 0 1px #263036}
+  .pill.make{color:var(--night);background:var(--aurora);box-shadow:none}
+  .pill.make:hover{color:var(--night);filter:brightness(1.08)}
+  @media (max-width:860px){#sb{grid-template-columns:1fr;grid-template-rows:auto 1fr;overflow:auto;padding:12px}#sbstage{min-height:44vh}}
+</style>
+<div id="sb" role="dialog" aria-modal="true" aria-label="Make a story" hidden>
+  <div id="sbstage"><canvas id="sbcanvas"></canvas></div>
+  <div class="mk">
+    <div class="mk-h"><h2>Make a <em>story</em></h2><button class="chip" id="sbclose" aria-label="Close">close ✕</button></div>
+
+    <div>
+      <label class="big" for="mkask">1 · Say what should happen</label>
+      <textarea id="mkask" class="ask" rows="3" placeholder="A plumber misses a Saturday morning call. Then an AI answers it and books the job."></textarea>
+      <div class="ideas" id="mkideas" aria-label="Ideas"></div>
+    </div>
+
+    <div>
+      <label class="big" for="mkkey">2 · Your key</label>
+      <div class="keybox" id="mkkeybox">
+        <div id="mkkeynew">
+          <div class="k"><input id="mkkey" class="key" type="password" autocomplete="off" spellcheck="false" placeholder="paste it here: sk-ant-… or sk-…"><span class="badge" id="mkbadge"></span></div>
+          <p>No key yet? Get one from <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Claude</a> or <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">OpenAI</a>, copy it, and paste it here. We can tell which one it is. It stays in this browser and goes only to them.</p>
+        </div>
+        <div class="saved" id="mkkeysaved" hidden><span>🔑 <b id="mkkeyname">Claude</b> key, saved in this browser</span><button class="linky" id="mkforget">forget it</button></div>
+      </div>
+    </div>
+
+    <button class="go" id="mkgo"><span class="spin" aria-hidden="true"></span><span id="mkgol">✦ Make it</span></button>
+    <p class="mkst" id="mkst" role="status" aria-live="polite"></p>
+
+    <form class="tweak" id="mktweak" hidden><input id="mktweakin" placeholder="change it: faster, add a painter, end on the crew…" aria-label="Change the story"><button class="chip" type="submit">change</button></form>
+
+    <details id="mkadv"><summary>advanced · the storyboard JSON</summary><div class="sec">
+      <div class="row"><button class="chip" id="sbplay">play this JSON</button><button class="chip" id="sbcopy">copy JSON</button></div>
+      <textarea id="sbjson" spellcheck="false" aria-label="Storyboard JSON"></textarea>
+      <pre id="sberr"></pre>
+      <form id="sbpub" class="row" style="gap:6px"><input id="sburl" placeholder="publish to (e.g. https://cto.digitalcraftai.com/api/scene)" style="flex:1;min-width:0" aria-label="Publish endpoint"><input id="sbtok" type="password" placeholder="token" style="width:110px" aria-label="Publish token"><button class="chip" type="submit">publish</button></form>
+    </div></details>
   </div>
 </div>
 
@@ -335,20 +409,152 @@
     var at=-1; AF.crew.forEach(function(c,i){ if(state.shape.indexOf('crew:'+c+':')===0) at=i; });
     drawCrew(AF.crew[(at+1)%AF.crew.length]);
   }
-  // ---- storyboard editor: JSON in, a stage out; validate as you type; publish to a scene endpoint ----
-  var sbStage=null, SB_DEFAULT='{\n  "version": 1,\n  "beats": [\n    { "trade": "roofer", "moment": { "text": "9:47 PM · missed call", "at": "hand" }, "caption": { "who": "Roofer", "did": "Call answered · job booked", "metric": { "to": 38, "suffix": "s" } } },\n    { "trade": "pool", "moment": { "text": "Sun 8:02 AM · new lead", "at": "prop" }, "caption": { "who": "Pool service", "did": "Route booked" } },\n    { "crew": ["roofer", "pool", "painter", "hvac", "realtor"], "caption": { "did": "Your whole crew · on autopilot" } }\n  ]\n}';
+  // ---- make a story: describe it, bring your own key (Claude or OpenAI), and it plays ----
+  // The key goes from this browser straight to the provider; nothing passes through us. The answer is
+  // a storyboard, checked by AF.validate(); if it fails, the errors go back for one or two repairs.
+  var sbStage=null, SB_DEFAULT=JSON.stringify({version:1,loop:true,beats:[
+    {trade:'roofer',moment:{text:'9:47 PM · missed call',at:'hand'},missed:{text:'No answer · went to voicemail'},caption:{who:'Roofer',did:'Missed call · the job went elsewhere'},hold:2200},
+    {builder:'typing',prompt:{text:"agents.run('answer-calls', { after: '6pm' })",code:true},caption:{who:'The builder',did:'Custom AI systems · built end to end'},hold:2200},
+    {builder:'prompting',prompt:{text:'answer every missed call and book the job'},caption:{who:'The builder',did:'Your workflow · handed to agents'},hold:1600},
+    {builder:'agents',agents:['answer','estimate','analyze'],caption:{who:'The agents',did:'On the job · around the clock'},hold:3000},
+    {trade:'roofer',moment:{text:'9:47 PM · missed call',then:'9:47 PM · answered',at:'hand'},ai:{text:'Agent · answering'},caption:{who:'Roofer',did:'Call answered · job booked'}},
+    {trade:'pool',moment:{text:'Sun 8:02 AM · new lead',then:'Sun 8:02 AM · followed up',at:'prop'},ai:{text:'Agent · following up'},caption:{who:'Pool service',did:'Lead qualified · follow-up booked'},hold:2600},
+    {crew:['roofer','pool','painter','hvac','realtor'],builder:true,caption:{did:'Your whole crew · on autopilot'}}
+  ]},null,2);
+  var IDEAS=[['a missed call, then caught','A roofer misses a 9:47 PM call and loses the job. Then I build an AI agent, and the same call gets answered and booked.'],
+    ['a realtor at midnight','A realtor gets a lead at 11 PM. An AI agent pulls comps and drafts the offer before morning.'],
+    ['my whole crew','Show a plumber, an electrician and a painter, each with an AI agent catching what they miss, then the whole crew together.'],
+    ['someone at a desk','Someone at a desk builds AI agents, briefs them in plain English, and they go to work for a cleaner and a mover.']];
+  var KEY_LS='af-key', V0=AF.vocab();
+  function keyKind(k){ k=(k||'').trim().replace(/^bearer\s+/i,''); return /^sk-ant-/.test(k)?'claude':/^sk-[A-Za-z0-9_-]{10,}/.test(k)?'openai':''; }
+  var NAMES={claude:'Claude',openai:'OpenAI'};
+  function savedKey(){ try { return localStorage.getItem(KEY_LS)||''; } catch(e){ return ''; } }
+  var liveKey=savedKey();
+  function keyUI(){
+    var k=liveKey, kind=keyKind(k);
+    $('mkkeynew').hidden=!!kind; $('mkkeysaved').hidden=!kind;
+    if(kind) $('mkkeyname').textContent=NAMES[kind];
+  }
+  $('mkkey').oninput=function(){
+    var k=this.value.trim().replace(/^bearer\s+/i,''), kind=keyKind(k), b=$('mkbadge');
+    if(!k){ b.textContent=''; b.className='badge'; return; }
+    if(!kind){ b.textContent='that isn’t a key yet'; b.className='badge bad'; return; }
+    b.textContent='✓ '+NAMES[kind]; b.className='badge ok';
+    liveKey=k; try { localStorage.setItem(KEY_LS,k); } catch(e){}
+    setTimeout(function(){ keyUI(); if(!$('mkask').value.trim()) $('mkask').focus(); else $('mkgo').focus(); },500);
+  };
+  $('mkforget').onclick=function(){ liveKey=''; try { localStorage.removeItem(KEY_LS); } catch(e){} $('mkkey').value=''; $('mkbadge').textContent=''; keyUI(); $('mkkey').focus(); say('Key forgotten. It’s gone from this browser.'); };
+  IDEAS.forEach(function(it){ var b=document.createElement('button'); b.className='chip'; b.type='button'; b.textContent=it[0]; b.onclick=function(){ $('mkask').value=it[1]; $('mkask').focus(); }; $('mkideas').appendChild(b); });
+  function say(t,kind){ var e=$('mkst'); e.textContent=t; e.className='mkst'+(kind?' '+kind:''); }
+
+  function system(){
+    return 'You write storyboards for aurora-field: a particle animation where a pen draws a person on a dark stage, a moment pings (a missed call, a new lead), an AI orb arrives, and the drawing fills with light while a caption shows the outcome.\n'+
+      'Reply with ONE JSON object and nothing else: no prose, no code fence.\n\n'+
+      'Shape: { "version": 1, "loop": true, "palette"?: one of '+JSON.stringify(V0.palettes)+', "beats": [ 1 to 12 beats ] }\n'+
+      'Each beat has exactly one of trade, builder or crew:\n'+
+      '1. Caught: { "trade", "moment": { "text", "then"?, "at"? }, "ai"?: { "text" }, "caption": { "who", "did" }, "hold"? }\n'+
+      '   trade is one of '+JSON.stringify(V0.trades)+', or a custom figure { "pose": one of '+JSON.stringify(V0.poses)+', "props": up to 3 of '+JSON.stringify(V0.props)+', "action"?: one of '+JSON.stringify(V0.actions)+' }.\n'+
+      '   moment.text is the alert ("9:47 PM · missed call"); moment.then is what it becomes once the AI handles it ("9:47 PM · answered"); at is one of head, chest, hand, prop, feet (hand for phones, prop for tools and screens). ai.text labels the orb ("Agent · answering"). The caption is the outcome.\n'+
+      '2. Missed: { "trade", "moment": { "text", "at"? }, "missed": { "text" }, "caption": { "who", "did" }, "hold"? } with no ai and no fill: nobody comes, the moment turns to missed.text ("No answer · went to voicemail"), the pen erases the drawing, the caption is the loss. Put it before the same trade caught, for a before and after.\n'+
+      '3. Builder, a person at a desk who builds AI agents: { "builder": "typing", "prompt": { "text": a line of code, "code": true }, "caption" }, { "builder": "prompting", "prompt": { "text": a plain English instruction }, "caption" }, { "builder": "agents", "agents": 1 to 3 of '+JSON.stringify(V0.agents)+', "caption" }.\n'+
+      '4. Crew finale: { "crew": [ 2 to 8 trades ] or true, "builder"?: true, "caption": { "did" } }.\n\n'+
+      'Limits: caption.who at most 32 characters, caption.did at most 64, moment.text, moment.then, missed.text and ai.text at most 48, prompt.text at most 72. hold is milliseconds, 1600 to 4000.\n'+
+      'Style: short concrete phrases joined with " · " (a middle dot). Times of day make moments vivid. No em dashes. Do not invent statistics, and only add caption.metric { "to": number, "suffix"? } when the user gives the number.\n'+
+      'A strong arc: a miss, the build (typing, prompting, agents), the same moment caught, one or two more trades caught, then the crew. Follow what the user asks for over this arc.\n\n'+
+      'Example:\n'+JSON.stringify(JSON.parse(SB_DEFAULT));
+  }
+  // one call to the provider the key belongs to; resolves with the reply's text
+  function ask(messages){
+    var key=liveKey, kind=keyKind(key);
+    if(kind==='claude'){
+      var call=function(fallback){
+        var h={'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'}, body={model:'claude-opus-5-5',max_tokens:16000,output_config:{effort:'medium'},system:system(),messages:messages};
+        if(fallback){ h['anthropic-beta']='server-side-fallback-2026-07-01'; body.fallbacks='default'; }
+        return fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:h,body:JSON.stringify(body)}).then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){
+          if(!r.ok){ if(fallback&&r.status===400&&/fallback/i.test((j.error&&j.error.message)||'')) return call(false); throw fail(r.status,j.error&&j.error.message); }
+          if(j.stop_reason==='refusal') throw new Error('It wouldn’t make that one. Try describing it another way.');
+          return (j.content||[]).filter(function(b){ return b.type==='text'; }).map(function(b){ return b.text; }).join('');
+        }); });
+      };
+      return call(true);
+    }
+    if(kind==='openai'){
+      var models=['gpt-5','gpt-4.1','gpt-4o'];
+      var tryModel=function(i){
+        return fetch('https://api.openai.com/v1/chat/completions',{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+key},
+          body:JSON.stringify({model:models[i],response_format:{type:'json_object'},messages:[{role:'system',content:system()}].concat(messages)})})
+          .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){
+            var msg=(j.error&&j.error.message)||'';
+            if(!r.ok){ if(i+1<models.length&&(r.status===404||/model/i.test(msg))&&r.status!==401&&r.status!==429) return tryModel(i+1); throw fail(r.status,msg); }
+            return (j.choices&&j.choices[0]&&j.choices[0].message&&j.choices[0].message.content)||'';
+          }); });
+      };
+      return tryModel(0);
+    }
+    return Promise.reject(new Error('Paste your key first (step 2).'));
+  }
+  // errors in plain words
+  function fail(status,msg){
+    var t=status===401||status===403?'That key didn’t work. Copy it again from the Claude or OpenAI page and paste it in.'
+      :status===429?'Your account is out of credit or busy right now. Add credit, or wait a minute and try again.'
+      :status>=500?'The AI service is having a moment. Try again in a minute.'
+      :'Something went wrong ('+status+')'+(msg?': '+msg:'');
+    var e=new Error(t); e.status=status; return e;
+  }
+  function parseBoard(text){
+    var a=text.indexOf('{'), b=text.lastIndexOf('}');
+    if(a<0||b<a) throw new Error('no JSON in the reply');
+    return JSON.parse(text.slice(a,b+1));
+  }
+  // ask, check, and repair: up to two rounds of "here's what failed, fix it"
+  function compose(messages,round){
+    return ask(messages).then(function(text){
+      var board, errs;
+      try { board=parseBoard(text); var v=AF.validate(board); errs=v.ok?null:v.errors; } catch(e){ errs=['the reply was not valid JSON ('+e.message+')']; }
+      if(!errs) return board;
+      if(round>=2) throw new Error('It came back with a story that doesn’t fit. Press Make it again, or describe it a little differently.');
+      say('Almost there: tidying it up…');
+      return compose(messages.concat([{role:'assistant',content:text},{role:'user',content:'That storyboard failed these checks:\n- '+errs.slice(0,12).join('\n- ')+'\nReturn the whole corrected storyboard JSON only.'}]),round+1);
+    });
+  }
+  var busy=false;
+  function make(prompt,base){
+    if(busy) return;
+    if(!keyKind(liveKey)){ say('Paste your key in step 2 first. That’s the only setup.','err'); $('mkkey').focus(); return; }
+    if(!prompt){ say('Say what should happen in step 1, or pick an idea.','err'); $('mkask').focus(); return; }
+    busy=true; $('mkgo').disabled=true; $('mkgol').textContent=base?'Changing it…':'Making your story…'; say('Writing the story with '+NAMES[keyKind(liveKey)]+'. This takes a few seconds.');
+    var msg=base?'Here is the current storyboard:\n'+JSON.stringify(base)+'\n\nChange it: '+prompt+'\nReturn the whole storyboard JSON.':'Make a storyboard for this: '+prompt;
+    compose([{role:'user',content:msg}],0).then(function(board){
+      $('sbjson').value=JSON.stringify(board,null,2); sbSave(); sbCheck(); sbPlay();
+      say('Playing. Change it below, or press Make it for another take.','ok'); $('mktweak').hidden=false;
+    },function(e){
+      say(e.message||String(e),'err');
+      if(e.status===401||e.status===403){ $('mkforget').click(); say(e.message,'err'); }
+    }).then(function(){ busy=false; $('mkgo').disabled=false; $('mkgol').textContent='✦ Make it'; });
+  }
+  $('mkgo').onclick=function(){ make($('mkask').value.trim()); };
+  $('mkask').onkeydown=function(e){ if(e.key==='Enter'&&(e.metaKey||e.ctrlKey||!e.shiftKey)){ e.preventDefault(); make(this.value.trim()); } };
+  $('mktweak').onsubmit=function(e){ e.preventDefault(); var t=$('mktweakin').value.trim(); if(!t) return; var cur=null; try { cur=JSON.parse($('sbjson').value); } catch(err){} make(t,cur); $('mktweakin').value=''; };
+  keyUI();
+
+  // the JSON underneath: validate as you type, play it, copy it, publish it to a scene endpoint
   function sbCheck(){ try { var v=AF.validate(JSON.parse($('sbjson').value)); $('sberr').textContent=v.ok?'':v.errors.join('\n'); return v.ok; } catch(e){ $('sberr').textContent='JSON: '+e.message; return false; } }
+  function sbSave(){ try { localStorage.setItem('af-storyboard',$('sbjson').value); } catch(e){} }
   function sbPlay(){ if(!sbCheck()) return; var board=JSON.parse($('sbjson').value); if(sbStage){ var v=sbStage.load(board); if(v.ok) sbStage.goto(0); return; } sbStage=AF.stage($('sbcanvas'),board,{container:$('sbstage'),interactive:false}); }
   try { $('sbjson').value=localStorage.getItem('af-storyboard')||SB_DEFAULT; } catch(e){ $('sbjson').value=SB_DEFAULT; }
-  $('sbjson').oninput=function(){ sbCheck(); try { localStorage.setItem('af-storyboard',$('sbjson').value); } catch(e){} };
-  $('sbopen').onclick=function(){ $('sb').hidden=false; if(field) field.pause(); sbPlay(); };
-  $('sbclose').onclick=function(){ $('sb').hidden=true; if(sbStage){ sbStage.destroy(); sbStage=null; } if(field&&!paused) field.play(); };
+  $('sbjson').oninput=function(){ sbCheck(); sbSave(); };
+  function sbOpen(){ $('sb').hidden=false; if(field) field.pause(); sbPlay(); setTimeout(function(){ (keyKind(liveKey)?$('mkask'):$('mkkey')).focus(); },60); }
+  function sbClose(){ $('sb').hidden=true; if(sbStage){ sbStage.destroy(); sbStage=null; } if(field&&!paused) field.play(); }
+  $('sbopen').onclick=sbOpen; $('makeopen').onclick=sbOpen;
+  $('sbclose').onclick=sbClose;
+  $('sb').addEventListener('keydown',function(e){ if(e.key==='Escape'){ e.stopPropagation(); sbClose(); } else e.stopPropagation(); });
   $('sbplay').onclick=sbPlay;
   $('sbcopy').onclick=function(){ if(navigator.clipboard) navigator.clipboard.writeText($('sbjson').value).then(function(){ $('sberr').textContent='copied'; },function(){}); };
   $('sbpub').onsubmit=function(e){ e.preventDefault(); if(!sbCheck()) return; var url=$('sburl').value.trim(); if(!url) { $('sberr').textContent='Add the endpoint to publish to.'; return; }
     fetch(url,{method:'POST',headers:{'content-type':'application/json',authorization:'Bearer '+$('sbtok').value},body:JSON.stringify({ publish: JSON.parse($('sbjson').value) })})
       .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ $('sberr').textContent=r.ok?'published: open pages pick it up within a minute':('publish failed ('+r.status+'): '+(j.error||'')); }); })
       .catch(function(err){ $('sberr').textContent='publish failed: '+err.message; }); };
+  if(q.get('make')==='1'||location.hash==='#make') setTimeout(sbOpen,300);
   $('enlighten').onclick=function(){ crewLoop=!crewLoop; this.setAttribute('aria-pressed',String(crewLoop)); if(crewLoop) nextCrew(); else clearTimeout(crewT); };
   $('redraw').onclick=function(){ var m=state.shape.match(/^crew:([a-z]+):/); drawCrew(m?m[1]:AF.crew[0]); };
   function setPalette(k,quiet){ state.palette=k; field.set({palette:k}); if(!quiet){ marks(); syncURL(); } }
@@ -532,6 +738,7 @@
     else if(k==='ArrowLeft'&&tg.type!=='range'){ pick(list[(i-1+list.length)%list.length]); }
     else if(k==='p'||k==='P'){ setPalette(PALS[(PALS.indexOf(state.palette)+1)%PALS.length]); toast(state.palette); }
     else if(k==='l'||k==='L'){ $('light').click(); toast('light '+(state.light?'on':'off')); }
+    else if(k==='m'||k==='M'){ sbOpen(); }
     else if(k==='c'||k==='C'){ camera(); }
     else if(k==='f'||k==='F'){ perform(); }
     else if(k===' '&&tg.tagName!=='BUTTON'){ e.preventDefault(); pausePlay(); }

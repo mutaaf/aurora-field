@@ -564,6 +564,23 @@ test('3.2: a missed beat: no AI comes, the pen takes the drawing back, then the 
   st.destroy();
 });
 
+test('3.3: labels keep off the drawing: bounds(), and a moment that turns to handled', () => {
+  const env = stubEnv({ gl: true });
+  const sb = { version: 1, beats: [{ trade: 'roofer', moment: { text: '9:47 PM · missed call', then: '9:47 PM · answered', at: 'hand' }, ai: { text: 'Agent · answering' }, caption: { who: 'Roofer', did: 'Call answered · job booked' } }] };
+  assert.deepEqual(AF.validate(sb), { ok: true, errors: [] });
+  assert.equal(AF.validate({ version: 1, beats: [{ trade: 'roofer', moment: { text: 'x', then: 'y'.repeat(60) } }] }).ok, false, 'then has the moment limit');
+  assert.ok(AF.schema({ strict: true }).properties.beats.items.anyOf[0].properties.moment.properties.then, 'the schema knows then');
+  const st = AF.stage(env.canvas, sb, { clock: 'manual', count: 900, headless: true }), handled = [], seen = [];
+  st.on('handled', h => handled.push(h.text)).on('phase', p => seen.push(p.phase));
+  for (let k = 0; k < 16; k++) st.advance(500);
+  assert.deepEqual(handled.slice(0, 1), ['9:47 PM · answered']);
+  assert.ok(seen.indexOf('ai') < seen.indexOf('fill'), 'handled sits inside the ai phase, the phases are unchanged');
+  const B = st.field.bounds(), a = st.field.anchors();
+  assert.ok(B && B.w > 10 && B.h > B.w, 'a standing figure is taller than wide: ' + JSON.stringify(B));
+  for (const k of ['head', 'chest']) assert.ok(a[k].x >= B.x - 2 && a[k].x <= B.x + B.w + 2 && a[k].y >= B.y - 2 && a[k].y <= B.y + B.h + 2, k + ' inside the box');
+  st.destroy();
+});
+
 test('create: refuses a missing canvas', () => {
   assert.throws(() => AF.create(null), /canvas/);
 });
