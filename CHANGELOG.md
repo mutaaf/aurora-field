@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.1.2 — 2026-10-20
+- Agent chips sit on fixed rows above the agents' highest head, so labels never overlap.
+
 ## 3.1.1 — 2026-10-20
 - **Stage layout:**
   - `groupRadius` sizes lineups (the agents, the crew) separately from single figures, so wide scenes fit the stage.
